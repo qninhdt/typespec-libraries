@@ -128,6 +128,16 @@ interface CompositeFieldTag {
   priority: number;
 }
 
+/**
+ * Escape characters that are unsafe inside a Go struct tag value.
+ * Backticks would break the raw-string literal delimiter; commas act as
+ * sub-value separators (e.g. `form:"field,title=value"`) and would cause
+ * mis-parsing when they appear inside the title or placeholder text.
+ */
+function escapeFormTagValue(value: string): string {
+  return value.replace(/`/g, "'").replace(/,/g, " ");
+}
+
 interface GoTypeResult {
   goType: string;
   gormTag: string;
@@ -268,7 +278,7 @@ function generateDataGoField(program: Program, prop: ModelProperty, imports: Set
   const placeholder = getPlaceholder(program, prop);
   const labelTag =
     title || placeholder
-      ? ` form:"${prop.name}${title ? `,title=${title}` : ""}${placeholder ? `,placeholder=${placeholder}` : ""}"`
+      ? ` form:"${prop.name}${title ? `,title=${escapeFormTagValue(title)}` : ""}${placeholder ? `,placeholder=${escapeFormTagValue(placeholder)}` : ""}"`
       : "";
 
   const structTags = validateTag
