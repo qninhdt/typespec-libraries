@@ -362,6 +362,22 @@ function generatePydanticField(
     for (const imp of mapping.imports) stdImports.add(imp);
   }
 
+  // Format-based type overrides (Pydantic v2 semantic types)
+  const format = getFormat(program, prop);
+  if (format === "email") {
+    stdImports.add("pydantic.EmailStr");
+    pyType = "EmailStr";
+  } else if (format === "url" || format === "uri") {
+    stdImports.add("pydantic.AnyUrl");
+    pyType = "AnyUrl";
+  } else if (format !== undefined && format !== null && format !== "") {
+    reportDiagnostic(program, {
+      code: "unknown-format",
+      target: prop,
+      format: { format, propName: prop.name },
+    });
+  }
+
   const isOpt = prop.optional;
   if (isOpt) {
     stdImports.add("typing.Optional");
@@ -383,14 +399,16 @@ function generatePydanticField(
   if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
 
   const label = getTitle(program, prop);
-  if (label) fieldArgs.push(`title="${label}"`);
+  if (label) fieldArgs.push(`title="${label.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
 
   const doc = getDoc(program, prop);
-  if (doc) fieldArgs.push(`description="${doc.replace(/"/g, '\\"')}"`);
+  if (doc) fieldArgs.push(`description="${doc.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
 
   const placeholder = getPlaceholder(program, prop);
   if (placeholder)
-    fieldArgs.push(`json_schema_extra={"placeholder": "${placeholder.replace(/"/g, '\\"')}"}`);
+    fieldArgs.push(
+      `json_schema_extra={"placeholder": "${placeholder.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}`,
+    );
 
   pydanticImports.add("Field");
 
@@ -1083,7 +1101,7 @@ function generateField(
 }
 
 function generateInit(modelNames: string[], moduleFiles: string[], moduleName: string): string {
-  let code = `"""${moduleName} \u2014 auto-generated SQLModel database models. DO NOT EDIT."""\n\n`;
+  let code = `"""${moduleName} — auto-generated models. DO NOT EDIT."""\n\n`;
 
   for (let i = 0; i < modelNames.length; i++) {
     code += `from .${moduleFiles[i]} import ${modelNames[i]}\n`;
