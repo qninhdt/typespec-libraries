@@ -152,14 +152,16 @@ model CreateInvitationForm {
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class CreateInvitationForm(BaseModel):
     """Create Invitation Form"""
 
-    invitee_email: str = Field(
+    # Lookup type - inherits @maxLength(320) and @format("email") from User.email
+    invitee_email: EmailStr = Field(
         ..., max_length=320, title="Invitee Email",
+        description="Lookup type - inherits @maxLength(320) and @format(\"email\") from User.email",
         json_schema_extra={"placeholder": "friend@example.com"}
     )
     message: Optional[str] = Field(

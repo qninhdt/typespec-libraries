@@ -176,6 +176,7 @@ export function $onUpdate(context: DecoratorContext, target: ModelProperty, acti
 export function $ignore(context: DecoratorContext, target: ModelProperty): void {
   context.program.stateMap(IgnoreKey).set(target, true);
 }
+
 // ─── @data ────────────────────────────────────────────────────────────────
 
 /**

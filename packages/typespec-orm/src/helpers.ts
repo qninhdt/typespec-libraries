@@ -123,38 +123,28 @@ function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
 }
 
 export function getMaxLength(program: Program, prop: ModelProperty): number | undefined {
-  return (
-    tsGetMaxLength(program, prop) ??
-    (lookupSourceProp(prop) && tsGetMaxLength(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetMaxLength(program, prop) ?? (src ? tsGetMaxLength(program, src) : undefined);
 }
 
 export function getMinLength(program: Program, prop: ModelProperty): number | undefined {
-  return (
-    tsGetMinLength(program, prop) ??
-    (lookupSourceProp(prop) && tsGetMinLength(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetMinLength(program, prop) ?? (src ? tsGetMinLength(program, src) : undefined);
 }
 
 export function getMinValue(program: Program, prop: ModelProperty): number | undefined {
-  return (
-    tsGetMinValue(program, prop) ??
-    (lookupSourceProp(prop) && tsGetMinValue(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetMinValue(program, prop) ?? (src ? tsGetMinValue(program, src) : undefined);
 }
 
 export function getMaxValue(program: Program, prop: ModelProperty): number | undefined {
-  return (
-    tsGetMaxValue(program, prop) ??
-    (lookupSourceProp(prop) && tsGetMaxValue(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetMaxValue(program, prop) ?? (src ? tsGetMaxValue(program, src) : undefined);
 }
 
 export function getPattern(program: Program, prop: ModelProperty): string | undefined {
-  return (
-    tsGetPattern(program, prop) ??
-    (lookupSourceProp(prop) && tsGetPattern(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetPattern(program, prop) ?? (src ? tsGetPattern(program, src) : undefined);
 }
 
 /**
@@ -163,10 +153,8 @@ export function getPattern(program: Program, prop: ModelProperty): string | unde
  * Falls back to the source property for lookup types.
  */
 export function getFormat(program: Program, prop: ModelProperty): string | undefined {
-  return (
-    tsGetFormat(program, prop) ??
-    (lookupSourceProp(prop) && tsGetFormat(program, lookupSourceProp(prop)!))
-  );
+  const src = lookupSourceProp(prop);
+  return tsGetFormat(program, prop) ?? (src ? tsGetFormat(program, src) : undefined);
 }
 
 export interface ForeignKeyInfo {

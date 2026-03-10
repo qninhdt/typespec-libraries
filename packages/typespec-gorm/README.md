@@ -149,9 +149,8 @@ package models
 
 // CreateInvitationForm Create Invitation Form
 type CreateInvitationForm struct {
-	// Email address of the person being invited
+	// Lookup type - inherits @maxLength(320) and @format("email") from User.email
 	InviteeEmail string  `validate:"required,max=320,email" json:"inviteeEmail" form:"inviteeEmail,title=Invitee Email,placeholder=friend@example.com"`
-	// Optional personal message
 	Message      *string `validate:"omitempty,max=1000" json:"message,omitempty" form:"message,title=Personal Message,placeholder=Write a short note to your invitee…"`
 }
 ```
