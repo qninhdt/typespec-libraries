@@ -208,7 +208,7 @@ class Post(SQLModel, table=True):
 | `bytes`       | `bytea`            | `[]byte`            | `LargeBinary`             |
 | `jsonb`       | `jsonb`            | `datatypes.JSON` ⁵  | `JSONB` ⁶                 |
 
-> ¹ `github.com/google/uuid` · ² `from uuid import UUID` (SQLModel infers the column type) · ³ `github.com/shopspring/decimal` · ⁴ `from decimal import Decimal` + `sqlalchemy.Numeric` · ⁵ `gorm.io/datatypes` · ⁶ `sqlalchemy.dialects.postgresql.JSONB`
+> ¹ `github.com/google/uuid` · ² `from uuid import UUID` · ³ `github.com/shopspring/decimal` · ⁴ `from decimal import Decimal` + `sqlalchemy.Numeric` · ⁵ `gorm.io/datatypes` · ⁶ `sqlalchemy.dialects.postgresql.JSONB`
 
 **`@format` overrides:**
 
