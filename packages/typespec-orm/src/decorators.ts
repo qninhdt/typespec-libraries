@@ -1,4 +1,4 @@
-import type { DecoratorContext, Model, ModelProperty } from "@typespec/compiler";
+import type { DecoratorContext, Model, ModelProperty, Scalar } from "@typespec/compiler";
 import {
   TableKey,
   IdKey,
@@ -17,6 +17,10 @@ import {
   OnDeleteKey,
   OnUpdateKey,
   IgnoreKey,
+  DataKey,
+  TitleKey,
+  PlaceholderKey,
+  InputTypeKey,
 } from "./lib.js";
 
 // ─── @table ──────────────────────────────────────────────────────────────────
@@ -89,6 +93,24 @@ export function $relation(
   });
 }
 
+// ─── Shared composite constraint helper ──────────────────────────────────────
+
+function appendCompositeConstraint(
+  context: DecoratorContext,
+  target: Model,
+  stateKey: typeof CompositeIndexKey,
+  name: string,
+  columns: string[],
+): void {
+  const existing =
+    (context.program.stateMap(stateKey).get(target) as Array<{
+      name: string;
+      columns: string[];
+    }>) ?? [];
+  existing.push({ name, columns });
+  context.program.stateMap(stateKey).set(target, existing);
+}
+
 // ─── @compositeIndex ─────────────────────────────────────────────────────────
 
 export function $compositeIndex(
@@ -97,13 +119,7 @@ export function $compositeIndex(
   name: string,
   ...columns: string[]
 ): void {
-  const existing =
-    (context.program.stateMap(CompositeIndexKey).get(target) as Array<{
-      name: string;
-      columns: string[];
-    }>) ?? [];
-  existing.push({ name, columns });
-  context.program.stateMap(CompositeIndexKey).set(target, existing);
+  appendCompositeConstraint(context, target, CompositeIndexKey, name, columns);
 }
 
 // ─── @compositeUnique ────────────────────────────────────────────────────────
@@ -114,13 +130,7 @@ export function $compositeUnique(
   name: string,
   ...columns: string[]
 ): void {
-  const existing =
-    (context.program.stateMap(CompositeUniqueKey).get(target) as Array<{
-      name: string;
-      columns: string[];
-    }>) ?? [];
-  existing.push({ name, columns });
-  context.program.stateMap(CompositeUniqueKey).set(target, existing);
+  appendCompositeConstraint(context, target, CompositeUniqueKey, name, columns);
 }
 
 // ─── @autoCreateTime ─────────────────────────────────────────────────────────
@@ -165,4 +175,40 @@ export function $onUpdate(context: DecoratorContext, target: ModelProperty, acti
 
 export function $ignore(context: DecoratorContext, target: ModelProperty): void {
   context.program.stateMap(IgnoreKey).set(target, true);
+}
+
+// ─── @data ────────────────────────────────────────────────────────────────
+
+/**
+ * Mark a model as a non-database data shape (form payload, API response DTO, etc.).
+ * Unlike @table, this does NOT generate a DB schema.
+ */
+export function $data(context: DecoratorContext, target: Model, label?: string): void {
+  context.program.stateMap(DataKey).set(target, label ?? target.name);
+}
+
+// ─── @title ────────────────────────────────────────────────────────────────
+
+/** Human-readable title for a form field (maps to Pydantic Field(title=...) / Go form tag). */
+export function $title(context: DecoratorContext, target: ModelProperty, text: string): void {
+  context.program.stateMap(TitleKey).set(target, text);
+}
+
+// ─── @placeholder ─────────────────────────────────────────────────
+
+/** Placeholder text shown inside an input before the user types. */
+export function $placeholder(context: DecoratorContext, target: ModelProperty, text: string): void {
+  context.program.stateMap(PlaceholderKey).set(target, text);
+}
+
+// ─── @inputType ──────────────────────────────────────────────────
+
+/**
+ * HTML input type override for string-based scalars (e.g. "email", "url", "tel").
+ * Intentionally targets Scalar (not ModelProperty) - see the derived.tsp example
+ * for the @@inputType(Model.field::type, ...) augment pattern needed when the
+ * property uses a lookup type.
+ */
+export function $inputType(context: DecoratorContext, target: Scalar, htmlType: string): void {
+  context.program.stateMap(InputTypeKey).set(target, htmlType);
 }

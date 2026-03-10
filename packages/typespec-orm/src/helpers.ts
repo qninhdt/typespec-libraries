@@ -39,6 +39,10 @@ import {
   OnDeleteKey,
   OnUpdateKey,
   IgnoreKey,
+  DataKey,
+  TitleKey,
+  PlaceholderKey,
+  InputTypeKey,
 } from "./lib.js";
 
 // ─── Table helpers ───────────────────────────────────────────────────────────
@@ -106,32 +110,51 @@ export function isSoftDelete(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(SoftDeleteKey).has(prop);
 }
 
+// ─── Lookup type support ─────────────────────────────────────────────────────
+
+/**
+ * If a property's type is itself a ModelProperty (lookup type syntax, e.g.
+ * `inviteeEmail: User.email`), return that source ModelProperty.
+ * Emitters use this to inherit validators / decorators from the referenced
+ * property when the type is a lookup reference.
+ */
+function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
+  return prop.type.kind === "ModelProperty" ? (prop.type as ModelProperty) : undefined;
+}
+
 export function getMaxLength(program: Program, prop: ModelProperty): number | undefined {
-  return tsGetMaxLength(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetMaxLength(program, prop) ?? (src ? tsGetMaxLength(program, src) : undefined);
 }
 
 export function getMinLength(program: Program, prop: ModelProperty): number | undefined {
-  return tsGetMinLength(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetMinLength(program, prop) ?? (src ? tsGetMinLength(program, src) : undefined);
 }
 
 export function getMinValue(program: Program, prop: ModelProperty): number | undefined {
-  return tsGetMinValue(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetMinValue(program, prop) ?? (src ? tsGetMinValue(program, src) : undefined);
 }
 
 export function getMaxValue(program: Program, prop: ModelProperty): number | undefined {
-  return tsGetMaxValue(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetMaxValue(program, prop) ?? (src ? tsGetMaxValue(program, src) : undefined);
 }
 
 export function getPattern(program: Program, prop: ModelProperty): string | undefined {
-  return tsGetPattern(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetPattern(program, prop) ?? (src ? tsGetPattern(program, src) : undefined);
 }
 
 /**
  * Returns the TypeSpec @format value, e.g. "email", "uri", "date-time".
  * Used to emit format-specific validators in target languages.
+ * Falls back to the source property for lookup types.
  */
 export function getFormat(program: Program, prop: ModelProperty): string | undefined {
-  return tsGetFormat(program, prop);
+  const src = lookupSourceProp(prop);
+  return tsGetFormat(program, prop) ?? (src ? tsGetFormat(program, src) : undefined);
 }
 
 export interface ForeignKeyInfo {
@@ -208,13 +231,51 @@ export function isIgnored(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(IgnoreKey).has(prop);
 }
 
+// ─── DataModel / Form-field helpers ────────────────────────────────────────
+
+export function isData(program: Program, model: Model): boolean {
+  return program.stateMap(DataKey).has(model);
+}
+
+export function getDataLabel(program: Program, model: Model): string | undefined {
+  return program.stateMap(DataKey).get(model) as string | undefined;
+}
+
+export function getTitle(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(TitleKey).get(prop) as string | undefined;
+}
+
+export function collectDataModels(program: Program): { model: Model; label: string }[] {
+  const result: { model: Model; label: string }[] = [];
+  for (const [node, label] of program.stateMap(DataKey)) {
+    if ((node as { kind?: string }).kind === "Model") {
+      result.push({ model: node as Model, label: label as string });
+    }
+  }
+  return result;
+}
+
+export function getPlaceholder(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(PlaceholderKey).get(prop) as string | undefined;
+}
+
+export function getInputType(program: Program, scalar: Scalar): string | undefined {
+  return program.stateMap(InputTypeKey).get(scalar) as string | undefined;
+}
+
 // ─── Doc helper ──────────────────────────────────────────────────────────────
 
 /**
  * Returns the @doc() string for a model or property, if set.
+ * Falls back to the source property for lookup types.
  */
 export function getDoc(program: Program, target: Model | ModelProperty): string | undefined {
-  const raw = tsGetDoc(program, target);
+  let raw = tsGetDoc(program, target);
+  // Lookup type fallback: inherit @doc from the referenced ModelProperty
+  if (!raw && target.kind === "ModelProperty") {
+    const source = lookupSourceProp(target);
+    if (source) raw = tsGetDoc(program, source);
+  }
   if (!raw) return undefined;
   // Collapse multi-line @doc / /** */ values to a single line
   return raw.replace(/\r?\n[\t \*]*/g, " ").trim();
@@ -254,14 +315,20 @@ export function getEnumMembers(enumType: Enum): EnumMemberInfo[] {
 /**
  * If the property type is an enum, return the enum info (type + members).
  * Returns undefined for non-enum types.
+ * Unwraps lookup types (e.g. `User.plan`) to find the underlying enum.
  */
 export function getPropertyEnum(
   prop: ModelProperty,
 ): { enumType: Enum; members: EnumMemberInfo[] } | undefined {
-  if (!isEnum(prop.type)) return undefined;
+  let type = prop.type;
+  // Unwrap lookup types: User.plan → plan.type (the actual Enum)
+  if (type.kind === "ModelProperty") {
+    type = (type as ModelProperty).type;
+  }
+  if (!isEnum(type)) return undefined;
   return {
-    enumType: prop.type,
-    members: getEnumMembers(prop.type),
+    enumType: type,
+    members: getEnumMembers(type),
   };
 }
 
@@ -281,50 +348,56 @@ export function getScalarChain(scalar: Scalar): string[] {
   return chain;
 }
 
+/** Custom scalars defined in @qninhdt/typespec-orm */
+const CUSTOM_SCALARS = new Set(["uuid", "text", "jsonb", "serial", "bigserial"]);
+
+/** Standard TypeSpec scalar → canonical DB type mapping */
+const STANDARD_SCALAR_MAP: Record<string, string> = {
+  string: "string",
+  boolean: "boolean",
+  int8: "int8",
+  int16: "int16",
+  int32: "int32",
+  int64: "int64",
+  uint8: "uint8",
+  uint16: "uint16",
+  uint32: "uint32",
+  uint64: "uint64",
+  safeint: "int64",
+  integer: "int64",
+  float32: "float32",
+  float64: "float64",
+  numeric: "float64",
+  float: "float64",
+  decimal: "decimal",
+  utcDateTime: "utcDateTime",
+  offsetDateTime: "utcDateTime",
+  plainDate: "date",
+  plainTime: "time",
+  duration: "duration",
+  bytes: "bytes",
+  url: "string",
+};
+
 /**
  * Resolve a TypeSpec type to a canonical database type name.
  * Returns undefined for non-scalar types.
+ * Unwraps lookup types (ModelProperty references) to find the underlying scalar.
  */
 export function resolveDbType(type: Type): string | undefined {
+  // Unwrap lookup types: User.email → email.type (the actual Scalar)
+  if (type.kind === "ModelProperty") {
+    return resolveDbType((type as ModelProperty).type);
+  }
   if (type.kind !== "Scalar") return undefined;
   const chain = getScalarChain(type as Scalar);
 
-  // Check custom scalars (defined in @qninhdt/typespec-orm)
-  const CUSTOM_SCALARS = ["uuid", "text", "jsonb", "serial", "bigserial"];
   for (const name of chain) {
-    if (CUSTOM_SCALARS.includes(name)) return name;
+    if (CUSTOM_SCALARS.has(name)) return name;
   }
 
-  // Check standard TypeSpec scalars
-  const STANDARD_MAP: Record<string, string> = {
-    string: "string",
-    boolean: "boolean",
-    int8: "int8",
-    int16: "int16",
-    int32: "int32",
-    int64: "int64",
-    uint8: "uint8",
-    uint16: "uint16",
-    uint32: "uint32",
-    uint64: "uint64",
-    safeint: "int64",
-    integer: "int64",
-    float32: "float32",
-    float64: "float64",
-    numeric: "float64",
-    float: "float64",
-    decimal: "decimal",
-    utcDateTime: "utcDateTime",
-    offsetDateTime: "utcDateTime",
-    plainDate: "date",
-    plainTime: "time",
-    duration: "duration",
-    bytes: "bytes",
-    url: "string",
-  };
-
   for (const name of chain) {
-    if (name in STANDARD_MAP) return STANDARD_MAP[name];
+    if (name in STANDARD_SCALAR_MAP) return STANDARD_SCALAR_MAP[name];
   }
 
   return undefined;
@@ -340,37 +413,37 @@ export function camelToSnake(name: string): string {
     .toLowerCase();
 }
 
+/** Pre-compiled Go abbreviation replacement patterns (avoids per-call RegExp construction) */
+const GO_ABBREVIATION_RULES: { endPattern: RegExp; midPattern: RegExp; to: string }[] = [
+  ["Id", "ID"],
+  ["Ids", "IDs"],
+  ["Url", "URL"],
+  ["Urls", "URLs"],
+  ["Uri", "URI"],
+  ["Uris", "URIs"],
+  ["Http", "HTTP"],
+  ["Https", "HTTPS"],
+  ["Api", "API"],
+  ["Uuid", "UUID"],
+  ["Sql", "SQL"],
+  ["Ip", "IP"],
+  ["Tcp", "TCP"],
+  ["Udp", "UDP"],
+  ["Ssh", "SSH"],
+  ["Cpu", "CPU"],
+  ["Json", "JSON"],
+].map(([from, to]) => ({
+  endPattern: new RegExp(`${from}$`),
+  midPattern: new RegExp(`${from}(?=[A-Z])`, "g"),
+  to,
+}));
+
 /** Convert camelCase to PascalCase with Go abbreviation rules */
 export function camelToPascal(name: string): string {
   let result = name.charAt(0).toUpperCase() + name.slice(1);
 
-  // Go common abbreviations
-  const ABBREVIATIONS: Record<string, string> = {
-    Id: "ID",
-    Ids: "IDs",
-    Url: "URL",
-    Urls: "URLs",
-    Uri: "URI",
-    Uris: "URIs",
-    Http: "HTTP",
-    Https: "HTTPS",
-    Api: "API",
-    Uuid: "UUID",
-    Sql: "SQL",
-    Ip: "IP",
-    Tcp: "TCP",
-    Udp: "UDP",
-    Ssh: "SSH",
-    Cpu: "CPU",
-    Json: "JSON",
-  };
-
-  for (const [from, to] of Object.entries(ABBREVIATIONS)) {
-    // Replace at end of string
-    const endPattern = new RegExp(`${from}$`);
+  for (const { endPattern, midPattern, to } of GO_ABBREVIATION_RULES) {
     result = result.replace(endPattern, to);
-    // Replace before uppercase letter (word boundary in PascalCase)
-    const midPattern = new RegExp(`${from}(?=[A-Z])`, "g");
     result = result.replace(midPattern, to);
   }
 

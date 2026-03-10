@@ -9,6 +9,9 @@ import type { EmitContext, Enum, Model, ModelProperty, Program } from "@typespec
 import type { EnumMemberInfo, ResolvedRelation } from "@qninhdt/typespec-orm";
 import {
   collectTableModels,
+  collectDataModels,
+  getTitle,
+  getPlaceholder,
   getColumnName,
   getCompositeIndexes,
   getCompositeUniques,
@@ -25,17 +28,18 @@ import {
   getPattern,
   getPrecision,
   getPropertyEnum,
-  resolveRelation,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
   isId,
-  isIgnored,
   isIndex,
   isSoftDelete,
   isUnique,
   resolveDbType,
   camelToSnake,
+  // Shared emitter utilities
+  NUMERIC_TYPES,
+  classifyProperties,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic, type SqlModelEmitterOptions } from "./lib.js";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -117,149 +121,140 @@ function promoteFieldArgsToColumn(
 interface PythonTypeMapping {
   pyType: string;
   saColumnType?: string;
-  imports: Set<string>;
-  saImports: Set<string>;
+  imports: readonly string[];
+  saImports: readonly string[];
 }
 
+const UNKNOWN_PY_TYPE: PythonTypeMapping = {
+  pyType: "Any",
+  imports: ["typing.Any"],
+  saImports: [],
+};
+
+/** Pre-built lookup table - avoids creating fresh Set objects on every call. */
+const PYTHON_TYPE_MAP: Record<string, PythonTypeMapping> = {
+  uuid: { pyType: "UUID", imports: ["uuid.UUID"], saImports: [] },
+  string: { pyType: "str", saColumnType: "String", imports: [], saImports: ["sqlalchemy.String"] },
+  text: { pyType: "str", saColumnType: "Text", imports: [], saImports: ["sqlalchemy.Text"] },
+  boolean: {
+    pyType: "bool",
+    saColumnType: "Boolean",
+    imports: [],
+    saImports: ["sqlalchemy.Boolean"],
+  },
+  int8: {
+    pyType: "int",
+    saColumnType: "SmallInteger",
+    imports: [],
+    saImports: ["sqlalchemy.SmallInteger"],
+  },
+  int16: {
+    pyType: "int",
+    saColumnType: "SmallInteger",
+    imports: [],
+    saImports: ["sqlalchemy.SmallInteger"],
+  },
+  int32: {
+    pyType: "int",
+    saColumnType: "Integer",
+    imports: [],
+    saImports: ["sqlalchemy.Integer"],
+  },
+  serial: {
+    pyType: "int",
+    saColumnType: "Integer",
+    imports: [],
+    saImports: ["sqlalchemy.Integer"],
+  },
+  int64: {
+    pyType: "int",
+    saColumnType: "BigInteger",
+    imports: [],
+    saImports: ["sqlalchemy.BigInteger"],
+  },
+  bigserial: {
+    pyType: "int",
+    saColumnType: "BigInteger",
+    imports: [],
+    saImports: ["sqlalchemy.BigInteger"],
+  },
+  uint8: {
+    pyType: "int",
+    saColumnType: "Integer",
+    imports: [],
+    saImports: ["sqlalchemy.Integer"],
+  },
+  uint16: {
+    pyType: "int",
+    saColumnType: "Integer",
+    imports: [],
+    saImports: ["sqlalchemy.Integer"],
+  },
+  uint32: {
+    pyType: "int",
+    saColumnType: "BigInteger",
+    imports: [],
+    saImports: ["sqlalchemy.BigInteger"],
+  },
+  uint64: {
+    pyType: "int",
+    saColumnType: "BigInteger",
+    imports: [],
+    saImports: ["sqlalchemy.BigInteger"],
+  },
+  float32: { pyType: "float", saColumnType: "Float", imports: [], saImports: ["sqlalchemy.Float"] },
+  float64: {
+    pyType: "float",
+    saColumnType: "Double",
+    imports: [],
+    saImports: ["sqlalchemy.Double"],
+  },
+  decimal: {
+    pyType: "Decimal",
+    saColumnType: "Numeric",
+    imports: ["decimal.Decimal"],
+    saImports: ["sqlalchemy.Numeric"],
+  },
+  utcDateTime: {
+    pyType: "datetime",
+    saColumnType: "DateTime(timezone=True)",
+    imports: ["datetime.datetime"],
+    saImports: ["sqlalchemy.DateTime"],
+  },
+  date: {
+    pyType: "date",
+    saColumnType: "Date",
+    imports: ["datetime.date"],
+    saImports: ["sqlalchemy.Date"],
+  },
+  time: {
+    pyType: "time",
+    saColumnType: "Time",
+    imports: ["datetime.time"],
+    saImports: ["sqlalchemy.Time"],
+  },
+  duration: {
+    pyType: "timedelta",
+    saColumnType: "Interval",
+    imports: ["datetime.timedelta"],
+    saImports: ["sqlalchemy.Interval"],
+  },
+  bytes: {
+    pyType: "bytes",
+    saColumnType: "LargeBinary",
+    imports: [],
+    saImports: ["sqlalchemy.LargeBinary"],
+  },
+  jsonb: {
+    pyType: "dict[str, Any]",
+    saColumnType: "JSONB",
+    imports: ["typing.Any"],
+    saImports: ["sqlalchemy.dialects.postgresql.JSONB"],
+  },
+};
+
 function getPythonTypeMap(dbType: string): PythonTypeMapping {
-  switch (dbType) {
-    case "uuid":
-      return {
-        pyType: "UUID",
-        imports: new Set(["uuid.UUID"]),
-        saImports: new Set(),
-      };
-    case "string":
-      return {
-        pyType: "str",
-        saColumnType: "String",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.String"]),
-      };
-    case "text":
-      return {
-        pyType: "str",
-        saColumnType: "Text",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Text"]),
-      };
-    case "boolean":
-      return {
-        pyType: "bool",
-        saColumnType: "Boolean",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Boolean"]),
-      };
-    case "int8":
-    case "int16":
-      return {
-        pyType: "int",
-        saColumnType: "SmallInteger",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.SmallInteger"]),
-      };
-    case "int32":
-    case "serial":
-      return {
-        pyType: "int",
-        saColumnType: "Integer",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Integer"]),
-      };
-    case "int64":
-    case "bigserial":
-      return {
-        pyType: "int",
-        saColumnType: "BigInteger",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.BigInteger"]),
-      };
-    case "uint8":
-    case "uint16":
-      return {
-        pyType: "int",
-        saColumnType: "Integer",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Integer"]),
-      };
-    case "uint32":
-    case "uint64":
-      return {
-        pyType: "int",
-        saColumnType: "BigInteger",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.BigInteger"]),
-      };
-    case "float32":
-      return {
-        pyType: "float",
-        saColumnType: "Float",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Float"]),
-      };
-    case "float64":
-      return {
-        pyType: "float",
-        saColumnType: "Double",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.Double"]),
-      };
-    case "decimal":
-      return {
-        pyType: "Decimal",
-        saColumnType: "Numeric",
-        imports: new Set(["decimal.Decimal"]),
-        saImports: new Set(["sqlalchemy.Numeric"]),
-      };
-    case "utcDateTime":
-      return {
-        pyType: "datetime",
-        saColumnType: "DateTime(timezone=True)",
-        imports: new Set(["datetime.datetime"]),
-        saImports: new Set(["sqlalchemy.DateTime"]),
-      };
-    case "date":
-      return {
-        pyType: "date",
-        saColumnType: "Date",
-        imports: new Set(["datetime.date"]),
-        saImports: new Set(["sqlalchemy.Date"]),
-      };
-    case "time":
-      return {
-        pyType: "time",
-        saColumnType: "Time",
-        imports: new Set(["datetime.time"]),
-        saImports: new Set(["sqlalchemy.Time"]),
-      };
-    case "duration":
-      return {
-        pyType: "timedelta",
-        saColumnType: "Interval",
-        imports: new Set(["datetime.timedelta"]),
-        saImports: new Set(["sqlalchemy.Interval"]),
-      };
-    case "bytes":
-      return {
-        pyType: "bytes",
-        saColumnType: "LargeBinary",
-        imports: new Set(),
-        saImports: new Set(["sqlalchemy.LargeBinary"]),
-      };
-    case "jsonb":
-      return {
-        pyType: "dict[str, Any]",
-        saColumnType: "JSONB",
-        imports: new Set(["typing.Any"]),
-        saImports: new Set(["sqlalchemy.dialects.postgresql.JSONB"]),
-      };
-    default:
-      return {
-        pyType: "Any",
-        imports: new Set(["typing.Any"]),
-        saImports: new Set(),
-      };
-  }
+  return PYTHON_TYPE_MAP[dbType] ?? UNKNOWN_PY_TYPE;
 }
 
 // ─── Emitter entry point ─────────────────────────────────────────────────────
@@ -270,7 +265,9 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   const moduleName = context.options["module-name"] ?? "models";
 
   const tables = collectTableModels(program);
-  if (tables.length === 0) {
+  const dataModels = collectDataModels(program);
+
+  if (tables.length === 0 && dataModels.length === 0) {
     reportDiagnostic(program, {
       code: "no-tables-found",
       target: program.getGlobalNamespaceType(),
@@ -280,6 +277,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
 
   await mkdir(outputDir, { recursive: true });
 
+  const allModelNames: string[] = [];
   const moduleFiles: string[] = [];
 
   for (const { model, tableName } of tables) {
@@ -295,15 +293,29 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
         target: model,
       });
     }
+    allModelNames.push(model.name);
+    moduleFiles.push(fileName.replace(".py", ""));
+  }
+
+  for (const { model, label } of dataModels) {
+    const code = generatePydanticModel(program, model, label);
+    const fileName = camelToSnake(model.name) + ".py";
+    try {
+      await writeFile(join(outputDir, fileName), code);
+    } catch (err) {
+      reportDiagnostic(program, {
+        code: "emit-write-failed",
+        messageId: "default",
+        format: { fileName, error: String(err) },
+        target: model,
+      });
+    }
+    allModelNames.push(model.name);
     moduleFiles.push(fileName.replace(".py", ""));
   }
 
   // Generate __init__.py that re-exports all models
-  const initCode = generateInit(
-    tables.map((t) => t.model.name),
-    moduleFiles,
-    moduleName,
-  );
+  const initCode = generateInit(allModelNames, moduleFiles, moduleName);
   try {
     await writeFile(join(outputDir, "__init__.py"), initCode);
   } catch (err) {
@@ -330,6 +342,125 @@ function generateEnumClass(enumName: string, members: EnumMemberInfo[]): string 
   return code;
 }
 
+// ─── @data model → Pydantic BaseModel generation ────────────────────────────
+
+function generatePydanticField(
+  program: Program,
+  prop: ModelProperty,
+  stdImports: Set<string>,
+  pydanticImports: Set<string>,
+): string {
+  const pyFieldName = camelToSnake(prop.name);
+  const dbType = resolveDbType(prop.type);
+  const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
+
+  const enumInfo = getPropertyEnum(prop);
+  let pyType = mapping.pyType;
+  if (enumInfo) {
+    pyType = enumInfo.enumType.name;
+  } else {
+    for (const imp of mapping.imports) stdImports.add(imp);
+  }
+
+  // Format-based type overrides (Pydantic v2 semantic types)
+  const format = getFormat(program, prop);
+  if (format === "email") {
+    pydanticImports.add("EmailStr");
+    pyType = "EmailStr";
+  } else if (format === "url" || format === "uri") {
+    pydanticImports.add("AnyUrl");
+    pyType = "AnyUrl";
+  } else if (format !== undefined && format !== null && format !== "") {
+    reportDiagnostic(program, {
+      code: "unknown-format",
+      target: prop,
+      format: { format, propName: prop.name },
+    });
+  }
+
+  const isOpt = prop.optional;
+  if (isOpt) {
+    stdImports.add("typing.Optional");
+    pyType = `Optional[${pyType}]`;
+  }
+
+  const fieldArgs: string[] = [isOpt ? "None" : "..."];
+
+  const maxLen = getMaxLength(program, prop);
+  const minLen = getMinLength(program, prop);
+  const minVal = getMinValue(program, prop);
+  const maxVal = getMaxValue(program, prop);
+  const pattern = getPattern(program, prop);
+
+  if (maxLen !== undefined) fieldArgs.push(`max_length=${maxLen}`);
+  if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);
+  if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
+  if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
+  if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
+
+  const label = getTitle(program, prop);
+  if (label) fieldArgs.push(`title="${label.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+
+  const doc = getDoc(program, prop);
+  if (doc) fieldArgs.push(`description="${doc.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+
+  const placeholder = getPlaceholder(program, prop);
+  if (placeholder)
+    fieldArgs.push(
+      `json_schema_extra={"placeholder": "${placeholder.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}`,
+    );
+
+  pydanticImports.add("Field");
+
+  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
+
+  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+}
+
+function generatePydanticModel(program: Program, model: Model, label: string): string {
+  const stdImports = new Set<string>();
+  const pydanticImports = new Set<string>(["BaseModel"]);
+  const enumTypes = new Map<string, EnumMemberInfo[]>();
+  const fieldDefs: string[] = [];
+
+  for (const [, prop] of model.properties) {
+    const enumInfo = getPropertyEnum(prop);
+    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
+      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
+      stdImports.add("enum.Enum");
+    }
+    fieldDefs.push(generatePydanticField(program, prop, stdImports, pydanticImports));
+  }
+
+  let code = FILE_HEADER;
+
+  const stdImportGroups = groupImports(stdImports);
+  for (const [module, names] of stdImportGroups) {
+    code += `from ${module} import ${[...names].sort().join(", ")}\n`;
+  }
+  if (stdImportGroups.size > 0) code += "\n";
+
+  const pydanticList = [...pydanticImports].sort();
+  code += `from pydantic import ${pydanticList.join(", ")}\n`;
+  code += "\n\n";
+
+  for (const [enumName, members] of enumTypes) {
+    code += generateEnumClass(enumName, members);
+    code += "\n\n";
+  }
+
+  const modelDoc = getDoc(program, model);
+  code += `class ${model.name}(BaseModel):\n`;
+  code += `${FOUR_SPACES}"""${modelDoc ?? label}"""\n`;
+  code += "\n";
+
+  for (const field of fieldDefs) {
+    code += field;
+  }
+
+  return code;
+}
+
 function generateSqlModel(program: Program, model: Model, tableName: string): string {
   // Collect all imports needed
   const stdImports = new Set<string>(); // "from X import Y" style
@@ -338,72 +469,63 @@ function generateSqlModel(program: Program, model: Model, tableName: string): st
   const needsField = { value: false };
   const needsColumn = { value: false };
   const needsRelationship = { value: false };
-  const enumTypes = new Map<string, EnumMemberInfo[]>();
+
+  // Classify properties using shared utility
+  const {
+    enumTypes,
+    ignored,
+    relations,
+    fields: regularProps,
+  } = classifyProperties(program, model);
 
   // Pre-scan properties to determine imports and collect enums
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
 
-  for (const [, prop] of model.properties) {
-    // Collect enum types
-    const enumInfo = getPropertyEnum(prop);
-    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
-      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
+  // Ignored fields - emit as ClassVar (excluded from DB)
+  for (const { prop, enumInfo } of ignored) {
+    const dbType = resolveDbType(prop.type);
+    const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
+    let pyType = mapping.pyType;
+    if (enumInfo) {
+      pyType = enumInfo.enumType.name;
+    } else {
+      for (const imp of mapping.imports) stdImports.add(imp);
     }
-
-    // Ignored fields - emit as ClassVar (excluded from DB)
-    if (isIgnored(program, prop)) {
-      const dbType = resolveDbType(prop.type);
-      const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
-      let pyType = mapping.pyType;
-      if (enumInfo) {
-        pyType = enumInfo.enumType.name;
-      } else {
-        for (const imp of mapping.imports) stdImports.add(imp);
-      }
-      stdImports.add("typing.ClassVar");
-      const finalType = prop.optional ? `${pyType} | None` : pyType;
-      const doc = getDoc(program, prop);
-      const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
-      fieldDefs.push(
-        `${docComment}${FOUR_SPACES}${camelToSnake(prop.name)}: ClassVar[${finalType}]  # @ignore - not persisted\n`,
-      );
-      continue;
-    }
-
-    // Relationship navigation fields (auto-detected)
-    const resolved = resolveRelation(program, prop, model);
-    if (resolved) {
-      needsRelationship.value = true;
-      // Auto-inject FK scalar field for many-to-one / one-to-one
-      if (resolved.autoInjectFk) {
-        fieldDefs.push(
-          generateAutoFkField(
-            program,
-            prop,
-            resolved,
-            stdImports,
-            saImports,
-            sqlmodelImports,
-            needsField,
-            needsColumn,
-          ),
-        );
-      }
-      relationDefs.push(generateResolvedRelationField(program, prop, resolved, stdImports));
-      continue;
-    }
-
-    const fieldDef = generateField(
-      program,
-      prop,
-      stdImports,
-      saImports,
-      sqlmodelImports,
-      needsField,
-      needsColumn,
+    stdImports.add("typing.ClassVar");
+    const finalType = prop.optional ? `${pyType} | None` : pyType;
+    const doc = getDoc(program, prop);
+    const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
+    fieldDefs.push(
+      `${docComment}${FOUR_SPACES}${camelToSnake(prop.name)}: ClassVar[${finalType}]  # @ignore - not persisted\n`,
     );
-    fieldDefs.push(fieldDef);
+  }
+
+  // Relationship navigation fields
+  for (const { prop, resolved } of relations) {
+    needsRelationship.value = true;
+    if (resolved.autoInjectFk) {
+      fieldDefs.push(
+        generateAutoFkField(
+          program,
+          prop,
+          resolved,
+          stdImports,
+          saImports,
+          sqlmodelImports,
+          needsField,
+          needsColumn,
+        ),
+      );
+    }
+    relationDefs.push(generateResolvedRelationField(program, prop, resolved));
+  }
+
+  // Regular DB-mapped fields
+  for (const { prop } of regularProps) {
+    fieldDefs.push(
+      generateField(program, prop, stdImports, saImports, sqlmodelImports, needsField, needsColumn),
+    );
   }
 
   if (needsField.value) {
@@ -595,7 +717,6 @@ function generateResolvedRelationField(
   program: Program,
   prop: ModelProperty,
   rel: ResolvedRelation,
-  _stdImports: Set<string>,
 ): string {
   const pyFieldName = camelToSnake(prop.name);
   const pyRefType = `"${rel.targetModel.name}"`;
@@ -855,23 +976,7 @@ function generateField(
   }
 
   // Numeric range constraints (Pydantic v2 ge/le) - includes decimal
-  const isNumericType =
-    dbType !== undefined &&
-    [
-      "int8",
-      "int16",
-      "int32",
-      "int64",
-      "uint8",
-      "uint16",
-      "uint32",
-      "uint64",
-      "float32",
-      "float64",
-      "decimal",
-      "serial",
-      "bigserial",
-    ].includes(dbType);
+  const isNumericType = dbType !== undefined && NUMERIC_TYPES.has(dbType);
   if (isNumericType) {
     const minVal = getMinValue(program, prop);
     const maxVal = getMaxValue(program, prop);
@@ -996,7 +1101,7 @@ function generateField(
 }
 
 function generateInit(modelNames: string[], moduleFiles: string[], moduleName: string): string {
-  let code = `"""${moduleName} \u2014 auto-generated SQLModel database models. DO NOT EDIT."""\n\n`;
+  let code = `"""${moduleName} — auto-generated models. DO NOT EDIT."""\n\n`;
 
   for (let i = 0; i < modelNames.length; i++) {
     code += `from .${moduleFiles[i]} import ${modelNames[i]}\n`;

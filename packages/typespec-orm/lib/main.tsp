@@ -46,28 +46,15 @@ extern dec foreignKey(
 
 extern dec relation(
   target: ModelProperty,
-  type: valueof
-    | "one-to-one"
-    | "one-to-many"
-    | "many-to-one"
-    | "many-to-many"
-    | "belongs-to",
+  type: valueof "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many" | "belongs-to",
   foreignKey?: valueof string
 );
 
 // ─── Composite Indexes & Unique Constraints ──────────────────────────────────
 
-extern dec compositeIndex(
-  target: Model,
-  name: valueof string,
-  ...columns: valueof string[]
-);
+extern dec compositeIndex(target: Model, name: valueof string, ...columns: valueof string[]);
 
-extern dec compositeUnique(
-  target: Model,
-  name: valueof string,
-  ...columns: valueof string[]
-);
+extern dec compositeUnique(target: Model, name: valueof string, ...columns: valueof string[]);
 
 // ─── Timestamp auto-fill ─────────────────────────────────────────────────────
 
@@ -77,34 +64,37 @@ extern dec autoUpdateTime(target: ModelProperty);
 
 // ─── Precision ───────────────────────────────────────────────────────────────
 
-extern dec precision(
-  target: ModelProperty,
-  precision: valueof int32,
-  scale?: valueof int32
-);
+extern dec precision(target: ModelProperty, precision: valueof int32, scale?: valueof int32);
 
 // ─── Cascading & FK Constraints ──────────────────────────────────────────────
 
 extern dec onDelete(
   target: ModelProperty,
-  action: valueof
-    | "CASCADE"
-    | "SET NULL"
-    | "SET DEFAULT"
-    | "RESTRICT"
-    | "NO ACTION"
+  action: valueof "CASCADE" | "SET NULL" | "SET DEFAULT" | "RESTRICT" | "NO ACTION"
 );
 
 extern dec onUpdate(
   target: ModelProperty,
-  action: valueof
-    | "CASCADE"
-    | "SET NULL"
-    | "SET DEFAULT"
-    | "RESTRICT"
-    | "NO ACTION"
+  action: valueof "CASCADE" | "SET NULL" | "SET DEFAULT" | "RESTRICT" | "NO ACTION"
 );
 
 // ─── Ignore Field ────────────────────────────────────────────────────────────
 
 extern dec ignore(target: ModelProperty);
+
+// ─── Data / Form Decorators ───────────────────────────────────────────────────
+
+/** Marks a model as a data/form shape (not a database table). */
+extern dec data(target: Model, label?: valueof string);
+
+/** Sets a human-readable title for a form field (Pydantic Field(title=...) / Go form tag). */
+extern dec title(target: ModelProperty, text: valueof string);
+
+/** Sets a placeholder hint for a form field. */
+extern dec placeholder(target: ModelProperty, text: valueof string);
+
+/**
+ * Sets the HTML input type for a scalar type.
+ * Must target a Scalar - use `@@inputType(Model.field::type, ...)` for lookup-typed properties.
+ */
+extern dec inputType(target: Scalar, htmlType: valueof string);

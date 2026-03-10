@@ -141,6 +141,11 @@ export const $lib = createTypeSpecLibrary({
       description: "Maps ModelProperty → ON UPDATE action string",
     },
     ignore: { description: "Marks ModelProperty as ignored (not a DB column)" },
+    // ─── Data / Form decorators ──────────────────────────────────────────────
+    data: { description: "Marks Model as a non-DB data/form shape" },
+    title: { description: "Maps ModelProperty → human-readable field title" },
+    placeholder: { description: "Maps ModelProperty → input placeholder text" },
+    inputType: { description: "Maps Scalar → HTML input type hint" },
   },
 } as const);
 
@@ -166,3 +171,7 @@ export const PrecisionKey = $lib.stateKeys.precision;
 export const OnDeleteKey = $lib.stateKeys.onDelete;
 export const OnUpdateKey = $lib.stateKeys.onUpdate;
 export const IgnoreKey = $lib.stateKeys.ignore;
+export const DataKey = $lib.stateKeys.data;
+export const TitleKey = $lib.stateKeys.title;
+export const PlaceholderKey = $lib.stateKeys.placeholder;
+export const InputTypeKey = $lib.stateKeys.inputType;

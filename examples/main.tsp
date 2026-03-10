@@ -7,3 +7,4 @@
 import "./models/user.tsp";
 import "./models/world.tsp";
 import "./models/story.tsp";
+import "./models/derived.tsp";

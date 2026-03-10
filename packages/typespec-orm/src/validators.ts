@@ -6,7 +6,7 @@
  */
 
 import type { Model, ModelProperty, Program } from "@typespec/compiler";
-import { reportDiagnostic, TableKey } from "./lib.js";
+import { reportDiagnostic, MapKey, TableKey } from "./lib.js";
 import {
   isTable,
   getColumnName,
@@ -27,7 +27,30 @@ import {
   getCompositeUniques,
   resolveDbType,
   camelToSnake,
+  deriveTableName,
 } from "./helpers.js";
+
+// ─── Type‐check Sets (module‐level to avoid per‐call allocation) ─────────────
+
+/** Types that accept @precision */
+const PRECISION_TYPES = new Set(["decimal", "float32", "float64", "int32", "int64"]);
+
+/** Types that accept @autoIncrement */
+const INTEGER_TYPES = new Set([
+  "int8",
+  "int16",
+  "int32",
+  "int64",
+  "uint8",
+  "uint16",
+  "uint32",
+  "uint64",
+  "serial",
+  "bigserial",
+]);
+
+/** Types that accept @softDelete / @autoCreateTime / @autoUpdateTime */
+const DATETIME_TYPES = new Set(["utcDateTime"]);
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 
@@ -38,7 +61,7 @@ export function $onValidate(program: Program): void {
   for (const [type, name] of program.stateMap(TableKey)) {
     if (type.kind === "Model") {
       const model = type as Model;
-      const tableName = (name as string) || deriveTableNameForValidation(model.name);
+      const tableName = (name as string) || deriveTableName(model.name);
       tableModels.push({ model, tableName });
     }
   }
@@ -50,6 +73,9 @@ export function $onValidate(program: Program): void {
   for (const { model } of tableModels) {
     validateModel(program, model);
   }
+
+  // 3. @onDelete/@onUpdate on non-relation scalar props
+  validateCascadeOnScalar(program, tableModels);
 }
 
 // ─── Duplicate table name check ──────────────────────────────────────────────
@@ -83,7 +109,6 @@ function validateModel(program: Program, model: Model): void {
   for (const [, prop] of model.properties) {
     // Skip navigation/array properties (relations)
     if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
-      validateRelationProperty(program, prop);
       continue;
     }
     if (prop.type.kind === "Model" && (prop.type as Model).indexer?.value?.kind === "Model") {
@@ -173,8 +198,7 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
 
   // @precision on non-numeric
   if (getPrecision(program, prop)) {
-    const NUMERIC_TYPES = new Set(["decimal", "float32", "float64", "int32", "int64"]);
-    if (!dbType || !NUMERIC_TYPES.has(dbType)) {
+    if (!dbType || !PRECISION_TYPES.has(dbType)) {
       reportDiagnostic(program, {
         code: "precision-on-non-numeric",
         target: prop,
@@ -185,18 +209,6 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
 
   // @autoIncrement on non-integer
   if (isAutoIncrement(program, prop)) {
-    const INTEGER_TYPES = new Set([
-      "int8",
-      "int16",
-      "int32",
-      "int64",
-      "uint8",
-      "uint16",
-      "uint32",
-      "uint64",
-      "serial",
-      "bigserial",
-    ]);
     if (!dbType || !INTEGER_TYPES.has(dbType)) {
       reportDiagnostic(program, {
         code: "auto-increment-on-non-integer",
@@ -208,7 +220,6 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
 
   // @softDelete on non-datetime
   if (isSoftDelete(program, prop)) {
-    const DATETIME_TYPES = new Set(["utcDateTime"]);
     if (!dbType || !DATETIME_TYPES.has(dbType)) {
       reportDiagnostic(program, {
         code: "soft-delete-on-non-datetime",
@@ -224,7 +235,6 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
     [isAutoUpdateTime, "autoUpdateTime"],
   ] as const) {
     if (check(program, prop)) {
-      const DATETIME_TYPES = new Set(["utcDateTime"]);
       if (!dbType || !DATETIME_TYPES.has(dbType)) {
         reportDiagnostic(program, {
           code: "auto-time-on-non-datetime",
@@ -266,18 +276,10 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
   }
 }
 
-// ─── Relation property validations ───────────────────────────────────────────
-
-function validateRelationProperty(_program: Program, _prop: ModelProperty): void {
-  // @onDelete/@onUpdate without FK or relation type is useless on scalar props
-  // (but valid on Model-typed relation props - those are checked here)
-  // No validation needed: onDelete/onUpdate IS valid on relation props
-}
-
-// ─── Cascade on non-relation check (called for scalar props) ─────────────────
+// ─── Cascade on non-relation check ───────────────────────────────────────────
 
 /** Check if @onDelete or @onUpdate is used on non-relation scalar properties */
-export function validateCascadeOnScalar(
+function validateCascadeOnScalar(
   program: Program,
   tableModels: { model: Model; tableName: string }[],
 ): void {
@@ -318,34 +320,25 @@ function validateCompositeConstraints(
 ): void {
   const validColumns = new Set(columnNames.keys());
 
-  for (const idx of getCompositeIndexes(program, model)) {
-    for (const col of idx.columns) {
-      if (!validColumns.has(col)) {
-        reportDiagnostic(program, {
-          code: "composite-column-not-found",
-          target: model,
-          format: {
-            columnName: col,
-            decorator: "compositeIndex",
-            constraintName: idx.name,
-          },
-        });
-      }
-    }
-  }
+  const constraints: { entries: { name: string; columns: string[] }[]; decorator: string }[] = [
+    { entries: getCompositeIndexes(program, model), decorator: "compositeIndex" },
+    { entries: getCompositeUniques(program, model), decorator: "compositeUnique" },
+  ];
 
-  for (const unq of getCompositeUniques(program, model)) {
-    for (const col of unq.columns) {
-      if (!validColumns.has(col)) {
-        reportDiagnostic(program, {
-          code: "composite-column-not-found",
-          target: model,
-          format: {
-            columnName: col,
-            decorator: "compositeUnique",
-            constraintName: unq.name,
-          },
-        });
+  for (const { entries, decorator } of constraints) {
+    for (const entry of entries) {
+      for (const col of entry.columns) {
+        if (!validColumns.has(col)) {
+          reportDiagnostic(program, {
+            code: "composite-column-not-found",
+            target: model,
+            format: {
+              columnName: col,
+              decorator,
+              constraintName: entry.name,
+            },
+          });
+        }
       }
     }
   }
@@ -353,17 +346,7 @@ function validateCompositeConstraints(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-import { MapKey } from "./lib.js";
-
 /** Check if a property has an explicit @map() decorator (vs auto-derived name) */
 function hasExplicitMap(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(MapKey).has(prop);
-}
-
-/** Derive table name from model name (duplicated from helpers to avoid circular deps) */
-function deriveTableNameForValidation(modelName: string): string {
-  const snake = camelToSnake(modelName);
-  if (snake.endsWith("s")) return snake;
-  if (snake.endsWith("y")) return snake.slice(0, -1) + "ies";
-  return snake + "s";
 }

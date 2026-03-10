@@ -1,6 +1,6 @@
 {
   "name": "@qninhdt/typespec-orm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeSpec decorator library for defining database ORM schemas - @table, @id, @index, @foreignKey and more.",
   "type": "module",
   "main": "dist/src/index.js",
