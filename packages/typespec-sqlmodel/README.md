@@ -130,7 +130,7 @@ class Post(SQLModel, table=True):
 
 | TypeSpec type | PostgreSQL column  | Python type      | SQLAlchemy column type    | Import                                 |
 | ------------- | ------------------ | ---------------- | ------------------------- | -------------------------------------- |
-| `uuid`        | `uuid`             | `UUID`           | _(inferred)_              | `from uuid import UUID`                           |
+| `uuid`        | `uuid`             | `UUID`           | _(inferred)_              | `from uuid import UUID`                |
 | `string`      | `varchar(255)`     | `str`            | `String(255)`             | `sqlalchemy.String`                    |
 | `text`        | `text`             | `str`            | `Text`                    | `sqlalchemy.Text`                      |
 | `boolean`     | `boolean`          | `bool`           | `Boolean`                 | `sqlalchemy.Boolean`                   |
