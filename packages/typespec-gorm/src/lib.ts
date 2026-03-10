@@ -38,7 +38,7 @@ export const $lib = createTypeSpecLibrary({
     "no-tables-found": {
       severity: "warning",
       messages: {
-        default: "No models decorated with @table were found. Nothing to emit.",
+        default: "No models decorated with @table or @data were found. Nothing to emit.",
       },
     },
     "unknown-format": {

@@ -365,10 +365,10 @@ function generatePydanticField(
   // Format-based type overrides (Pydantic v2 semantic types)
   const format = getFormat(program, prop);
   if (format === "email") {
-    stdImports.add("pydantic.EmailStr");
+    pydanticImports.add("EmailStr");
     pyType = "EmailStr";
   } else if (format === "url" || format === "uri") {
-    stdImports.add("pydantic.AnyUrl");
+    pydanticImports.add("AnyUrl");
     pyType = "AnyUrl";
   } else if (format !== undefined && format !== null && format !== "") {
     reportDiagnostic(program, {
