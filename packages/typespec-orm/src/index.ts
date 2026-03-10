@@ -18,6 +18,10 @@ export {
   OnDeleteKey,
   OnUpdateKey,
   IgnoreKey,
+  DataKey,
+  TitleKey,
+  PlaceholderKey,
+  InputTypeKey,
   reportDiagnostic,
 } from "./lib.js";
 
@@ -49,6 +53,10 @@ import {
   $onDelete,
   $onUpdate,
   $ignore,
+  $data,
+  $title,
+  $placeholder,
+  $inputType,
 } from "./decorators.js";
 
 export const $decorators = {
@@ -70,6 +78,10 @@ export const $decorators = {
     onDelete: $onDelete,
     onUpdate: $onUpdate,
     ignore: $ignore,
+    data: $data,
+    title: $title,
+    placeholder: $placeholder,
+    inputType: $inputType,
   },
 };
 
@@ -115,6 +127,13 @@ export {
   findPrimaryKey,
   unwrapArrayType,
   resolveRelation,
+  // Data / form helpers
+  isData,
+  getDataLabel,
+  getTitle,
+  collectDataModels,
+  getPlaceholder,
+  getInputType,
 } from "./helpers.js";
 
 export type {
@@ -126,3 +145,12 @@ export type {
   EnumMemberInfo,
   TableModel,
 } from "./helpers.js";
+
+// ─── Shared emitter utilities ────────────────────────────────────────────────
+export { NUMERIC_TYPES, deduplicateParts, classifyProperties } from "./emitter-utils.js";
+
+export type {
+  ClassifiedProperty,
+  ClassifiedRelation,
+  ClassifiedProperties,
+} from "./emitter-utils.js";

@@ -9,6 +9,9 @@ import type { EmitContext, Enum, Model, ModelProperty, Program } from "@typespec
 import type { EnumMemberInfo, ResolvedRelation } from "@qninhdt/typespec-orm";
 import {
   collectTableModels,
+  collectDataModels,
+  getTitle,
+  getPlaceholder,
   getColumnName,
   getCompositeIndexes,
   getCompositeUniques,
@@ -26,18 +29,20 @@ import {
   getPattern,
   getPrecision,
   getPropertyEnum,
-  resolveRelation,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
   isId,
-  isIgnored,
   isIndex,
   isSoftDelete,
   isUnique,
   resolveDbType,
   camelToPascal,
   camelToSnake,
+  // Shared emitter utilities
+  NUMERIC_TYPES,
+  deduplicateParts,
+  classifyProperties,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic, type GormEmitterOptions } from "./lib.js";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -97,6 +102,23 @@ const GO_TYPE_MAP: Record<string, { goType: string; gormType: string; imports?: 
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/** Maps @format values → go-playground/validator v10 tag names */
+const GO_FORMAT_VALIDATORS: Record<string, string> = {
+  email: "email",
+  uri: "url",
+  url: "url",
+  uuid: "uuid",
+  ipv4: "ipv4",
+  ipv6: "ipv6",
+  ip: "ip",
+  cidr: "cidr",
+  mac: "mac",
+  base64: "base64",
+  hostname: "hostname",
+  latitude: "latitude",
+  longitude: "longitude",
+};
+
 interface CompositeFieldTag {
   /** "index" or "uniqueIndex" */
   kind: "index" | "uniqueIndex";
@@ -105,23 +127,6 @@ interface CompositeFieldTag {
   /** 1-based position in the column list */
   priority: number;
 }
-
-/** Numeric DB types where go-validator `required` would reject zero values */
-const NUMERIC_TYPES = new Set([
-  "int8",
-  "int16",
-  "int32",
-  "int64",
-  "uint8",
-  "uint16",
-  "uint32",
-  "uint64",
-  "float32",
-  "float64",
-  "decimal",
-  "serial",
-  "bigserial",
-]);
 
 interface GoTypeResult {
   goType: string;
@@ -139,7 +144,9 @@ export async function emit(context: EmitContext<GormEmitterOptions>): Promise<vo
   const packageName = context.options["package-name"] ?? "models";
 
   const tables = collectTableModels(program);
-  if (tables.length === 0) {
+  const dataModels = collectDataModels(program);
+
+  if (tables.length === 0 && dataModels.length === 0) {
     reportDiagnostic(program, {
       code: "no-tables-found",
       target: program.getGlobalNamespaceType(),
@@ -151,6 +158,21 @@ export async function emit(context: EmitContext<GormEmitterOptions>): Promise<vo
 
   for (const { model, tableName } of tables) {
     const code = generateGormModel(program, model, tableName, packageName);
+    const fileName = camelToSnake(model.name) + ".go";
+    try {
+      await writeFile(join(outputDir, fileName), code);
+    } catch (err) {
+      reportDiagnostic(program, {
+        code: "emit-write-failed",
+        messageId: "default",
+        format: { fileName, error: String(err) },
+        target: model,
+      });
+    }
+  }
+
+  for (const { model, label } of dataModels) {
+    const code = generateDataGoStruct(program, model, label, packageName);
     const fileName = camelToSnake(model.name) + ".go";
     try {
       await writeFile(join(outputDir, fileName), code);
@@ -176,24 +198,22 @@ function buildCompositeMap(
 ): Map<string, CompositeFieldTag[]> {
   const map = new Map<string, CompositeFieldTag[]>();
 
-  for (const idx of indexes) {
-    for (let i = 0; i < idx.columns.length; i++) {
-      const col = idx.columns[i];
-      const tags = map.get(col) ?? [];
-      tags.push({ kind: "index", name: idx.name, priority: i + 1 });
-      map.set(col, tags);
+  const addEntries = (
+    constraints: { name: string; columns: string[] }[],
+    kind: CompositeFieldTag["kind"],
+  ) => {
+    for (const c of constraints) {
+      for (let i = 0; i < c.columns.length; i++) {
+        const col = c.columns[i];
+        const tags = map.get(col) ?? [];
+        tags.push({ kind, name: c.name, priority: i + 1 });
+        map.set(col, tags);
+      }
     }
-  }
+  };
 
-  for (const unq of uniques) {
-    for (let i = 0; i < unq.columns.length; i++) {
-      const col = unq.columns[i];
-      const tags = map.get(col) ?? [];
-      tags.push({ kind: "uniqueIndex", name: unq.name, priority: i + 1 });
-      map.set(col, tags);
-    }
-  }
-
+  addEntries(indexes, "index");
+  addEntries(uniques, "uniqueIndex");
   return map;
 }
 
@@ -215,6 +235,103 @@ function generateEnumBlock(enumName: string, members: EnumMemberInfo[]): string 
   return code;
 }
 
+// ─── @data model code generation ────────────────────────────────────────────
+
+/**
+ * Generate a single struct field for a @data model.
+ * Emits validate + json tags only (no gorm tag).
+ */
+function generateDataGoField(program: Program, prop: ModelProperty, imports: Set<string>): string {
+  const fieldName = camelToPascal(prop.name);
+  const dbType = resolveDbType(prop.type);
+  const mapping = dbType ? GO_TYPE_MAP[dbType] : undefined;
+
+  const enumInfo = getPropertyEnum(prop);
+  let goType = mapping?.goType ?? "interface{}";
+  if (enumInfo) {
+    goType = camelToPascal(enumInfo.enumType.name);
+  }
+  if (mapping?.imports) {
+    for (const imp of mapping.imports) imports.add(imp);
+  }
+
+  const isOpt = prop.optional;
+  const finalGoType =
+    isOpt && !goType.startsWith("*") && !goType.startsWith("[]") ? `*${goType}` : goType;
+
+  const validateTag = buildValidateTag(program, prop);
+  const jsonOmit = isOpt ? ",omitempty" : "";
+  const doc = getDoc(program, prop);
+  const docComment = doc ? `\t// ${doc}\n` : "";
+
+  const title = getTitle(program, prop);
+  const placeholder = getPlaceholder(program, prop);
+  const labelTag =
+    title || placeholder
+      ? ` form:"${prop.name}${title ? `,title=${title}` : ""}${placeholder ? `,placeholder=${placeholder}` : ""}"`
+      : "";
+
+  const structTags = validateTag
+    ? `validate:"${validateTag}" json:"${prop.name}${jsonOmit}"${labelTag}`
+    : `json:"${prop.name}${jsonOmit}"${labelTag}`;
+
+  return `${docComment}\t${fieldName} ${finalGoType} \`${structTags}\`\n`;
+}
+
+/**
+ * Generate a Go struct for a @data model (form payload / DTO).
+ * No gorm tags, no TableName() - just validate + json struct tags.
+ */
+function generateDataGoStruct(
+  program: Program,
+  model: Model,
+  label: string,
+  packageName: string,
+): string {
+  const imports = new Set<string>();
+  const fields: string[] = [];
+  const enumTypes = new Map<string, EnumMemberInfo[]>();
+
+  for (const [, prop] of model.properties) {
+    const enumInfo = getPropertyEnum(prop);
+    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
+      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
+    }
+    fields.push(generateDataGoField(program, prop, imports));
+  }
+
+  const structName = model.name;
+  const sortedImports = [...imports].sort();
+
+  let code = FILE_HEADER;
+  code += `package ${packageName}\n\n`;
+
+  if (sortedImports.length > 0) {
+    code += "import (\n";
+    const stdImports = sortedImports.filter((i) => !i.includes("."));
+    const extImports = sortedImports.filter((i) => i.includes("."));
+    for (const imp of stdImports) code += `\t"${imp}"\n`;
+    if (stdImports.length > 0 && extImports.length > 0) code += "\n";
+    for (const imp of extImports) code += `\t"${imp}"\n`;
+    code += ")\n\n";
+  }
+
+  for (const [enumName, members] of enumTypes) {
+    code += generateEnumBlock(enumName, members);
+    code += "\n";
+  }
+
+  const modelDoc = getDoc(program, model);
+  code += `// ${structName} ${modelDoc ?? label}\n`;
+  code += `type ${structName} struct {\n`;
+  for (const field of fields) {
+    code += field;
+  }
+  code += "}\n";
+
+  return code;
+}
+
 // ─── Code generation ─────────────────────────────────────────────────────────
 
 function generateGormModel(
@@ -226,61 +343,55 @@ function generateGormModel(
   const imports = new Set<string>();
   const fields: string[] = [];
   const relationFields: string[] = [];
-  const enumTypes = new Map<string, EnumMemberInfo[]>();
 
   // Build composite constraint map for field-level GORM tags
   const compIdxs = getCompositeIndexes(program, model);
   const compUnqs = getCompositeUniques(program, model);
   const compositeMap = buildCompositeMap(compIdxs, compUnqs);
 
-  for (const [, prop] of model.properties) {
-    // Collect enum types for code generation above the struct
-    const enumInfo = getPropertyEnum(prop);
-    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
-      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
-    }
+  // Classify properties using shared utility
+  const {
+    enumTypes,
+    ignored,
+    relations,
+    fields: regularProps,
+  } = classifyProperties(program, model);
 
-    // Ignored fields → gorm:"-"
-    if (isIgnored(program, prop)) {
-      const fieldName = camelToPascal(prop.name);
-      const dbType = resolveDbType(prop.type);
-      const mapping = dbType ? GO_TYPE_MAP[dbType] : undefined;
-      let goType = mapping?.goType ?? "interface{}";
-      if (enumInfo) {
-        goType = camelToPascal(enumInfo.enumType.name);
-      }
-      if (mapping?.imports) {
-        for (const imp of mapping.imports) imports.add(imp);
-      }
-      const isOpt = prop.optional;
-      const finalGoType =
-        isOpt && !goType.startsWith("*") && !goType.startsWith("[]") ? `*${goType}` : goType;
-      const jsonOmit = isOpt ? ",omitempty" : "";
-      const doc = getDoc(program, prop);
-      const docComment = doc ? `\t// ${doc}\n` : "";
-      fields.push(
-        `${docComment}\t${fieldName} ${finalGoType} \`gorm:"-" json:"${prop.name}${jsonOmit}"\`\n`,
-      );
-      continue;
+  // Ignored fields → gorm:"-"
+  for (const { prop, enumInfo } of ignored) {
+    const fieldName = camelToPascal(prop.name);
+    const dbType = resolveDbType(prop.type);
+    const mapping = dbType ? GO_TYPE_MAP[dbType] : undefined;
+    let goType = mapping?.goType ?? "interface{}";
+    if (enumInfo) {
+      goType = camelToPascal(enumInfo.enumType.name);
     }
-
-    // Relation navigation properties (no DB column, just GORM struct reference)
-    const resolved = resolveRelation(program, prop, model);
-    if (resolved) {
-      // Auto-inject FK scalar field for many-to-one / one-to-one
-      if (resolved.autoInjectFk) {
-        fields.push(generateAutoFkField(program, prop, resolved, imports, compositeMap));
-      }
-      relationFields.push(generateResolvedRelationField(program, prop, resolved));
-      continue;
+    if (mapping?.imports) {
+      for (const imp of mapping.imports) imports.add(imp);
     }
-
-    const field = generateField(program, prop, imports, compositeMap);
-    fields.push(field);
+    const isOpt = prop.optional;
+    const finalGoType =
+      isOpt && !goType.startsWith("*") && !goType.startsWith("[]") ? `*${goType}` : goType;
+    const jsonOmit = isOpt ? ",omitempty" : "";
+    const doc = getDoc(program, prop);
+    const docComment = doc ? `\t// ${doc}\n` : "";
+    fields.push(
+      `${docComment}\t${fieldName} ${finalGoType} \`gorm:"-" json:"${prop.name}${jsonOmit}"\`\n`,
+    );
   }
 
-  // Always import gorm for the TableName receiver
-  imports.add("gorm.io/gorm");
+  // Relation navigation properties (no DB column, just GORM struct reference)
+  for (const { prop, resolved } of relations) {
+    if (resolved.autoInjectFk) {
+      fields.push(generateAutoFkField(program, prop, resolved, imports, compositeMap));
+    }
+    relationFields.push(generateResolvedRelationField(program, prop, resolved));
+  }
+
+  // Regular DB-mapped fields
+  for (const { prop } of regularProps) {
+    fields.push(generateField(program, prop, imports, compositeMap));
+  }
 
   const structName = model.name;
   const sortedImports = [...imports].sort();
@@ -335,8 +446,6 @@ function generateGormModel(
   code += `func (${structName}) TableName() string {\n`;
   code += `\treturn "${tableName}"\n`;
   code += "}\n";
-
-  code += `\nvar _ = (*gorm.DB)(nil) // ensure gorm import\n`;
 
   return code;
 }
@@ -579,37 +688,8 @@ function resolveGoType(
     tagParts.push("autoUpdateTime");
   }
 
-  // Not null (non-optional, non-primary-key fields)
-  if (!prop.optional && !isId(program, prop)) {
-    tagParts.push("not null");
-  }
-
-  // Unique (single-column)
-  if (isUnique(program, prop)) {
-    tagParts.push("uniqueIndex");
-  }
-
-  // Index (single-column, with optional name)
-  if (isIndex(program, prop)) {
-    const idxName = getIndexName(program, prop);
-    tagParts.push(idxName ? `index:${idxName}` : "index");
-  }
-
-  // Composite index/unique tags (field-level, replaces BeforeAutoMigrate hook)
-  const compositeTags = compositeMap.get(columnName);
-  if (compositeTags) {
-    for (const ct of compositeTags) {
-      tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
-    }
-  }
-
-  // Default value (non-uuid, non-pk)
-  if (!isId(program, prop)) {
-    const defaultVal = getDefaultValue(program, prop);
-    if (defaultVal) {
-      tagParts.push(`default:${defaultVal}`);
-    }
-  }
+  // Not null, unique, index, composite, default (shared with enum path)
+  appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
 
   // @doc → GORM comment tag
   const doc = getDoc(program, prop);
@@ -620,6 +700,7 @@ function resolveGoType(
   // Foreign key - index + constraint tag
   const fk = getForeignKey(program, prop);
   if (fk) {
+    const compositeTags = compositeMap.get(columnName);
     // Only add index if not already present from @index or composite
     if (!isIndex(program, prop) && !compositeTags?.some((ct) => ct.kind === "index")) {
       tagParts.push("index");
@@ -664,6 +745,32 @@ function resolveEnumGoType(
   tagParts.push(`column:${columnName}`);
   tagParts.push(`type:${gormTypeName}`);
 
+  appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
+
+  const doc = getDoc(program, prop);
+  if (doc) {
+    tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'")}`);
+  }
+
+  return {
+    goType,
+    gormTag: deduplicateParts(tagParts).join(";"),
+    requiredImports: [],
+    doc,
+  };
+}
+
+/**
+ * Append GORM tag parts shared between scalar and enum fields:
+ * not null, uniqueIndex, index, composite tags, default value.
+ */
+function appendCommonGormTags(
+  program: Program,
+  prop: ModelProperty,
+  columnName: string,
+  compositeMap: Map<string, CompositeFieldTag[]>,
+  tagParts: string[],
+): void {
   if (!prop.optional && !isId(program, prop)) {
     tagParts.push("not null");
   }
@@ -677,7 +784,6 @@ function resolveEnumGoType(
     tagParts.push(idxName ? `index:${idxName}` : "index");
   }
 
-  // Composite index/unique tags
   const compositeTags = compositeMap.get(columnName);
   if (compositeTags) {
     for (const ct of compositeTags) {
@@ -691,18 +797,6 @@ function resolveEnumGoType(
       tagParts.push(`default:${defaultVal}`);
     }
   }
-
-  const doc = getDoc(program, prop);
-  if (doc) {
-    tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'")}`);
-  }
-
-  return {
-    goType,
-    gormTag: deduplicateParts(tagParts).join(";"),
-    requiredImports: [],
-    doc,
-  };
 }
 
 // ─── Validator tag builder ──────────────────────────────────────────────────
@@ -763,53 +857,17 @@ function buildValidateTag(program: Program, prop: ModelProperty): string {
 
   // Format-based validators
   const format = getFormat(program, prop);
-  switch (format) {
-    case "email":
-      parts.push("email");
-      break;
-    case "uri":
-    case "url":
-      parts.push("url");
-      break;
-    case "uuid":
-      parts.push("uuid");
-      break;
-    case "ipv4":
-      parts.push("ipv4");
-      break;
-    case "ipv6":
-      parts.push("ipv6");
-      break;
-    case "ip":
-      parts.push("ip");
-      break;
-    case "cidr":
-      parts.push("cidr");
-      break;
-    case "mac":
-      parts.push("mac");
-      break;
-    case "base64":
-      parts.push("base64");
-      break;
-    case "hostname":
-      parts.push("hostname");
-      break;
-    case "latitude":
-      parts.push("latitude");
-      break;
-    case "longitude":
-      parts.push("longitude");
-      break;
-    default:
-      if (format) {
-        reportDiagnostic(program, {
-          code: "unknown-format",
-          target: prop,
-          format: { format, propName: prop.name },
-        });
-      }
-      break;
+  if (format) {
+    const validator = GO_FORMAT_VALIDATORS[format];
+    if (validator) {
+      parts.push(validator);
+    } else {
+      reportDiagnostic(program, {
+        code: "unknown-format",
+        target: prop,
+        format: { format, propName: prop.name },
+      });
+    }
   }
 
   // Pattern
@@ -824,18 +882,4 @@ function buildValidateTag(program: Program, prop: ModelProperty): string {
   }
 
   return parts.join(",");
-}
-
-// ─── Utilities ──────────────────────────────────────────────────────────────
-
-function deduplicateParts(parts: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const part of parts) {
-    if (!seen.has(part)) {
-      seen.add(part);
-      result.push(part);
-    }
-  }
-  return result;
 }

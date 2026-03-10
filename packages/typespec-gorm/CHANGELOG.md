@@ -5,6 +5,22 @@ All notable changes to `@qninhdt/typespec-gorm` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-10
+
+### Added
+
+- `@data` model support: generates a plain Go struct with `validate`, `json`, and `form` struct tags (no GORM tags, no `TableName()`)
+- `form:"field,title=...,placeholder=..."` tags emitted from `@title` and `@placeholder` decorators on form fields
+- Lookup-typed field inheritance: `max=`, `email`, `url`, etc. validator rules are now inherited from the source model property
+
+### Changed
+
+- Refactored internal property-classification loop into the shared `classifyProperties` utility from `@qninhdt/typespec-orm`
+- Replaced inline `switch` for `@format` validators with a pre-built lookup table (`GO_FORMAT_VALIDATORS`)
+- Moved `deduplicateParts` and `NUMERIC_TYPES` to shared `emitter-utils.ts`
+
+---
+
 ## [0.1.0] - 2026-03-10
 
 ### Added

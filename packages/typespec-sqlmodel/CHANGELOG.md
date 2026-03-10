@@ -5,6 +5,23 @@ All notable changes to `@qninhdt/typespec-sqlmodel` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-10
+
+### Added
+
+- `@data` model support: generates a Pydantic `BaseModel` subclass with `Field(title=..., description=..., json_schema_extra={"placeholder": ...})`
+- `@title` → `Field(title=...)`, `@placeholder` → `Field(json_schema_extra={"placeholder": ...})`, `@doc` → `Field(description=...)`
+- `@data` models are included in the generated `__init__.py` re-exports alongside `@table` models
+- Lookup-typed field inheritance: `max_length`, `ge`, `le`, `pattern`, etc. are now inherited from the source model property
+
+### Changed
+
+- Replaced the large `switch` statement for Python type mapping with a pre-built constant lookup table (`PYTHON_TYPE_MAP`)
+- Refactored internal property-classification loop into the shared `classifyProperties` utility from `@qninhdt/typespec-orm`
+- Moved `NUMERIC_TYPES` to shared `emitter-utils.ts`
+
+---
+
 ## [0.1.0] - 2026-03-10
 
 ### Added
