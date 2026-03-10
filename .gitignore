@@ -1,0 +1,27 @@
+# MacOS
+.DS_Store
+
+# TypeSpec output
+tsp-output/
+outputs/
+
+# Build output
+dist/
+packages/*/dist/
+
+# Dependency directories
+node_modules/
+
+# pnpm
+.pnpm-store/
+
+# Pack artifacts
+*.tgz
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Editor
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,11 @@
+output-dir: "{project-root}/outputs"
+emit:
+  - "@qninhdt/typespec-gorm"
+  - "@qninhdt/typespec-sqlmodel"
+options:
+  "@qninhdt/typespec-gorm":
+    emitter-output-dir: "{output-dir}/gorm"
+    package-name: "models"
+  "@qninhdt/typespec-sqlmodel":
+    emitter-output-dir: "{output-dir}/sqlmodel"
+    module-name: "models"

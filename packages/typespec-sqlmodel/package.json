@@ -1,0 +1,72 @@
+{
+  "name": "@qninhdt/typespec-sqlmodel",
+  "version": "0.1.0",
+  "description": "TypeSpec emitter that generates Python SQLModel classes from schemas decorated with @qninhdt/typespec-orm.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.tsbuildinfo",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist/",
+    "watch": "tsc -p tsconfig.build.json --watch",
+    "prepublishOnly": "tsc -p tsconfig.build.json"
+  },
+  "keywords": [
+    "typespec",
+    "emitter",
+    "sqlmodel",
+    "python",
+    "pydantic",
+    "orm",
+    "codegen",
+    "database"
+  ],
+  "author": {
+    "name": "Nguyen Quang Ninh",
+    "email": "qndt123@gmail.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qninhdt/typespec-libraries.git",
+    "directory": "packages/typespec-sqlmodel"
+  },
+  "homepage": "https://github.com/qninhdt/typespec-libraries/tree/main/packages/typespec-sqlmodel#readme",
+  "bugs": {
+    "url": "https://github.com/qninhdt/typespec-libraries/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@qninhdt/typespec-orm": "workspace:*"
+  },
+  "peerDependencies": {
+    "@typespec/compiler": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@typespec/compiler": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@typespec/compiler": "latest",
+    "typescript": "~5.7.0"
+  }
+}

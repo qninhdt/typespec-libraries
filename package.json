@@ -1,0 +1,41 @@
+{
+  "name": "typespec-libraries",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.31.0",
+  "author": {
+    "name": "Nguyen Quang Ninh",
+    "email": "qndt123@gmail.com"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "clean": "pnpm -r run clean",
+    "prepare": "pnpm run build",
+    "typecheck": "tsc -b packages/*/tsconfig.build.json --noEmit",
+    "lint": "eslint packages/*/src",
+    "lint:fix": "eslint packages/*/src --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm run build && changeset publish",
+    "compile-examples": "tsp compile examples/ --config tspconfig.yaml --output-dir ./outputs",
+    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm --output-dir ./outputs",
+    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel --output-dir ./outputs"
+  },
+  "dependencies": {
+    "@qninhdt/typespec-gorm": "workspace:*",
+    "@qninhdt/typespec-orm": "workspace:*",
+    "@qninhdt/typespec-sqlmodel": "workspace:*",
+    "@typespec/compiler": "latest"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0",
+    "@types/node": "^25.4.0",
+    "eslint": "^10.0.3",
+    "prettier": "^3.8.1",
+    "typescript": "~5.7.0",
+    "typescript-eslint": "^8.57.0"
+  }
+}

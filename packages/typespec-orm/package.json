@@ -1,0 +1,72 @@
+{
+  "name": "@qninhdt/typespec-orm",
+  "version": "0.1.0",
+  "description": "TypeSpec decorator library for defining database ORM schemas - @table, @id, @index, @foreignKey and more.",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "tspMain": "lib/main.tsp",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "typespec": "./lib/main.tsp",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "!dist/**/*.tsbuildinfo",
+    "lib/",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist/",
+    "watch": "tsc -p tsconfig.build.json --watch",
+    "prepublishOnly": "tsc -p tsconfig.build.json"
+  },
+  "keywords": [
+    "typespec",
+    "orm",
+    "database",
+    "decorators",
+    "schema",
+    "gorm",
+    "sqlmodel",
+    "codegen"
+  ],
+  "author": {
+    "name": "Nguyen Quang Ninh",
+    "email": "qndt123@gmail.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qninhdt/typespec-libraries.git",
+    "directory": "packages/typespec-orm"
+  },
+  "homepage": "https://github.com/qninhdt/typespec-libraries/tree/main/packages/typespec-orm#readme",
+  "bugs": {
+    "url": "https://github.com/qninhdt/typespec-libraries/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@typespec/compiler": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@typespec/compiler": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@typespec/compiler": "latest",
+    "typescript": "~5.7.0"
+  }
+}
