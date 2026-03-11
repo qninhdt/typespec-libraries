@@ -44,7 +44,7 @@ model StoryNode {
 
   /** Parent node in the story tree - null for root nodes */
   @foreignKey("story_nodes", "id")
-  @onDelete("SET NULL")
+  @onDelete("CASCADE")
   parent?: StoryNode;
 }
 

@@ -21,6 +21,15 @@ node_modules/
 # TypeScript incremental build info
 *.tsbuildinfo
 
+# Temp folder
+temp/
+
+# Test
+coverage/
+__snapshots__/
+
+@qninhdt/
+
 # Editor
 .idea/
 *.swp

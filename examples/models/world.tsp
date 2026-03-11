@@ -33,7 +33,7 @@ model World {
 
   /**
    * System prompt used to guide AI generation within this world.
-   * Custom `text` scalar - safe to target with \@@inputType(World.prompt::type, ...).
+   * Custom 'text' scalar - safe to target with \@@inputType(World.prompt::type, ...).
    */
   prompt: text;
 

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build-and-lint:
-    name: Build, Lint & Typecheck
+    name: Build, Lint, Typecheck & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
@@ -42,3 +42,6 @@ jobs:
 
       - name: Format check
         run: pnpm run format:check
+
+      - name: Test
+        run: pnpm run test

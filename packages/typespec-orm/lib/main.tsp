@@ -1,4 +1,3 @@
-import "@typespec/compiler";
 import "./tsp-index.js";
 
 using TypeSpec.Reflection;

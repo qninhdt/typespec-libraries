@@ -16,7 +16,7 @@ enum SubscriptionPlan {
 
 /** Registered user account */
 @table
-@compositeUnique("uq_users_email_active", "email", "is_active")
+@compositeUnique("uq_users_email_deleted", "email", "deleted_at")
 model User {
   /** Unique identifier for the user */
   @id
