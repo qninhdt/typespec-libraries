@@ -10,6 +10,8 @@
   },
   "scripts": {
     "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:coverage": "pnpm -r run test:coverage",
     "clean": "pnpm -r run clean",
     "prepare": "pnpm run build && husky",
     "typecheck": "tsc -b packages/*/tsconfig.build.json --noEmit",
