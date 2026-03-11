@@ -1,5 +1,5 @@
 /**
- * GormStruct — JSX component for rendering a complete GORM model Go file.
+ * GormStruct -JSX component for rendering a complete GORM model Go file.
  *
  * Top-level orchestrator that composes GormField, GormRelationField, GormEnum
  * into a complete Go source file wrapped in <SourceFile>.

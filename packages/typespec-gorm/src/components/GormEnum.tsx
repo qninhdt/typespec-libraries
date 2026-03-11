@@ -1,5 +1,5 @@
 /**
- * GormEnum — JSX component for Go enum type definitions.
+ * GormEnum -JSX component for Go enum type definitions.
  * Renders: `type X string` + `const (...)` block.
  */
 

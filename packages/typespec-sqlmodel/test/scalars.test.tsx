@@ -147,9 +147,9 @@ describe("Python scalar type mappings", () => {
       "user.py",
     );
 
-    // Required — no None
+    // Required -no None
     expect(output).toMatch(/name: str = Field\(/);
-    // Optional — | None with default=None
+    // Optional -| None with default=None
     expect(output).toContain("bio: str | None");
     expect(output).toContain("age: int | None");
     expect(output).toContain("default=None");

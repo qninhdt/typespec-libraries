@@ -1,6 +1,6 @@
 /**
  * Constants and type maps used by GORM code generation components.
- * Pure data — no JSX needed.
+ * Pure data -no JSX needed.
  */
 
 /** Maps canonical DB type names → Go types, GORM column types, and required imports */

@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build-and-lint:
-    name: Build, Lint & Typecheck
+    name: Build, Lint, Typecheck & Test
     runs-on: ubuntu-latest
 
     steps:

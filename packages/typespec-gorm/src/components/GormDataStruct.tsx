@@ -1,7 +1,7 @@
 /**
- * GormDataStruct — JSX component for @data model Go structs.
+ * GormDataStruct -JSX component for @data model Go structs.
  *
- * These are DTOs/form models — no GORM tags, no TableName() method.
+ * These are DTOs/form models -no GORM tags, no TableName() method.
  * Uses validate + json + form struct tags only.
  */
 

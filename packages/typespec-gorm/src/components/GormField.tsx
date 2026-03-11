@@ -1,5 +1,5 @@
 /**
- * GormField — Functions for rendering Go struct field lines.
+ * GormField -Functions for rendering Go struct field lines.
  *
  * Returns plain strings with proper newlines.
  * Called imperatively by GormStruct for synchronous rendering.

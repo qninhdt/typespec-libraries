@@ -1,5 +1,5 @@
 /**
- * PyConstants — Constants, type maps, and utility functions for SQLModel components.
+ * PyConstants -Constants, type maps, and utility functions for SQLModel components.
  */
 
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
@@ -244,7 +244,7 @@ export function generateInit(
   moduleFiles: string[],
   moduleName: string,
 ): string {
-  let code = `"""${moduleName} — auto-generated models. DO NOT EDIT."""\n\n`;
+  let code = `"""${moduleName} -auto-generated models. DO NOT EDIT."""\n\n`;
   for (let i = 0; i < modelNames.length; i++) {
     code += `from .${moduleFiles[i]} import ${modelNames[i]}\n`;
   }

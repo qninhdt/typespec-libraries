@@ -1,7 +1,7 @@
 /**
- * PyDataModel — JSX component for @data model → Pydantic BaseModel.
+ * PyDataModel -JSX component for @data model → Pydantic BaseModel.
  *
- * DTOs/form models — no table, no SQLAlchemy.
+ * DTOs/form models -no table, no SQLAlchemy.
  */
 
 import { SourceFile } from "@alloy-js/core";

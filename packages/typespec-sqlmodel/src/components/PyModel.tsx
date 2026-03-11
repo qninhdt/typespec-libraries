@@ -1,5 +1,5 @@
 /**
- * PyModel — JSX component for rendering a complete SQLModel Python file.
+ * PyModel -JSX component for rendering a complete SQLModel Python file.
  *
  * Top-level orchestrator that wraps content in <SourceFile>.
  */

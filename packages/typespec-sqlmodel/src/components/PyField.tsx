@@ -1,5 +1,5 @@
 /**
- * PyField — Functions for generating SQLModel field definitions.
+ * PyField -Functions for generating SQLModel field definitions.
  *
  * Returns plain strings. Called imperatively by PyModel.
  */

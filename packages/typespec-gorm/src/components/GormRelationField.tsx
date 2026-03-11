@@ -1,5 +1,5 @@
 /**
- * GormRelationField — Functions for relation struct field lines.
+ * GormRelationField -Functions for relation struct field lines.
  *
  * Returns plain strings. Called imperatively by GormStruct.
  */

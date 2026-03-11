@@ -1,6 +1,6 @@
 /**
- * GormValidateTag — builds go-playground/validator v10 validate tag strings.
- * Pure logic, no JSX — returns a string tag value.
+ * GormValidateTag -builds go-playground/validator v10 validate tag strings.
+ * Pure logic, no JSX -returns a string tag value.
  */
 
 import type { ModelProperty, Program } from "@typespec/compiler";

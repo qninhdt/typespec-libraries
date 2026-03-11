@@ -1,5 +1,5 @@
 /**
- * PyRelationField — Functions for SQLModel relation field generation.
+ * PyRelationField -Functions for SQLModel relation field generation.
  *
  * Returns plain strings. Called imperatively by PyModel.
  */

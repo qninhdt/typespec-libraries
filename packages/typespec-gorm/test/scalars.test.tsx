@@ -193,9 +193,9 @@ describe("Go scalar type mappings", () => {
       "user.go",
     );
 
-    // Required — no pointer
+    // Required -no pointer
     expect(output).toContain("\tName string");
-    // Optional — pointer
+    // Optional -pointer
     expect(output).toContain("\tBio *string");
     expect(output).toContain("\tAge *int32");
   });
@@ -220,7 +220,7 @@ describe("Go scalar type mappings", () => {
   });
 
   it("generates only needed imports", async () => {
-    // Model with only uuid — should NOT import "time"
+    // Model with only uuid -should NOT import "time"
     const output = await emitGoFile(
       `
       @table

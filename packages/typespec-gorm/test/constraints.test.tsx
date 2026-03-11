@@ -248,9 +248,9 @@ describe("GORM field constraints", () => {
       "user.go",
     );
 
-    // Required — no omitempty
+    // Required -no omitempty
     expect(output).toContain('json:"name"');
-    // Optional — omitempty
+    // Optional -omitempty
     expect(output).toContain('json:"bio,omitempty"');
   });
 
