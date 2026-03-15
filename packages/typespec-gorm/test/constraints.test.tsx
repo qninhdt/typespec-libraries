@@ -7,7 +7,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         bio?: string;
       }
@@ -31,7 +31,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @index email: string;
       }
     `,
@@ -47,7 +47,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @index("idx_users_email") email: string;
       }
     `,
@@ -62,7 +62,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @unique email: string;
       }
     `,
@@ -77,7 +77,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @maxLength(100) name: string;
       }
     `,
@@ -95,7 +95,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @minLength(2) name: string;
       }
     `,
@@ -110,7 +110,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         @precision(10, 2) price: decimal;
       }
     `,
@@ -125,7 +125,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         credits: int32 = 0;
         isActive: boolean = true;
       }
@@ -142,7 +142,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @map("user_name") name: string;
       }
     `,
@@ -158,7 +158,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @format("email") email: string;
       }
     `,
@@ -174,7 +174,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @format("url") website?: string;
       }
     `,
@@ -189,7 +189,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         @minValue(0) @maxValue(999) quantity: int32;
       }
     `,
@@ -205,7 +205,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @pattern("^[A-Za-z]+$") code: string;
       }
     `,
@@ -220,7 +220,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         @ignore computed?: string;
       }
@@ -240,7 +240,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         bio?: string;
       }
@@ -259,7 +259,7 @@ describe("GORM field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         bio?: string;
       }
@@ -280,7 +280,7 @@ describe("GORM field constraints", () => {
       /** A registered user */
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         /** The user's email */
         email: string;
       }
@@ -303,7 +303,7 @@ describe("GORM primary key generation", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.go",
@@ -318,7 +318,7 @@ describe("GORM primary key generation", () => {
       `
       @table
       model Post {
-        @id id: serial;
+        @key id: serial;
       }
     `,
       "post.go",
@@ -335,7 +335,7 @@ describe("GORM struct and file generation", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,
@@ -359,12 +359,62 @@ describe("GORM struct and file generation", () => {
       `
       @table("my_users")
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.go",
     );
 
     expect(output).toContain('\treturn "my_users"');
+  });
+});
+
+describe("GORM value constraints", () => {
+  it("generates min/max for @minValue/@maxValue", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minValue(0) @maxValue(100)
+        quantity: int32;
+      }
+    `,
+      "test.go",
+    );
+    expect(output).toContain("gte=0");
+    expect(output).toContain("lte=100");
+  });
+
+  it("generates min/max for @minValueExclusive/@maxValueExclusive", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minValueExclusive(0) @maxValueExclusive(100)
+        quantity: int32;
+      }
+    `,
+      "test.go",
+    );
+    expect(output).toContain("gt=0");
+    expect(output).toContain("lt=100");
+  });
+
+  it("generates min/max for @minItems/@maxItems", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minItems(1) @maxItems(10)
+        items: string[];
+      }
+    `,
+      "test.go",
+    );
+    expect(output).toContain("min=1");
+    expect(output).toContain("max=10");
   });
 });

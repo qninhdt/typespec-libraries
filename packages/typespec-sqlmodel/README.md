@@ -51,7 +51,7 @@ enum PostStatus {
 @table("posts")
 @compositeIndex("idx_posts_author_status", "author_id", "status")
 model Post {
-  @id id: uuid;
+  @key id: uuid;
 
   @maxLength(255) title: string;
   body: text;
@@ -65,7 +65,7 @@ model Post {
   @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
   @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
 
-  @foreignKey("users", "id") @onDelete("CASCADE")
+  @foreignKey("author_id") @onDelete("CASCADE")
   author: User;
 }
 ```
@@ -105,21 +105,146 @@ class Post(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     title: str = Field(max_length=255, sa_column_kwargs={"nullable": False})
     body: str = Field(sa_column_kwargs={"nullable": False})
-    status: PostStatus = Field(
-        sa_column=Column(SAEnum(PostStatus), nullable=False, index=True))
+    status: PostStatus = Field(sa_column=Column(SAEnum(PostStatus), nullable=False, index=True))
     view_count: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    created_at: datetime = Field(
-        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
-    updated_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now()))
-    deleted_at: datetime | None = Field(
-        default=None, sa_column=Column(DateTime(timezone=True), index=True))
-    author_id: UUID = Field(
-        sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
+    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now()))
+    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), index=True))
+    author_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
 
     # ─── Relationships ─────────────────────
     author: "User" | None = Relationship(back_populates="posts")
+```
+
+---
+
+## Relations
+
+All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`.
+
+### Many-to-One
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  title: string;
+
+  @foreignKey("author_id")
+  @onDelete("CASCADE")
+  author: User;
+}
+```
+
+### One-to-Many
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  @mappedBy("author")
+  posts: Post[];
+}
+```
+
+### One-to-One
+
+Use `owner_id` as **both primary key and foreign key** (identifying relationship):
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+
+  // Inverse side - points back to Passport
+  @mappedBy("owner")
+  passport?: Passport;
+}
+
+@table
+model Passport {
+  // owner_id is both PK and FK
+  @key @map("owner_id") ownerId: uuid;
+
+  passportNumber: string;
+
+  // No need for @unique - PK is inherently unique
+  @foreignKey("owner_id")
+  owner: User;
+}
+```
+
+### Cascade
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+
+  @foreignKey("author_id")
+  @onDelete("CASCADE")
+  @onUpdate("CASCADE")
+  author: User;
+}
+```
+
+### Self-Referencing
+
+```typescript
+@table
+model Category {
+  @key id: uuid;
+  name: string;
+
+  // Category has many subcategories
+  @mappedBy("parent")
+  children?: Category[];
+
+  // Parent category reference
+  @foreignKey("parent_id")
+  parent?: Category;
+}
+```
+
+### Many-to-Many
+
+A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
+
+```typescript
+// User and Role have a many-to-many relationship via UserRole
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  // Points to "user" property on UserRole
+  @mappedBy("user")
+  userRoles: UserRole[];
+}
+
+@table
+model Role {
+  @key id: uuid;
+  name: string;
+
+  // Points to "role" property on UserRole
+  @mappedBy("role")
+  roleUsers: UserRole[];
+}
+
+// Junction table - defines the relationship
+@table
+model UserRole {
+  @key id: uuid;
+
+  @foreignKey("user_id")
+  user: User;
+
+  @foreignKey("role_id")
+  role: Role;
+}
 ```
 
 ---

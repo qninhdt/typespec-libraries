@@ -7,7 +7,7 @@ describe("GORM @autoCreateTime", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoCreateTime createdAt: utcDateTime;
       }
     `,
@@ -29,7 +29,7 @@ describe("GORM @autoUpdateTime", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoUpdateTime updatedAt: utcDateTime;
       }
     `,
@@ -47,7 +47,7 @@ describe("GORM @autoUpdateTime", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoUpdateTime updatedAt?: utcDateTime;
       }
     `,
@@ -66,7 +66,7 @@ describe("GORM @softDelete", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @softDelete deletedAt?: utcDateTime;
       }
     `,

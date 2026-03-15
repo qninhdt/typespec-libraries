@@ -6,20 +6,23 @@
 import type { ModelProperty, Program } from "@typespec/compiler";
 import {
   getFormat,
+  getMaxItems,
   getMaxLength,
   getMaxValue,
+  getMaxValueExclusive,
+  getMinItems,
   getMinLength,
   getMinValue,
+  getMinValueExclusive,
   getPattern,
   getPropertyEnum,
+  isArrayType,
   isAutoCreateTime,
   isAutoUpdateTime,
-  isId,
+  isKey,
   isSoftDelete,
   resolveDbType,
-  NUMERIC_TYPES,
 } from "@qninhdt/typespec-orm";
-import { reportDiagnostic } from "../lib.js";
 import { GO_FORMAT_VALIDATORS } from "./GormConstants.js";
 
 /**
@@ -30,59 +33,87 @@ export function buildValidateTag(program: Program, prop: ModelProperty): string 
   const parts: string[] = [];
   const dbType = resolveDbType(prop.type);
   const isOptional = prop.optional;
-  const isPk = isId(program, prop);
+  const isPk = isKey(program, prop);
   const isSoft = isSoftDelete(program, prop);
 
   if (isOptional) parts.push("omitempty");
 
   const isBoolType = dbType === "boolean";
-  const isNumericForRequired = dbType !== undefined && NUMERIC_TYPES.has(dbType);
+  const isScalarType = dbType !== undefined && !isArrayType(prop.type);
   const isAutoTimestamp = isAutoCreateTime(program, prop) || isAutoUpdateTime(program, prop);
-  if (!isOptional && !isPk && !isSoft && !isBoolType && !isNumericForRequired && !isAutoTimestamp) {
+
+  // Primary keys, soft deletes, and auto-timestamps are auto-managed
+  if (isPk || isSoft || isAutoTimestamp) {
+    return parts.length > 0 ? parts.join(",") : "";
+  }
+
+  // Required for non-optional scalars (except booleans)
+  if (!isOptional && isScalarType && !isBoolType) {
     parts.push("required");
   }
 
-  const enumInfo = getPropertyEnum(prop);
-  if (enumInfo) {
-    const values = enumInfo.members.map((m) => m.value).join(" ");
-    parts.push(`oneof=${values}`);
-    return parts.join(",");
+  // Length constraints
+  const maxLen = getMaxLength(program, prop);
+  if (maxLen !== undefined) {
+    parts.push(`max=${maxLen}`);
+  }
+  const minLen = getMinLength(program, prop);
+  if (minLen !== undefined) {
+    parts.push(`min=${minLen}`);
   }
 
-  const isStringType = dbType === "string" || dbType === "text" || dbType === "uuid";
-  if (isStringType || dbType === undefined) {
-    const minLen = getMinLength(program, prop);
-    const maxLen = getMaxLength(program, prop);
-    if (minLen !== undefined) parts.push(`min=${minLen}`);
-    if (maxLen !== undefined) parts.push(`max=${maxLen}`);
+  // Value constraints (inclusive)
+  const maxVal = getMaxValue(program, prop);
+  const minVal = getMinValue(program, prop);
+  const maxValExclusive = getMaxValueExclusive(program, prop);
+  const minValExclusive = getMinValueExclusive(program, prop);
+
+  // Exclusive bounds override inclusive ones if both are specified
+  if (maxValExclusive !== undefined) {
+    parts.push(`lt=${maxValExclusive}`);
+  } else if (maxVal !== undefined) {
+    parts.push(`lte=${maxVal}`);
   }
 
-  const isNumericType = dbType !== undefined && NUMERIC_TYPES.has(dbType);
-  if (isNumericType) {
-    const minVal = getMinValue(program, prop);
-    const maxVal = getMaxValue(program, prop);
-    if (minVal !== undefined) parts.push(`gte=${minVal}`);
-    if (maxVal !== undefined) parts.push(`lte=${maxVal}`);
+  if (minValExclusive !== undefined) {
+    parts.push(`gt=${minValExclusive}`);
+  } else if (minVal !== undefined) {
+    parts.push(`gte=${minVal}`);
   }
 
+  // Array item constraints (min/max items)
+  if (isArrayType(prop.type)) {
+    const minItems = getMinItems(program, prop);
+    const maxItems = getMaxItems(program, prop);
+    if (minItems !== undefined) {
+      parts.push(`min=${minItems}`);
+    }
+    if (maxItems !== undefined) {
+      parts.push(`max=${maxItems}`);
+    }
+  }
+
+  // Pattern (regex)
+  const pattern = getPattern(program, prop);
+  if (pattern) {
+    parts.push(`regexp=${pattern}`);
+  }
+
+  // Format validators
   const format = getFormat(program, prop);
   if (format) {
     const validator = GO_FORMAT_VALIDATORS[format];
     if (validator) {
       parts.push(validator);
-    } else {
-      reportDiagnostic(program, {
-        code: "unknown-format",
-        target: prop,
-        format: { format, propName: prop.name },
-      });
     }
   }
 
-  const pattern = getPattern(program, prop);
-  if (pattern) parts.push(`regexp=${pattern}`);
+  // Enum validation
+  const enumInfo = getPropertyEnum(prop);
+  if (enumInfo) {
+    const values = enumInfo.members.map((m) => m.value).join(",");
+    parts.push(`oneof=${values}`);
+  }
 
-  if (parts.length === 1 && parts[0] === "omitempty") return "";
-
-  return parts.join(",");
+  return parts.length > 0 ? parts.join(",") : "";
 }

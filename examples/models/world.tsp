@@ -21,7 +21,7 @@ enum WorldVisibility {
 @compositeIndex("idx_worlds_visibility_active", "visibility", "deleted_at")
 model World {
   /** Unique identifier for the world */
-  @id id: uuid;
+  @key id: uuid;
 
   /**
    * Display name of the world - max 200 characters, indexed for lookup.
@@ -62,23 +62,28 @@ model World {
   // ─── Relationships ─────────────────
 
   /** User who owns and manages this world - cascades deletion */
-  @foreignKey("users", "id")
+  @foreignKey("owner_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   owner: User;
 
   /** Story tree nodes belonging to this world */
+  @mappedBy("world")
   storyNodes?: StoryNode[];
 
   /** NPCs defined in this world */
+  @mappedBy("world")
   npcs?: Npc[];
 
   /** Locations defined in this world */
+  @mappedBy("world")
   locations?: Location[];
 
   /** Events defined in this world */
+  @mappedBy("world")
   gameEvents?: GameEvent[];
 
   /** Tags used to classify content in this world */
+  @mappedBy("world")
   tags?: Tag[];
 }

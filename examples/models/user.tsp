@@ -16,10 +16,10 @@ enum SubscriptionPlan {
 
 /** Registered user account */
 @table
-@compositeUnique("uq_users_email_deleted", "email", "deleted_at")
+@compositeKey("uq_users_email_deleted", "email", "deleted_at")
 model User {
   /** Unique identifier for the user */
-  @id
+  @key
   id: uuid;
 
   /**
@@ -75,9 +75,11 @@ model User {
   // ─── Relationships ─────────────────
 
   /** Subscription plans associated with this user */
+  @mappedBy("user")
   subscriptions?: Subscription[];
 
   /** Worlds owned by this user */
+  @mappedBy("owner")
   worlds?: World[];
 }
 
@@ -86,7 +88,7 @@ model User {
 @compositeIndex("idx_subscriptions_user_active", "user_id", "is_active")
 model Subscription {
   /** Unique identifier for the subscription */
-  @id id: uuid;
+  @key id: uuid;
 
   /**
    * Subscription plan tier - determines access level and billing.
@@ -122,7 +124,7 @@ model Subscription {
   // ─── Relationships ─────────────────
 
   /** Owning user - cascades deletion to subscriptions when the user is removed */
-  @foreignKey("users", "id")
+  @foreignKey("user_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   user: User;

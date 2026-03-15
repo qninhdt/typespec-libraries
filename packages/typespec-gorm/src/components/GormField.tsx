@@ -21,7 +21,7 @@ import {
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
-  isId,
+  isKey,
   isIndex,
   isSoftDelete,
   isUnique,
@@ -160,7 +160,7 @@ function resolveGoType(
   }
   if (gormTypeName) tagParts.push(`type:${gormTypeName}`);
 
-  if (isId(program, prop)) {
+  if (isKey(program, prop)) {
     tagParts.push("primaryKey");
     if (dbType === "uuid") {
       const customDefault = getDefaultValue(program, prop);
@@ -177,7 +177,7 @@ function resolveGoType(
   appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
 
   const doc = getDoc(program, prop);
-  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'")}`);
+  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
 
   const fk = getForeignKey(program, prop);
   if (fk) {
@@ -221,7 +221,7 @@ function resolveEnumGoType(
   appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
 
   const doc = getDoc(program, prop);
-  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'")}`);
+  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
 
   return {
     goType,
@@ -238,7 +238,7 @@ function appendCommonGormTags(
   compositeMap: Map<string, CompositeFieldTag[]>,
   tagParts: string[],
 ): void {
-  if (!prop.optional && !isId(program, prop)) tagParts.push("not null");
+  if (!prop.optional && !isKey(program, prop)) tagParts.push("not null");
   if (isUnique(program, prop)) tagParts.push("uniqueIndex");
   if (isIndex(program, prop)) {
     const idxName = getIndexName(program, prop);
@@ -250,7 +250,7 @@ function appendCommonGormTags(
       tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
     }
   }
-  if (!isId(program, prop)) {
+  if (!isKey(program, prop)) {
     const defaultVal = getDefaultValue(program, prop);
     if (defaultVal) tagParts.push(`default:${defaultVal}`);
   }

@@ -48,7 +48,7 @@ model PublicUser
 @table("invitations")
 model Invitation {
   /** Unique identifier for the invitation */
-  @id id: uuid;
+  @key id: uuid;
 
   /**
    * Email of the invitee - should inherit \@maxLength(320) and \@format("email")

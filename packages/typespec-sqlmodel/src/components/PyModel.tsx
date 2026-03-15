@@ -62,7 +62,9 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // Relation navigation properties
   for (const { prop, resolved } of relations) {
     needsRelationship.value = true;
-    if (resolved.autoInjectFk) {
+    // Only generate FK field for many-to-one/one-to-one (the FK column is on THIS model)
+    // For one-to-many, the FK is on the target model, not here
+    if (resolved.kind === "many-to-one" || resolved.kind === "one-to-one") {
       fieldDefs.push(
         generateAutoFkField(
           program,

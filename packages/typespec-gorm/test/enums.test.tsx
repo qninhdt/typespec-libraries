@@ -13,7 +13,7 @@ describe("GORM enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         status: Status;
       }
     `,
@@ -41,7 +41,7 @@ describe("GORM enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         role: Role;
       }
     `,
@@ -64,7 +64,7 @@ describe("GORM enum generation", () => {
 
       @table
       model Subscription {
-        @id id: uuid;
+        @key id: uuid;
         plan: Plan;
       }
     `,
@@ -72,7 +72,7 @@ describe("GORM enum generation", () => {
     );
 
     // Validate tag should include oneof with all enum values
-    expect(output).toContain("oneof=free premium");
+    expect(output).toContain("oneof=free,premium");
   });
 
   it("generates optional enum with pointer type", async () => {
@@ -85,7 +85,7 @@ describe("GORM enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         status?: Status;
       }
     `,

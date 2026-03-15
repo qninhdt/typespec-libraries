@@ -7,15 +7,17 @@ describe("GORM one-to-many relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
+        @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
       }
@@ -36,13 +38,15 @@ describe("GORM one-to-many relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
       }
@@ -55,20 +59,22 @@ describe("GORM one-to-many relationships", () => {
 });
 
 describe("GORM many-to-one relationships", () => {
-  it("generates auto-injected FK field and navigation field", async () => {
+  it("generates FK field with navigation field", async () => {
     const output = await emitGoFile(
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
+        @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
       }
@@ -76,7 +82,7 @@ describe("GORM many-to-one relationships", () => {
       "post.go",
     );
 
-    // Auto-injected FK field
+    // FK field
     expect(output).toContain("UserID uuid.UUID");
     expect(output).toContain("column:user_id");
     expect(output).toContain("type:uuid");
@@ -92,13 +98,15 @@ describe("GORM many-to-one relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("user_id")
         @onDelete("CASCADE")
         user: User;
       }
@@ -118,12 +126,13 @@ describe("GORM optional relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("author_id")
         author?: User;
       }
     `,
@@ -141,13 +150,15 @@ describe("GORM FK field naming", () => {
       `
       @table
       model World {
-        @id id: uuid;
+        @key id: uuid;
+        @mappedBy("world")
         events: GameEvent[];
       }
 
       @table
       model GameEvent {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("world_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         world: World;
       }

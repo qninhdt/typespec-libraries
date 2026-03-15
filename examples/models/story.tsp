@@ -14,7 +14,7 @@ namespace WorldCard.Models;
 @compositeIndex("idx_story_nodes_world_depth", "world_id", "depth")
 model StoryNode {
   /** Unique identifier for the story node */
-  @id id: uuid;
+  @key id: uuid;
 
   /** Depth of this node in the story tree - root is 0 */
   @index("idx_story_nodes_depth")
@@ -37,13 +37,13 @@ model StoryNode {
   // ─── Relationships ─────────────────
 
   /** World this story node belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
 
   /** Parent node in the story tree - null for root nodes */
-  @foreignKey("story_nodes", "id")
+  @foreignKey("parent_id")
   @onDelete("CASCADE")
   parent?: StoryNode;
 }
@@ -57,7 +57,7 @@ model StoryNode {
 @compositeIndex("idx_npcs_world_name", "world_id", "name")
 model Npc {
   /** Unique identifier for the NPC */
-  @id id: uuid;
+  @key id: uuid;
 
   /** Name of the NPC - indexed for lookup, max 200 characters */
   @index("idx_npcs_name")
@@ -79,7 +79,7 @@ model Npc {
   // ─── Relationships ─────────────────
 
   /** World this NPC belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -91,7 +91,7 @@ model Npc {
 @table("locations")
 model Location {
   /** Unique identifier for the location */
-  @id id: uuid;
+  @key id: uuid;
 
   /** Name of the location - indexed for lookup, max 200 characters */
   @index("idx_locations_name")
@@ -110,7 +110,7 @@ model Location {
   // ─── Relationships ─────────────────
 
   /** World this location belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -122,7 +122,7 @@ model Location {
 @table("game_events")
 model GameEvent {
   /** Unique identifier for the game event */
-  @id id: uuid;
+  @key id: uuid;
 
   /** Name of the event - indexed for lookup, max 200 characters */
   @index("idx_game_events_name")
@@ -144,7 +144,7 @@ model GameEvent {
   // ─── Relationships ─────────────────
 
   /** World this event belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -155,10 +155,10 @@ model GameEvent {
  * The (world_id, name) pair is globally unique per world.
  */
 @table("tags")
-@compositeUnique("uq_tags_world_name", "world_id", "name")
+@compositeKey("uq_tags_world_name", "world_id", "name")
 model Tag {
   /** Unique identifier for the tag */
-  @id id: uuid;
+  @key id: uuid;
 
   /** Tag name - max 100 characters, unique within its world */
   @maxLength(100)
@@ -175,7 +175,7 @@ model Tag {
   // ─── Relationships ─────────────────
 
   /** World this tag belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -197,7 +197,7 @@ model AuditLog {
   /**
    * Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput
    */
-  @id
+  @key
   @autoIncrement
   id: bigserial;
 
@@ -233,7 +233,7 @@ model AuditLog {
    * User who performed the action - SET NULL when the user is deleted
    * so audit history is preserved even after account removal
    */
-  @foreignKey("users", "id")
+  @foreignKey("user_id")
   @onDelete("SET NULL")
   @onUpdate("CASCADE")
   actor?: User;

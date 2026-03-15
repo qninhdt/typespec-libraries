@@ -8,7 +8,7 @@ describe("SQLModel composite index", () => {
       @table
       @compositeIndex("idx_name_email", "name", "email")
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
       }
@@ -24,13 +24,13 @@ describe("SQLModel composite index", () => {
 });
 
 describe("SQLModel composite unique", () => {
-  it("generates __table_args__ with UniqueConstraint for @compositeUnique", async () => {
+  it("generates __table_args__ with UniqueConstraint for @compositeKey", async () => {
     const output = await emitPyFile(
       `
       @table
-      @compositeUnique("uq_email_name", "email", "name")
+      @compositeKey("uq_email_name", "email", "name")
       model User {
-        @id id: uuid;
+        @key id: uuid;
         email: string;
         name: string;
       }
@@ -48,9 +48,9 @@ describe("SQLModel composite unique", () => {
       `
       @table
       @compositeIndex("idx_a_b", "name", "email")
-      @compositeUnique("uq_c_d", "code", "name")
+      @compositeKey("uq_c_d", "code", "name")
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
         code: string;

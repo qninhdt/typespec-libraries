@@ -7,7 +7,7 @@ describe("SQLModel emitter end-to-end", () => {
     await runner.compile(`
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @maxLength(255) name: string;
         @unique @format("email") email: string;
         age?: int32;
@@ -30,18 +30,21 @@ describe("SQLModel emitter end-to-end", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         status: Status;
-        @relation("one-to-many") posts: Post[];
+        @mappedBy("user")
+        posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
         content: text;
-        @relation("many-to-one") @onDelete("CASCADE") user: User;
+        @foreignKey("user_id")
+        @onDelete("CASCADE")
+        user: User;
       }
     `);
 
@@ -69,9 +72,9 @@ describe("SQLModel emitter end-to-end", () => {
     await runner.compile(`
       @table
       @compositeIndex("idx_name_email", "name", "email")
-      @compositeUnique("unq_code_ver", "code", "version")
+      @compositeKey("unq_code_ver", "code", "version")
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
         code: string;
@@ -88,13 +91,13 @@ describe("SQLModel emitter end-to-end", () => {
     await runner.compile(`
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
       }
     `);

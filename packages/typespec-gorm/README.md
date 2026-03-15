@@ -51,7 +51,7 @@ enum PostStatus {
 @table("posts")
 @compositeIndex("idx_posts_author_status", "author_id", "status")
 model Post {
-  @id id: uuid;
+  @key id: uuid;
 
   @maxLength(255) title: string;
   body: text;
@@ -65,7 +65,7 @@ model Post {
   @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
   @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
 
-  @foreignKey("users", "id") @onDelete("CASCADE")
+  @foreignKey("author_id") @onDelete("CASCADE")
   author: User;
 }
 ```
@@ -113,6 +113,136 @@ type Post struct {
 
 // TableName returns the table name for Post.
 func (Post) TableName() string { return "posts" }
+```
+
+---
+
+## Relations
+
+All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`.
+
+### Many-to-One
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  title: string;
+
+  @foreignKey("author_id")
+  @onDelete("CASCADE")
+  author: User;
+}
+```
+
+### One-to-Many
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  @mappedBy("author")
+  posts: Post[];
+}
+```
+
+### One-to-One
+
+Use `owner_id` as **both primary key and foreign key** (identifying relationship):
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+
+  // Inverse side - points back to Passport
+  @mappedBy("owner")
+  passport?: Passport;
+}
+
+@table
+model Passport {
+  // owner_id is both PK and FK
+  @key ownerId: uuid;
+
+  passportNumber: string;
+
+  @foreignKey("owner_id")
+  owner: User;
+}
+```
+
+### Cascade
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+
+  @foreignKey("author_id")
+  @onDelete("CASCADE")
+  @onUpdate("CASCADE")
+  author: User;
+}
+```
+
+### Self-Referencing
+
+```typescript
+@table
+model Category {
+  @key id: uuid;
+  name: string;
+
+  // Category has many subcategories
+  @mappedBy("parent")
+  children?: Category[];
+
+  // Parent category reference
+  @foreignKey("parent_id")
+  parent?: Category;
+}
+```
+
+### Many-to-Many
+
+A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
+
+```typescript
+// User and Role have a many-to-many relationship via UserRole
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  // Points to "user" property on UserRole
+  @mappedBy("user")
+  userRoles: UserRole[];
+}
+
+@table
+model Role {
+  @key id: uuid;
+  name: string;
+
+  // Points to "role" property on UserRole
+  @mappedBy("role")
+  roleUsers: UserRole[];
+}
+
+// Junction table - defines the relationship
+@table
+model UserRole {
+  @key id: uuid;
+
+  @foreignKey("user_id")
+  user: User;
+
+  @foreignKey("role_id")
+  role: Role;
+}
 ```
 
 ---

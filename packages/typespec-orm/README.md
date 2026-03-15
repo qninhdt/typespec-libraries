@@ -35,7 +35,7 @@ enum Role {
 @table("users")
 @compositeIndex("idx_users_email_role", "email", "role")
 model User {
-  @id id: uuid;
+  @key id: uuid;
 
   @unique @maxLength(100)
   @format("email") @map("email_address")
@@ -86,7 +86,7 @@ Use `Model.property` as a field type to create a **lookup type**. The field inhe
 ```typescript
 @table("invitations")
 model Invitation {
-  @id id: uuid;
+  @key id: uuid;
 
   /** Inherits @maxLength(320) and @format("email") from User.email */
   inviteeEmail: User.email;
@@ -129,36 +129,187 @@ model CreateInvitationForm {
 
 ---
 
+## Relations
+
+All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`. The system will NOT auto-generate relations.
+
+### Many-to-One (belongs-to)
+
+Use `@foreignKey("column_name")` on the Model reference property:
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  title: string;
+
+  // FK column will be "author_id" in the database
+  @foreignKey("author_id")
+  @onDelete("CASCADE")
+  author: User;
+}
+```
+
+### One-to-Many (has-many)
+
+Use `@mappedBy("property_name")` on the array property. The inverse side must have `@foreignKey`:
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  // Points to the "author" property on Post
+  @mappedBy("author")
+  posts: Post[];
+}
+
+@table
+model Post {
+  @key id: uuid;
+  title: string;
+
+  @foreignKey("author_id")
+  author: User;
+}
+```
+
+### One-to-One
+
+Use `owner_id` as **both primary key and foreign key** (identifying relationship):
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  // Inverse side - points back to Passport
+  @mappedBy("owner")
+  passport?: Passport;
+}
+
+@table
+model Passport {
+  // owner_id is both PK and FK
+  @key ownerId: uuid;
+
+  passportNumber: string;
+
+  @foreignKey("owner_id")
+  owner: User;
+}
+```
+
+### Self-Referencing
+
+```typescript
+@table
+model Category {
+  @key id: uuid;
+  name: string;
+
+  // Category has many subcategories
+  @mappedBy("parent")
+  children?: Category[];
+
+  // Parent category reference
+  @foreignKey("parent_id")
+  parent?: Category;
+}
+```
+
+### Cascade Options
+
+Use `@onDelete` and `@onUpdate` for cascade behavior:
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+
+  @foreignKey("author_id")
+  @onDelete("CASCADE")   // Delete posts when author is deleted
+  @onUpdate("CASCADE")   // Update author_id when author's id changes
+  author: User;
+}
+```
+
+Valid actions: `CASCADE`, `SET NULL`, `SET DEFAULT`, `RESTRICT`, `NO ACTION`
+
+### Many-to-Many
+
+A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
+
+```typescript
+// User and Role have a many-to-many relationship via UserRole
+@table
+model User {
+  @key id: uuid;
+  name: string;
+
+  // Points to "user" property on UserRole
+  @mappedBy("user")
+  userRoles: UserRole[];
+}
+
+@table
+model Role {
+  @key id: uuid;
+  name: string;
+
+  // Points to "role" property on UserRole
+  @mappedBy("role")
+  roleUsers: UserRole[];
+}
+
+// Junction table - defines the relationship
+@table
+model UserRole {
+  @key id: uuid;
+
+  @foreignKey("user_id")
+  user: User;
+
+  @foreignKey("role_id")
+  role: Role;
+}
+```
+
+---
+
 ## Decorator Reference
 
 ### Model-level decorators
 
-| Decorator                            | Arguments                         | Description                                    |
-| ------------------------------------ | --------------------------------- | ---------------------------------------------- |
-| `@table(name?)`                      | `name?: string`                   | Maps model to a database table                 |
-| `@compositeIndex(name, ...columns)`  | `name: string, columns: string[]` | Creates a named multi-column index             |
-| `@compositeUnique(name, ...columns)` | `name: string, columns: string[]` | Creates a named multi-column unique constraint |
-| `@data(label?)`                      | `label?: string`                  | Marks model as a non-DB data / form shape      |
+| Decorator                           | Arguments                         | Description                                    |
+| ----------------------------------- | --------------------------------- | ---------------------------------------------- |
+| `@table(name?)`                     | `name?: string`                   | Maps model to a database table                 |
+| `@compositeIndex(name, ...columns)` | `name: string, columns: string[]` | Creates a named multi-column index             |
+| `@compositeKey(name, ...columns)`   | `name: string, columns: string[]` | Creates a named multi-column unique constraint |
+| `@data(label?)`                     | `label?: string`                  | Marks model as a non-DB data / form shape      |
 
 ### Property-level decorators
 
-| Decorator                 | Arguments            | Description                                       |
-| ------------------------- | -------------------- | ------------------------------------------------- |
-| `@id`                     | -                    | Marks the property as the primary key             |
-| `@index(name?)`           | `name?: string`      | Creates a single-column index                     |
-| `@unique`                 | -                    | Adds a unique constraint                          |
-| `@map(column)`            | `column: string`     | Overrides the column name                         |
-| `@autoIncrement`          | -                    | Marks as auto-increment (serial / bigserial)      |
-| `@autoCreateTime`         | -                    | Set timestamp on INSERT                           |
-| `@autoUpdateTime`         | -                    | Set timestamp on UPDATE                           |
-| `@softDelete`             | -                    | Enable soft-delete via a nullable timestamp       |
-| `@foreignKey(table, col)` | `table, col: string` | Declares a foreign-key reference                  |
-| `@onDelete(action)`       | `action: string`     | FK delete rule (`CASCADE`, `SET NULL`, etc.)      |
-| `@onUpdate(action)`       | `action: string`     | FK update rule                                    |
-| `@precision(p, s?)`       | `p, s: integer`      | Sets NUMERIC precision and scale                  |
-| `@ignore`                 | -                    | Exclude from DB schema (virtual / computed field) |
-| `@title(text)`            | `text: string`       | Human-readable field label for form / DTO models  |
-| `@placeholder(text)`      | `text: string`       | Placeholder hint shown before user types          |
+| Decorator             | Arguments          | Description                                               |
+| --------------------- | ------------------ | --------------------------------------------------------- |
+| `@key`                | -                  | Marks the property as the primary key (TypeSpec built-in) |
+| `@index(name?)`       | `name?: string`    | Creates a single-column index                             |
+| `@unique`             | -                  | Adds a unique constraint                                  |
+| `@map(column)`        | `column: string`   | Overrides the column name                                 |
+| `@autoIncrement`      | -                  | Marks as auto-increment (serial / bigserial)              |
+| `@autoCreateTime`     | -                  | Set timestamp on INSERT                                   |
+| `@autoUpdateTime`     | -                  | Set timestamp on UPDATE                                   |
+| `@softDelete`         | -                  | Enable soft-delete via a nullable timestamp               |
+| `@foreignKey(column)` | `column: string`   | Declares FK column name for this relation                 |
+| `@mappedBy(property)` | `property: string` | Declares inverse property for collection-side             |
+| `@onDelete(action)`   | `action: string`   | FK delete rule (`CASCADE`, `SET NULL`, etc.)              |
+| `@onUpdate(action)`   | `action: string`   | FK update rule                                            |
+| `@precision(p, s?)`   | `p, s: integer`    | Sets NUMERIC precision and scale                          |
+| `@ignore`             | -                  | Exclude from DB schema (virtual / computed field)         |
+| `@title(text)`        | `text: string`     | Human-readable field label for form / DTO models          |
+| `@placeholder(text)`  | `text: string`     | Placeholder hint shown before user types                  |
 
 ### Scalar-level decorator (augment syntax)
 
@@ -190,23 +341,22 @@ Standard TypeSpec scalars (`string`, `int32`, `boolean`, `utcDateTime`, …) are
 
 The validator runs at compile time and reports the following diagnostics:
 
-| Code                            | Severity | Description                                                    |
-| ------------------------------- | -------- | -------------------------------------------------------------- |
-| `multiple-ids`                  | error    | Model has more than one `@id` property                         |
-| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                 |
-| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                 |
-| `duplicate-column-name`         | error    | Two properties produce the same column name                    |
-| `composite-column-not-found`    | error    | Column in `@compositeIndex`/`@compositeUnique` does not exist  |
-| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                     |
-| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                 |
-| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                         |
-| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type   |
-| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@id`, `@index`, etc.) |
-| `missing-id`                    | warning  | `@table` model has no `@id` property                           |
-| `redundant-unique-on-id`        | warning  | `@unique` on a primary-key property is redundant               |
-| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                  |
-| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name              |
-| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property             |
+| Code                            | Severity | Description                                                     |
+| ------------------------------- | -------- | --------------------------------------------------------------- |
+| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                  |
+| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                  |
+| `duplicate-column-name`         | error    | Two properties produce the same column name                     |
+| `composite-column-not-found`    | error    | Column in `@compositeIndex`/`@compositeKey` does not exist      |
+| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                      |
+| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                  |
+| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                          |
+| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type    |
+| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.) |
+| `missing-key`                   | warning  | `@table` model has no `@key` property                           |
+| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                |
+| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                   |
+| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name               |
+| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property              |
 
 ---
 

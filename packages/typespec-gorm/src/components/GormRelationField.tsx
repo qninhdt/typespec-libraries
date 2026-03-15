@@ -48,7 +48,7 @@ export function generateAutoFkFieldLine(
 
   if (isUnique(program, relationProp)) {
     tagParts.push("uniqueIndex");
-  } else if (rel.autoInjectIndex) {
+  } else {
     const idxName = getIndexName(program, relationProp);
     tagParts.push(idxName ? `index:${idxName}` : "index");
   }

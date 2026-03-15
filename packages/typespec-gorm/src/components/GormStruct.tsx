@@ -12,10 +12,12 @@ import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import type { Model, Program } from "@typespec/compiler";
 import {
+  getColumnName,
   getCompositeIndexes,
   getCompositeUniques,
   getDoc,
   classifyProperties,
+  isKey,
   camelToPascal,
   camelToSnake,
   resolveDbType,
@@ -57,6 +59,20 @@ export function GormModelFile(props: GormModelFileProps): Children {
   const fieldLines: string[] = [];
   const relationFieldLines: string[] = [];
 
+  // First: Key fields - always at the top
+  for (const { prop } of regularProps) {
+    if (isKey(program, prop)) {
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+    }
+  }
+
+  // Second: Regular fields (excluding keys which are already output)
+  for (const { prop } of regularProps) {
+    if (!isKey(program, prop)) {
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+    }
+  }
+
   // Ignored fields → gorm:"-"
   for (const { prop, enumInfo } of ignored) {
     const dbType = resolveDbType(prop.type);
@@ -69,17 +85,26 @@ export function GormModelFile(props: GormModelFileProps): Children {
     fieldLines.push(generateIgnoredFieldLine(program, prop, imports, goType));
   }
 
-  // Relation FK auto-injection + navigation fields
+  // Collect all key column names
+  const keyColumnNames = new Set<string>();
+  for (const { prop } of regularProps) {
+    if (isKey(program, prop)) {
+      keyColumnNames.add(getColumnName(program, prop));
+    }
+  }
+
+  // Relation FK + navigation fields
   for (const { prop, resolved } of relations) {
-    if (resolved.autoInjectFk) {
+    // Only generate FK field for many-to-one/one-to-one (the FK column is on THIS model)
+    // For one-to-many, the FK is on the target model, not here
+    // Skip if FK column is already a key field (identifying relationship)
+    if (
+      (resolved.kind === "many-to-one" || resolved.kind === "one-to-one") &&
+      !keyColumnNames.has(resolved.fkColumnName)
+    ) {
       fieldLines.push(generateAutoFkFieldLine(program, prop, resolved, imports, compositeMap));
     }
     relationFieldLines.push(generateRelationFieldLine(program, prop, resolved));
-  }
-
-  // Regular DB-mapped fields
-  for (const { prop } of regularProps) {
-    fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
   }
 
   // Build enum block

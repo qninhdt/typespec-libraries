@@ -5,6 +5,21 @@ All notable changes to `@qninhdt/typespec-sqlmodel` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-16
+
+### Changed
+
+- Now uses TypeSpec's built-in `@key` decorator for primary keys instead of `@id`
+- Explicit relation system: relations are only generated when `@foreignKey` and `@mappedBy` are explicitly declared
+- Field ordering: key fields are now always placed at the top of the class
+
+### Added
+
+- Validator support for exclusive bounds: `@minValueExclusive` → `gt=`, `@maxValueExclusive` → `lt=`
+- Array item validators: `@minItems` → `min_length=`, `@maxItems` → `max_length=`
+
+---
+
 ## [0.2.0] - 2026-03-10
 
 ### Added
