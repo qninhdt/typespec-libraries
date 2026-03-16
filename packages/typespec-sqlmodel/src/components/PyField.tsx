@@ -26,7 +26,6 @@ import {
   getPrecision,
   getPropertyEnum,
   getTableName,
-  getValidators,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
@@ -116,7 +115,7 @@ export function generateField(
   const isPk = isKey(program, prop);
   const isSoft = isSoftDelete(program, prop);
   const isAutoInc = isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
-  const isPrimaryx = isIndex(program, prop);
+  const isIndexed = isIndex(program, prop);
   const isUnq = isUnique(program, prop);
   const maxLen = getMaxLength(program, prop);
   const defaultVal = getDefaultValue(program, prop);
@@ -143,20 +142,6 @@ export function generateField(
 
   if (isOptional || isSoft) {
     pyType = `${pyType} | None`;
-  }
-
-  // Custom validators from @validator decorator
-  const customValidators = getValidators(program, prop);
-  const hasValidators = customValidators.length > 0;
-
-  // If custom validators exist, wrap with Annotated and AfterValidator
-  if (hasValidators) {
-    stdImports.add("typing.Annotated");
-    stdImports.add("pydantic.AfterValidator");
-    needsField.value = true;
-    // Build validator chain: AfterValidator(name1), AfterValidator(name2), ...
-    const validatorChain = customValidators.map((v) => `AfterValidator(${v.name})`).join(", ");
-    pyType = `Annotated[${pyType}, ${validatorChain}]`;
   }
 
   const fieldArgs: string[] = [];
@@ -188,7 +173,7 @@ export function generateField(
   }
 
   // Index
-  if (isPrimaryx || fk) {
+  if (isIndexed || fk) {
     needsField.value = true;
     fieldArgs.push("index=True");
   }
@@ -285,9 +270,18 @@ export function generateField(
     const onUpd = getOnUpdate(program, prop);
     const targetModel = prop.type as Model;
     const targetTable =
-      targetModel && targetModel.kind === "Model" ? getTableName(program, targetModel) : "unknown";
+      targetModel && targetModel.kind === "Model" ? getTableName(program, targetModel) : undefined;
 
-    if (onDel || onUpd) {
+    if (!targetTable) {
+      reportDiagnostic(program, {
+        code: "foreign-key-target-not-table",
+        format: {
+          propName: prop.name,
+          typeName: targetModel?.kind === "Model" ? targetModel.name : prop.type.kind,
+        },
+        target: prop,
+      });
+    } else if (onDel || onUpd) {
       needsColumn.value = true;
       saImports.add("sqlalchemy.ForeignKey");
       const fkArgs: string[] = [`"${targetTable}.${fk}"`];

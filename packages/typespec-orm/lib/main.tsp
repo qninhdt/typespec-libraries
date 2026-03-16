@@ -44,7 +44,7 @@ extern dec table(target: Model, name?: valueof string);
 extern dec map(target: ModelProperty, columnName: valueof string);
 
 /**
- * Marks a property as the primary key column. By default, the column name is the same as the property name, but it can be overridden with `@map`.
+ * Marks a property as an index column. By default, the index name is auto-derived from the property name, but it can be overridden with the optional `name` parameter.
  */
 extern dec index(target: ModelProperty, name?: valueof string);
 
@@ -59,19 +59,19 @@ extern dec unique(target: ModelProperty);
 extern dec autoIncrement(target: ModelProperty);
 
 /**
- * Marks a property as a soft delete flag. The column type is boolean and the default value is false. When set to true, the record is considered deleted without actually removing it from the database.
+ * Marks a property as a soft delete timestamp. The column type must be a datetime type (`utcDateTime` or `offsetDateTime`). When set, the record is considered deleted (soft-deleted) without actually removing it from the database.
  */
 extern dec softDelete(target: ModelProperty);
 
 // ─── Relation Decorators ─────────────────────────────────────────────────────
 
 /**
- * Specifies a foreign key relationship to another model. The `target` parameter is the property that holds the related model, and the `field` parameter is the name of the property on the related model that this foreign key references (usually the primary key).
+ * Specifies a foreign key relationship to another model. The `target` parameter is the property that holds the related model, and the `field` parameter is the name of the **primary key column** on the related model that this foreign key references.
  */
 extern dec foreignKey(target: ModelProperty, field: valueof string);
 
 /**
- * Specifies the inverse side of a relationship defined with `@foreignKey`. The `target` parameter is the property that holds the related model, and the `field` parameter is the name of the property on the related model that references this model (usually a collection of related records).
+ * Specifies the inverse side of a relationship defined with `@foreignKey`. The `target` parameter is the collection/navigation property on the owning model, and the `field` parameter is the name of the **local property** on the related model that carries the `@foreignKey` decorator (i.e. the property referencing this model).
  */
 extern dec mappedBy(target: ModelProperty, field: valueof string);
 

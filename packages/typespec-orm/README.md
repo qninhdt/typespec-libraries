@@ -341,22 +341,27 @@ Standard TypeSpec scalars (`string`, `int32`, `boolean`, `utcDateTime`, …) are
 
 The validator runs at compile time and reports the following diagnostics:
 
-| Code                            | Severity | Description                                                     |
-| ------------------------------- | -------- | --------------------------------------------------------------- |
-| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                  |
-| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                  |
-| `duplicate-column-name`         | error    | Two properties produce the same column name                     |
-| `composite-column-not-found`    | error    | Column in `@compositeIndex`/`@compositeKey` does not exist      |
-| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                      |
-| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                  |
-| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                          |
-| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type    |
-| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.) |
-| `missing-key`                   | warning  | `@table` model has no `@key` property                           |
-| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                |
-| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                   |
-| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name               |
-| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property              |
+| Code                            | Severity | Description                                                                   |
+| ------------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `multiple-keys`                 | error    | Model has more than one `@key` property                                       |
+| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                                |
+| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                                |
+| `duplicate-column-name`         | error    | Two properties produce the same column name                                   |
+| `composite-column-not-found`    | error    | Column in `@compositeIndex`/`@compositeKey` does not exist                    |
+| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                                    |
+| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                                |
+| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                                        |
+| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type                  |
+| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.)               |
+| `duplicate-constraint-name`     | error    | `@compositeIndex`/`@compositeKey` constraint name is not unique in this model |
+| `empty-index-columns`           | error    | `@compositeIndex`/`@compositeKey` has no columns                              |
+| `duplicate-column-in-index`     | error    | A column appears more than once in the same `@compositeIndex`/`@compositeKey` |
+| `missing-key`                   | warning  | `@table` model has no `@key` property                                         |
+| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                              |
+| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                                 |
+| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name                             |
+| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property                            |
+| `invalid-foreign-key`           | warning  | `@foreignKey` reference could not be validated                                |
 
 ---
 
