@@ -40,10 +40,9 @@ export function PyModelFile(props: PyModelFileProps): Children {
 
   const stdImports = new Set<string>();
   const saImports = new Set<string>();
-  const sqlmodelImports = new Set<string>(["SQLModel", "Field", "Relationship"]);
+  const sqlmodelImports = new Set<string>(["SQLModel", "Field"]);
   const needsField = { value: false };
   const needsColumn = { value: false };
-  const needsRelationship = { value: false };
 
   // Classify properties
   const {
@@ -55,6 +54,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
 
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
+  const relationTargetModels = new Set<string>();
 
   // Ignored fields → ClassVar
   for (const { prop, enumInfo } of ignored) {
@@ -64,8 +64,22 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // Relation navigation properties
   // Generate relation fields only - NO auto FK generation (everything must be explicit)
   for (const { prop, resolved } of relations) {
-    needsRelationship.value = true;
-    relationDefs.push(generateRelationField(program, prop, resolved));
+    // Add Relationship import only if there are relations
+    if (!sqlmodelImports.has("Relationship")) {
+      sqlmodelImports.add("Relationship");
+    }
+    const { field, targetModel } = generateRelationField(program, prop, resolved);
+    relationDefs.push(field);
+    // Add to TYPE_CHECKING imports for cross-model relations
+    // Also add self-referential models to TYPE_CHECKING for proper forward reference
+    if (targetModel !== model.name) {
+      relationTargetModels.add(targetModel);
+      stdImports.add("TYPE_CHECKING");
+    } else {
+      // Self-referential: need TYPE_CHECKING for forward reference
+      relationTargetModels.add(targetModel);
+      stdImports.add("TYPE_CHECKING");
+    }
   }
 
   // Collect composite type fields from properties (composite<col1, col2>)
@@ -161,6 +175,15 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // Build file content
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
+
+  // TYPE_CHECKING block for relation imports (avoids circular dependency)
+  if (relationTargetModels.size > 0) {
+    code += "\nif TYPE_CHECKING:\n";
+    for (const targetModel of [...relationTargetModels].sort()) {
+      code += `    from .${camelToSnake(targetModel)} import ${targetModel}\n`;
+    }
+  }
+
   code += "\n\n";
 
   // Enum classes
@@ -173,7 +196,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const modelDoc = getDoc(program, model);
   code += `class ${model.name}(SQLModel, table=True):\n`;
   code += `${FOUR_SPACES}"""${modelDoc ?? `Represents the ${tableName} table.`}"""\n\n`;
-  code += `${FOUR_SPACES}__tablename__ = "${tableName}"\n`;
+  code += `${FOUR_SPACES}__tablename__ = "${tableName}" # type: ignore \n`;
 
   // Table args
   if (hasTableArgs) {

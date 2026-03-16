@@ -1,6 +1,10 @@
 import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface GormEmitterOptions {
+  /** Whether to generate standalone Go module (default: false) */
+  standalone?: boolean;
+  /** Go module name for standalone module (required when standalone is true) */
+  "module-name"?: string;
   /** Go package name for generated files (default: "models") */
   "package-name"?: string;
 }
@@ -9,6 +13,8 @@ const EmitterOptionsSchema: JSONSchemaType<GormEmitterOptions> = {
   type: "object",
   additionalProperties: false,
   properties: {
+    standalone: { type: "boolean", nullable: true },
+    "module-name": { type: "string", nullable: true },
     "package-name": { type: "string", nullable: true },
   },
   required: [],
@@ -17,6 +23,12 @@ const EmitterOptionsSchema: JSONSchemaType<GormEmitterOptions> = {
 export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-gorm",
   diagnostics: {
+    "standalone-requires-module-name": {
+      severity: "error",
+      messages: {
+        default: "standalone mode requires 'module-name' option",
+      },
+    },
     "unsupported-type": {
       severity: "warning",
       messages: {

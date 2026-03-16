@@ -13,7 +13,19 @@ import { generateInit } from "./components/PyConstants.js";
 export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promise<void> {
   const { program } = context;
   const outputDir = context.emitterOutputDir;
-  const moduleName = context.options["module-name"] ?? "models";
+  const options = context.options;
+  const isStandalone = options.standalone ?? false;
+  const packageName = options["package-name"];
+  const moduleName = options["module-name"] ?? "models";
+
+  // Validate standalone options
+  if (isStandalone && !packageName) {
+    reportDiagnostic(program, {
+      code: "standalone-requires-package-name",
+      target: program.getGlobalNamespaceType(),
+    });
+    return;
+  }
 
   const tables = collectTableModels(program);
   const dataModels = collectDataModels(program);
@@ -35,21 +47,63 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
     moduleFiles.push(camelToSnake(model.name));
   }
 
+  // Determine output structure based on standalone mode
+  const modelsFolder = isStandalone ? "models" : ".";
+
   // Generate __init__.py content
   const initContent = generateInit(allModelNames, moduleFiles, moduleName);
 
   // Build JSX component tree
   const tree = (
     <SourceDirectory path=".">
-      {tables.map(({ model, tableName }) => (
-        <PyModelFile program={program} model={model} tableName={tableName} />
-      ))}
-      {dataModels.map(({ model, label }) => (
-        <PyDataFile program={program} model={model} label={label} />
-      ))}
-      <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
-        {initContent}
-      </SourceFile>
+      {isStandalone && (
+        <>
+          <SourceFile path="pyproject.toml" filetype="toml" printWidth={9999}>
+            {`[project]
+name = "${packageName}"
+version = "0.0.0"
+description = "Generated SQLModel classes"
+requires-python = ">=3.10"
+dependencies = [
+    "sqlmodel>=0.0.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["` +
+              modelsFolder +
+              `"]
+`}
+          </SourceFile>
+          <SourceDirectory path={modelsFolder}>
+            {tables.map(({ model, tableName }) => (
+              <PyModelFile program={program} model={model} tableName={tableName} />
+            ))}
+            {dataModels.map(({ model, label }) => (
+              <PyDataFile program={program} model={model} label={label} />
+            ))}
+            <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
+              {initContent}
+            </SourceFile>
+          </SourceDirectory>
+        </>
+      )}
+      {!isStandalone && (
+        <>
+          {tables.map(({ model, tableName }) => (
+            <PyModelFile program={program} model={model} tableName={tableName} />
+          ))}
+          {dataModels.map(({ model, label }) => (
+            <PyDataFile program={program} model={model} label={label} />
+          ))}
+          <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
+            {initContent}
+          </SourceFile>
+        </>
+      )}
     </SourceDirectory>
   );
 

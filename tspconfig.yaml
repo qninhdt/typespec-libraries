@@ -3,13 +3,15 @@ emit:
   - "@qninhdt/typespec-gorm"
   - "@qninhdt/typespec-sqlmodel"
   - "@qninhdt/typespec-dbml"
+  - "@qninhdt/typespec-zod"
 options:
+  "@qninhdt/typespec-zod":
+    standalone: true
+    package-name: "demo"
   "@qninhdt/typespec-gorm":
-    emitter-output-dir: "{output-dir}/go-gorm"
+    standalone: true
+    module-name: "github.com/demo-user/demo"
     package-name: "models"
   "@qninhdt/typespec-sqlmodel":
-    emitter-output-dir: "{output-dir}/python-sqlmodel"
-    module-name: "models"
-  "@qninhdt/typespec-dbml":
-    emitter-output-dir: "{output-dir}/dbml"
-    filename: "schema"
+    standalone: true
+    package-name: "demo"

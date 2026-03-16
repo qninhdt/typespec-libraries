@@ -9,7 +9,7 @@ export default tseslint.config(
   // --- TypeScript source files ---
   ...tseslint.configs.recommended,
   {
-    files: ["packages/*/src/**/*.ts"],
+    files: ["packages/*/src/**/*.ts", "packages/*/src/**/*.tsx"],
     rules: {
       // Allow `any` in emitter code that deals with TypeSpec internals
       "@typescript-eslint/no-explicit-any": "off",

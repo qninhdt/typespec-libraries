@@ -12,14 +12,16 @@ import { FOUR_SPACES } from "./PyConstants.js";
 
 /**
  * Generate a SQLModel Relationship() for a navigation property.
+ * Returns both the field code and the target model name for imports.
  */
 export function generateRelationField(
   program: Program,
   prop: ModelProperty,
   rel: ResolvedRelation,
-): string {
+): { field: string; targetModel: string } {
   const pyFieldName = camelToSnake(prop.name);
-  const pyRefType = `"${rel.targetModel.name}"`;
+  const targetModelName = rel.targetModel.name;
+  const pyRefType = targetModelName;
 
   const isMany = rel.kind === "one-to-many" || rel.kind === "many-to-many";
   const pyType = isMany ? `list[${pyRefType}]` : `${pyRefType} | None`;
@@ -45,18 +47,35 @@ export function generateRelationField(
   const isSelfRef =
     (rel.kind === "many-to-one" || rel.kind === "one-to-one") && prop.model === rel.targetModel;
 
-  // For self-referential relationships, use remote_side pointing to PK (id)
-  if (isSelfRef) {
-    relArgs.push(`sa_relationship_kwargs={"remote_side": "${rel.targetModel.name}.id"}`);
-  }
-
-  if (isMany && rel.onDelete === "CASCADE") {
-    relArgs.push('cascade="all, delete-orphan"');
-  } else if (isMany && rel.onDelete === "SET NULL") {
-    relArgs.push('cascade="save-update, merge"');
-  }
-
   const doc = getDoc(program, prop);
   const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
-  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Relationship(${relArgs.join(", ")})\n`;
+
+  // For self-referential relationships:
+  // 1. Use remote_side pointing to PK (id)
+  // 2. Use string quotes in type annotation for forward reference
+  if (isSelfRef) {
+    relArgs.push(`sa_relationship_kwargs={"remote_side": "${rel.targetModel.name}.id"}`);
+    // Use string quotes for forward reference in type annotation
+    return {
+      field: `${docComment}${FOUR_SPACES}${pyFieldName}: "${pyType}" = Relationship(${relArgs.join(", ")})\n`,
+      targetModel: targetModelName,
+    };
+  }
+
+  // Track sa_relationship_kwargs for merging
+  const saRelKwArgs: string[] = [];
+
+  if (isMany && rel.onDelete === "CASCADE") {
+    saRelKwArgs.push('"cascade": "all, delete-orphan"');
+  } else if (isMany && rel.onDelete === "SET NULL") {
+    saRelKwArgs.push('"cascade": "save-update, merge"');
+  }
+
+  // Add any sa_relationship_kwargs to relArgs
+  if (saRelKwArgs.length > 0) {
+    relArgs.push(`sa_relationship_kwargs={${saRelKwArgs.join(", ")}}`);
+  }
+
+  const field = `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Relationship(${relArgs.join(", ")})\n`;
+  return { field, targetModel: targetModelName };
 }

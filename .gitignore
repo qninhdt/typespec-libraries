@@ -24,7 +24,7 @@ temp/
 coverage/
 __snapshots__/
 
-@qninhdt/
+packages/**/@qninhdt/
 
 # Editor
 .idea/
