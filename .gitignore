@@ -1,10 +1,6 @@
 # MacOS
 .DS_Store
 
-# TypeSpec output
-tsp-output/
-outputs/
-
 # Build output
 dist/
 packages/*/dist/

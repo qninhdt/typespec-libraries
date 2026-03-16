@@ -12,10 +12,7 @@ namespace WorldCard.Models;
  */
 @table("story_nodes")
 @compositeIndex("idx_story_nodes_world_depth", "world_id", "depth")
-model StoryNode {
-  /** Unique identifier for the story node */
-  @key id: uuid;
-
+model StoryNode is Timestamped {
   /** Depth of this node in the story tree - root is 0 */
   @index("idx_story_nodes_depth")
   depth: int32 = 0;
@@ -30,9 +27,6 @@ model StoryNode {
   /** IDs of lazily-expanded child nodes */
   @map("child_ids")
   childIds: jsonb;
-
-  /** Timestamp when this node was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -55,10 +49,7 @@ model StoryNode {
  */
 @table("npcs")
 @compositeIndex("idx_npcs_world_name", "world_id", "name")
-model Npc {
-  /** Unique identifier for the NPC */
-  @key id: uuid;
-
+model Npc is Timestamped {
   /** Name of the NPC - indexed for lookup, max 200 characters */
   @index("idx_npcs_name")
   @maxLength(200)
@@ -69,12 +60,6 @@ model Npc {
 
   /** Optional JSON object holding personality traits and attributes */
   traits?: jsonb;
-
-  /** Timestamp when the NPC was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
-  /** Timestamp of the last NPC update */
-  @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -89,10 +74,7 @@ model Npc {
  * Physical or virtual location within a world
  */
 @table("locations")
-model Location {
-  /** Unique identifier for the location */
-  @key id: uuid;
-
+model Location is Timestamped {
   /** Name of the location - indexed for lookup, max 200 characters */
   @index("idx_locations_name")
   @maxLength(200)
@@ -103,9 +85,6 @@ model Location {
 
   /** Bounding box or point stored as GeoJSON */
   coordinates?: jsonb;
-
-  /** Timestamp when the location was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -120,10 +99,7 @@ model Location {
  * World event that triggers state mutations when its conditions are met
  */
 @table("game_events")
-model GameEvent {
-  /** Unique identifier for the game event */
-  @key id: uuid;
-
+model GameEvent is Timestamped {
   /** Name of the event - indexed for lookup, max 200 characters */
   @index("idx_game_events_name")
   @maxLength(200)
@@ -137,9 +113,6 @@ model GameEvent {
 
   /** Mutations applied when the event fires */
   effects?: jsonb;
-
-  /** Timestamp when the event was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -156,10 +129,7 @@ model GameEvent {
  */
 @table("tags")
 @compositeKey("uq_tags_world_name", "world_id", "name")
-model Tag {
-  /** Unique identifier for the tag */
-  @key id: uuid;
-
+model Tag is Timestamped {
   /** Tag name - max 100 characters, unique within its world */
   @maxLength(100)
   name: string;
@@ -168,9 +138,6 @@ model Tag {
   @index("idx_tags_category")
   @maxLength(50)
   category: string;
-
-  /** Timestamp when the tag was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -196,6 +163,7 @@ model Tag {
 model AuditLog {
   /**
    * Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput
+   * Note: Does NOT use base id - overrides with bigserial for performance
    */
   @key
   @autoIncrement
@@ -224,8 +192,11 @@ model AuditLog {
   /** JSON patch or before/after snapshot */
   diff?: jsonb;
 
-  /** Timestamp when the audit event occurred */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
+  // ─── Timestamp fields (only createdAt - no update/delete for audit logs) ───
+
+  @autoCreateTime
+  @map("created_at")
+  createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 

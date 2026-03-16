@@ -49,8 +49,13 @@ export function generateFieldLine(
   // Soft delete gets special GORM type
   if (isSoft) {
     imports.add("gorm.io/gorm");
-    const gormTag = `column:${columnName};index`;
-    return `\t${fieldName} gorm.DeletedAt \`gorm:"${gormTag}" json:"${prop.name}"\`\n`;
+    const doc = getDoc(program, prop);
+    const docComment = doc ? `\t// ${doc}\n` : "";
+    const tagParts = [`column:${columnName}`, "index"];
+    if (doc) {
+      tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
+    }
+    return `${docComment}\t${fieldName} gorm.DeletedAt \`gorm:"${tagParts.join(";")}" json:"${prop.name}"\`\n`;
   }
 
   // Enum check

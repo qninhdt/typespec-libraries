@@ -4,8 +4,8 @@ emit:
   - "@qninhdt/typespec-sqlmodel"
 options:
   "@qninhdt/typespec-gorm":
-    emitter-output-dir: "{output-dir}/gorm"
+    emitter-output-dir: "{output-dir}/go-gorm"
     package-name: "models"
   "@qninhdt/typespec-sqlmodel":
-    emitter-output-dir: "{output-dir}/sqlmodel"
+    emitter-output-dir: "{output-dir}/python-sqlmodel"
     module-name: "models"

@@ -19,10 +19,7 @@ enum WorldVisibility {
 @table
 @compositeIndex("idx_worlds_owner_created", "owner_id", "created_at")
 @compositeIndex("idx_worlds_visibility_active", "visibility", "deleted_at")
-model World {
-  /** Unique identifier for the world */
-  @key id: uuid;
-
+model World is Timestamped {
   /**
    * Display name of the world - max 200 characters, indexed for lookup.
    * Referenced via lookup type in derived models (e.g. `worldName: World.name`).
@@ -43,21 +40,6 @@ model World {
 
   /** Optional JSON configuration for world-specific settings */
   settings?: jsonb;
-
-  /** Timestamp when the world was created */
-  @autoCreateTime
-  @map("created_at")
-  createdAt: utcDateTime;
-
-  /** Timestamp of the last world update */
-  @autoUpdateTime
-  @map("updated_at")
-  updatedAt?: utcDateTime;
-
-  /** Soft-delete timestamp - null means the world is active */
-  @softDelete
-  @map("deleted_at")
-  deletedAt?: utcDateTime;
 
   // ─── Relationships ─────────────────
 
