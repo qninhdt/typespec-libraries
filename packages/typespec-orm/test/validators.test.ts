@@ -3,20 +3,22 @@ import { createTestRunner } from "./utils.js";
 import { $onValidate } from "../src/validators.js";
 
 describe("$onValidate diagnostics", () => {
-  it("reports multiple @id on same model", async () => {
+  it("reports multiple @key on same model", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       @table
       model User {
-        @test @id id1: uuid;
-        @test @id id2: uuid;
+        @key
+        id1: uuid;
+        @key
+        id2: uuid;
         name: string;
       }
     `);
     $onValidate(runner.program);
 
     const diags = runner.program.diagnostics.filter(
-      (d) => d.code === "@qninhdt/typespec-orm/multiple-ids",
+      (d) => d.code === "@qninhdt/typespec-orm/multiple-keys",
     );
     expect(diags).toHaveLength(1);
     expect(diags[0].severity).toBe("error");
@@ -27,13 +29,13 @@ describe("$onValidate diagnostics", () => {
     await runner.compile(`
       @table("users")
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         name: string;
       }
 
       @table("users")
       model Admin {
-        @test @id id: uuid;
+        @test @key id: uuid;
         name: string;
       }
     `);
@@ -51,7 +53,7 @@ describe("$onValidate diagnostics", () => {
     await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @softDelete deleted: boolean;
       }
     `);
@@ -69,7 +71,7 @@ describe("$onValidate diagnostics", () => {
     await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @softDelete deletedAt?: utcDateTime;
         @softDelete removedAt?: utcDateTime;
       }
@@ -83,19 +85,21 @@ describe("$onValidate diagnostics", () => {
     expect(diags[0].severity).toBe("error");
   });
 
-  it("warns about redundant @unique on @id", async () => {
+  it("warns about redundant @unique on @key", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       @table
       model User {
-        @test @id @unique id: uuid;
+        @key
+        @unique
+        id: uuid;
         name: string;
       }
     `);
     $onValidate(runner.program);
 
     const diags = runner.program.diagnostics.filter(
-      (d) => d.code === "@qninhdt/typespec-orm/redundant-unique-on-id",
+      (d) => d.code === "@qninhdt/typespec-orm/redundant-unique-on-key",
     );
     expect(diags).toHaveLength(1);
     expect(diags[0].severity).toBe("warning");
@@ -106,7 +110,7 @@ describe("$onValidate diagnostics", () => {
     await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @unique @index email: string;
       }
     `);
@@ -124,7 +128,7 @@ describe("$onValidate diagnostics", () => {
     await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         name: string;
         @unique email: string;
       }

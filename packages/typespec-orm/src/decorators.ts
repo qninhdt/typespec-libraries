@@ -1,14 +1,13 @@
 import type { DecoratorContext, Model, ModelProperty, Scalar } from "@typespec/compiler";
 import {
   TableKey,
-  IdKey,
   MapKey,
   IndexKey,
   UniqueKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
-  RelationKey,
+  MappedByKey,
   CompositeIndexKey,
   CompositeUniqueKey,
   AutoCreateTimeKey,
@@ -27,12 +26,6 @@ import {
 
 export function $table(context: DecoratorContext, target: Model, name?: string): void {
   context.program.stateMap(TableKey).set(target, name ?? "");
-}
-
-// ─── @id ─────────────────────────────────────────────────────────────────────
-
-export function $id(context: DecoratorContext, target: ModelProperty): void {
-  context.program.stateMap(IdKey).set(target, true);
 }
 
 // ─── @map ────────────────────────────────────────────────────────────────────
@@ -67,30 +60,14 @@ export function $softDelete(context: DecoratorContext, target: ModelProperty): v
 
 // ─── @foreignKey ─────────────────────────────────────────────────────────────
 
-export function $foreignKey(
-  context: DecoratorContext,
-  target: ModelProperty,
-  foreignTable: string,
-  foreignColumn?: string,
-): void {
-  context.program.stateMap(ForeignKeyKey).set(target, {
-    table: foreignTable,
-    column: foreignColumn ?? "id",
-  });
+export function $foreignKey(context: DecoratorContext, target: ModelProperty, field: string): void {
+  context.program.stateMap(ForeignKeyKey).set(target, field);
 }
 
-// ─── @relation ───────────────────────────────────────────────────────────────
+// ─── @mappedBy ───────────────────────────────────────────────────────────────
 
-export function $relation(
-  context: DecoratorContext,
-  target: ModelProperty,
-  type: string,
-  foreignKey?: string,
-): void {
-  context.program.stateMap(RelationKey).set(target, {
-    type,
-    foreignKey: foreignKey ?? "",
-  });
+export function $mappedBy(context: DecoratorContext, target: ModelProperty, field: string): void {
+  context.program.stateMap(MappedByKey).set(target, field);
 }
 
 // ─── Shared composite constraint helper ──────────────────────────────────────
@@ -122,9 +99,9 @@ export function $compositeIndex(
   appendCompositeConstraint(context, target, CompositeIndexKey, name, columns);
 }
 
-// ─── @compositeUnique ────────────────────────────────────────────────────────
+// ─── @compositeKey ────────────────────────────────────────────────────────
 
-export function $compositeUnique(
+export function $compositeKey(
   context: DecoratorContext,
   target: Model,
   name: string,

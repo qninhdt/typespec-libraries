@@ -48,7 +48,7 @@ export function generateAutoFkField(
 
   if (isUnique(program, relationProp)) {
     fieldArgs.push("unique=True");
-  } else if (rel.autoInjectIndex) {
+  } else {
     fieldArgs.push("index=True");
   }
 

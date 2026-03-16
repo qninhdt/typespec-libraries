@@ -8,7 +8,7 @@ describe("GORM composite index", () => {
       @table
       @compositeIndex("idx_name_email", "name", "email")
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
       }
@@ -31,13 +31,13 @@ describe("GORM composite index", () => {
 });
 
 describe("GORM composite unique", () => {
-  it("generates @compositeUnique as uniqueIndex:NAME,priority:N on each field", async () => {
+  it("generates @compositeKey as uniqueIndex:NAME,priority:N on each field", async () => {
     const output = await emitGoFile(
       `
       @table
-      @compositeUnique("uq_name_email", "name", "email")
+      @compositeKey("uq_name_email", "name", "email")
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
       }
@@ -54,9 +54,9 @@ describe("GORM composite unique", () => {
       `
       @table
       @compositeIndex("idx_a_b", "name", "email")
-      @compositeUnique("uq_c_d", "code", "version")
+      @compositeKey("uq_c_d", "code", "version")
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
         code: string;

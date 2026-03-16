@@ -7,7 +7,7 @@ describe("SQLModel @autoCreateTime", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoCreateTime createdAt: utcDateTime;
       }
     `,
@@ -28,7 +28,7 @@ describe("SQLModel @autoUpdateTime", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoUpdateTime updatedAt?: utcDateTime;
       }
     `,
@@ -47,7 +47,7 @@ describe("SQLModel @softDelete", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @softDelete deletedAt?: utcDateTime;
       }
     `,

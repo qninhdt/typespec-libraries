@@ -22,7 +22,6 @@ import {
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
-  isId,
   isIndex,
   isSoftDelete,
   isUnique,
@@ -35,7 +34,7 @@ describe("@table decorator", () => {
     await runner.compile(`
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `);
@@ -50,7 +49,7 @@ describe("@table decorator", () => {
     await runner.compile(`
       @table("custom_users")
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `);
@@ -65,7 +64,7 @@ describe("@table decorator", () => {
     await runner.compile(`
       @table
       model StoryNode {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
       }
     `);
@@ -76,28 +75,13 @@ describe("@table decorator", () => {
   });
 });
 
-describe("@id decorator", () => {
-  it("marks a property as primary key", async () => {
-    const runner = await createTestRunner();
-    const { id } = (await runner.compile(`
-      @table
-      model User {
-        @test @id id: uuid;
-        name: string;
-      }
-    `)) as Record<string, ModelProperty>;
-
-    expect(isId(runner.program, id)).toBe(true);
-  });
-});
-
 describe("@map decorator", () => {
   it("sets a custom column name", async () => {
     const runner = await createTestRunner();
     const { name } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @map("user_name") name: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -112,7 +96,7 @@ describe("@index decorator", () => {
     const { email } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @index email: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -127,7 +111,7 @@ describe("@unique decorator", () => {
     const { email } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @unique email: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -142,7 +126,7 @@ describe("@autoIncrement decorator", () => {
     const { id } = (await runner.compile(`
       @table
       model User {
-        @test @id @autoIncrement id: serial;
+        @test @key @autoIncrement id: serial;
         name: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -157,7 +141,7 @@ describe("@softDelete decorator", () => {
     const { deletedAt } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @softDelete deletedAt?: utcDateTime;
       }
     `)) as Record<string, ModelProperty>;
@@ -167,40 +151,41 @@ describe("@softDelete decorator", () => {
 });
 
 describe("@foreignKey decorator", () => {
-  it("sets a foreign key reference", async () => {
+  it("sets a foreign key column name", async () => {
     const runner = await createTestRunner();
     const { userId } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
       }
       @table
       model Post {
-        @test @id id: uuid;
-        @test @foreignKey("users", "id") userId: uuid;
+        @test @key id: uuid;
+        @test @foreignKey("user_id") userId: uuid;
       }
     `)) as Record<string, ModelProperty>;
 
     const fk = getForeignKey(runner.program, userId);
     expect(fk).toBeDefined();
-    expect(fk!.table).toBe("users");
-    expect(fk!.column).toBe("id");
+    expect(fk).toBe("user_id");
   });
 });
 
-describe("@relation decorator", () => {
-  it("sets a relation type", async () => {
+describe("@mappedBy decorator", () => {
+  it("sets the inverse property name for one-to-many", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       @table
       model User {
-        @id id: uuid;
-        @relation("one-to-many") posts: Post[];
+        @key id: uuid;
+        @mappedBy("user")
+        posts: Post[];
       }
       @table
       model Post {
-        @id id: uuid;
-        @relation("many-to-one") user: User;
+        @key id: uuid;
+        @foreignKey("user_id")
+        user: User;
       }
     `);
     // Just verify it compiles without error
@@ -214,7 +199,7 @@ describe("@autoCreateTime decorator", () => {
     const { createdAt } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @autoCreateTime createdAt: utcDateTime;
       }
     `)) as Record<string, ModelProperty>;
@@ -229,7 +214,7 @@ describe("@autoUpdateTime decorator", () => {
     const { updatedAt } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @autoUpdateTime updatedAt: utcDateTime;
       }
     `)) as Record<string, ModelProperty>;
@@ -244,7 +229,7 @@ describe("@precision decorator", () => {
     const { price } = (await runner.compile(`
       @table
       model Product {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @precision(10, 2) price: decimal;
       }
     `)) as Record<string, ModelProperty>;
@@ -262,12 +247,12 @@ describe("@onDelete decorator", () => {
     const { user } = (await runner.compile(`
       @table
       model Post {
-        @test @id id: uuid;
-        @test @relation("many-to-one") @onDelete("CASCADE") user: User;
+        @test @key id: uuid;
+        @test @foreignKey("user_id") @onDelete("CASCADE") user: User;
       }
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `)) as Record<string, ModelProperty>;
 
@@ -281,12 +266,12 @@ describe("@onUpdate decorator", () => {
     const { user } = (await runner.compile(`
       @table
       model Post {
-        @test @id id: uuid;
-        @test @relation("many-to-one") @onUpdate("CASCADE") user: User;
+        @test @key id: uuid;
+        @test @foreignKey("user_id") @onUpdate("CASCADE") user: User;
       }
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `)) as Record<string, ModelProperty>;
 
@@ -301,7 +286,7 @@ describe("@compositeIndex decorator", () => {
       @table
       @compositeIndex("idx_name_email", "name", "email")
       @test model Test {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
       }
@@ -314,14 +299,14 @@ describe("@compositeIndex decorator", () => {
   });
 });
 
-describe("@compositeUnique decorator", () => {
+describe("@compositeKey decorator", () => {
   it("creates a composite unique constraint", async () => {
     const runner = await createTestRunner();
     const { Test } = (await runner.compile(`
       @table
-      @compositeUnique("unq_name_email", "name", "email")
+      @compositeKey("unq_name_email", "name", "email")
       @test model Test {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         email: string;
       }
@@ -399,7 +384,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { name } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @maxLength(255) name: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -412,7 +397,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { name } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @minLength(1) name: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -425,7 +410,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { age } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @minValue(0) @maxValue(200) age: int32;
       }
     `)) as Record<string, ModelProperty>;
@@ -439,7 +424,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { name } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         /** The user's display name */
         @test name: string;
       }
@@ -453,7 +438,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { code } = (await runner.compile(`
       @table
       model Product {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @pattern("[A-Z]{3}-[0-9]{4}") code: string;
       }
     `)) as Record<string, ModelProperty>;
@@ -466,7 +451,7 @@ describe("TypeSpec built-in decorators with ORM", () => {
     const { email } = (await runner.compile(`
       @table
       model User {
-        @test @id id: uuid;
+        @test @key id: uuid;
         @test @format("email") email: string;
       }
     `)) as Record<string, ModelProperty>;

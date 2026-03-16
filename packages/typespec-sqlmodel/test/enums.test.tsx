@@ -13,7 +13,7 @@ describe("SQLModel enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         status: Status;
       }
     `,
@@ -40,7 +40,7 @@ describe("SQLModel enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         role: Role;
       }
     `,
@@ -62,7 +62,7 @@ describe("SQLModel enum generation", () => {
 
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         status?: Status;
       }
     `,

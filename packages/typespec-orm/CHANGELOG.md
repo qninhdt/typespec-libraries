@@ -5,6 +5,21 @@ All notable changes to `@qninhdt/typespec-orm` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-16
+
+### Changed
+
+- **Replaced `@id` with TypeSpec's built-in `@key`**: Primary keys are now marked with the standard TypeSpec `@key` decorator instead of a custom `@id` decorator
+- **Explicit relation system**: All relations must now be explicitly declared using `@foreignKey` and `@mappedBy`. Auto-generation of relations has been removed
+- Renamed `@compositeUnique` to `@compositeKey` for consistency
+
+### Added
+
+- Built-in validator support: `@minValueExclusive`, `@maxValueExclusive`, `@minItems`, `@maxItems`
+- Helper functions: `getMinValueExclusive`, `getMaxValueExclusive`, `getMinItems`, `getMaxItems`
+
+---
+
 ## [0.2.0] - 2026-03-10
 
 ### Added
@@ -24,8 +39,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 
 - Initial release
-- Model-level decorators: `@table`, `@compositeIndex`, `@compositeUnique`
-- Property-level decorators: `@id`, `@map`, `@index`, `@unique`, `@autoIncrement`, `@autoCreateTime`, `@autoUpdateTime`, `@softDelete`, `@foreignKey`, `@onDelete`, `@onUpdate`, `@precision`, `@ignore`, `@relation`, `@default`
+- Model-level decorators: `@table`, `@compositeIndex`, `@compositeKey`
+- Property-level decorators: `@key`, `@map`, `@index`, `@unique`, `@autoIncrement`, `@autoCreateTime`, `@autoUpdateTime`, `@softDelete`, `@foreignKey`, `@mappedBy`, `@onDelete`, `@onUpdate`, `@precision`, `@ignore`
 - Built-in scalars: `uuid`, `text`, `jsonb`, `serial`, `bigserial`
 - `$onValidate` hook with 10 error diagnostics and 6 warning diagnostics
 - Full TypeScript type declarations and source maps

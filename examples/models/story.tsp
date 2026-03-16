@@ -12,10 +12,7 @@ namespace WorldCard.Models;
  */
 @table("story_nodes")
 @compositeIndex("idx_story_nodes_world_depth", "world_id", "depth")
-model StoryNode {
-  /** Unique identifier for the story node */
-  @id id: uuid;
-
+model StoryNode is Timestamped {
   /** Depth of this node in the story tree - root is 0 */
   @index("idx_story_nodes_depth")
   depth: int32 = 0;
@@ -31,19 +28,16 @@ model StoryNode {
   @map("child_ids")
   childIds: jsonb;
 
-  /** Timestamp when this node was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
   // ─── Relationships ─────────────────
 
   /** World this story node belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
 
   /** Parent node in the story tree - null for root nodes */
-  @foreignKey("story_nodes", "id")
+  @foreignKey("parent_id")
   @onDelete("CASCADE")
   parent?: StoryNode;
 }
@@ -55,10 +49,7 @@ model StoryNode {
  */
 @table("npcs")
 @compositeIndex("idx_npcs_world_name", "world_id", "name")
-model Npc {
-  /** Unique identifier for the NPC */
-  @id id: uuid;
-
+model Npc is Timestamped {
   /** Name of the NPC - indexed for lookup, max 200 characters */
   @index("idx_npcs_name")
   @maxLength(200)
@@ -70,16 +61,10 @@ model Npc {
   /** Optional JSON object holding personality traits and attributes */
   traits?: jsonb;
 
-  /** Timestamp when the NPC was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
-  /** Timestamp of the last NPC update */
-  @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
-
   // ─── Relationships ─────────────────
 
   /** World this NPC belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -89,10 +74,7 @@ model Npc {
  * Physical or virtual location within a world
  */
 @table("locations")
-model Location {
-  /** Unique identifier for the location */
-  @id id: uuid;
-
+model Location is Timestamped {
   /** Name of the location - indexed for lookup, max 200 characters */
   @index("idx_locations_name")
   @maxLength(200)
@@ -104,13 +86,10 @@ model Location {
   /** Bounding box or point stored as GeoJSON */
   coordinates?: jsonb;
 
-  /** Timestamp when the location was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
   // ─── Relationships ─────────────────
 
   /** World this location belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -120,10 +99,7 @@ model Location {
  * World event that triggers state mutations when its conditions are met
  */
 @table("game_events")
-model GameEvent {
-  /** Unique identifier for the game event */
-  @id id: uuid;
-
+model GameEvent is Timestamped {
   /** Name of the event - indexed for lookup, max 200 characters */
   @index("idx_game_events_name")
   @maxLength(200)
@@ -138,13 +114,10 @@ model GameEvent {
   /** Mutations applied when the event fires */
   effects?: jsonb;
 
-  /** Timestamp when the event was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
   // ─── Relationships ─────────────────
 
   /** World this event belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -155,11 +128,8 @@ model GameEvent {
  * The (world_id, name) pair is globally unique per world.
  */
 @table("tags")
-@compositeUnique("uq_tags_world_name", "world_id", "name")
-model Tag {
-  /** Unique identifier for the tag */
-  @id id: uuid;
-
+@compositeKey("uq_tags_world_name", "world_id", "name")
+model Tag is Timestamped {
   /** Tag name - max 100 characters, unique within its world */
   @maxLength(100)
   name: string;
@@ -169,13 +139,10 @@ model Tag {
   @maxLength(50)
   category: string;
 
-  /** Timestamp when the tag was created */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-
   // ─── Relationships ─────────────────
 
   /** World this tag belongs to - cascades deletion */
-  @foreignKey("worlds", "id")
+  @foreignKey("world_id")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -196,8 +163,9 @@ model Tag {
 model AuditLog {
   /**
    * Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput
+   * Note: Does NOT use base id - overrides with bigserial for performance
    */
-  @id
+  @key
   @autoIncrement
   id: bigserial;
 
@@ -224,8 +192,11 @@ model AuditLog {
   /** JSON patch or before/after snapshot */
   diff?: jsonb;
 
-  /** Timestamp when the audit event occurred */
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
+  // ─── Timestamp fields (only createdAt - no update/delete for audit logs) ───
+
+  @autoCreateTime
+  @map("created_at")
+  createdAt: utcDateTime;
 
   // ─── Relationships ─────────────────
 
@@ -233,7 +204,7 @@ model AuditLog {
    * User who performed the action - SET NULL when the user is deleted
    * so audit history is preserved even after account removal
    */
-  @foreignKey("users", "id")
+  @foreignKey("user_id")
   @onDelete("SET NULL")
   @onUpdate("CASCADE")
   actor?: User;

@@ -5,10 +5,10 @@ export const $lib = createTypeSpecLibrary({
   diagnostics: {
     // ─── Errors ────────────────────────────────────────────────────────────────
 
-    "multiple-ids": {
+    "multiple-keys": {
       severity: "error",
       messages: {
-        default: `Model has multiple @id properties. Only one primary key is allowed per table.`,
+        default: `Model has multiple @key properties. Only one primary key is allowed per table.`,
       },
     },
     "multiple-soft-deletes": {
@@ -68,13 +68,13 @@ export const $lib = createTypeSpecLibrary({
 
     // ─── Warnings ──────────────────────────────────────────────────────────────
 
-    "missing-id": {
+    "missing-key": {
       severity: "warning",
       messages: {
-        default: `Model marked as @table has no @id property. Consider adding a primary key.`,
+        default: `Model marked as @table has no @key property. Consider adding a primary key.`,
       },
     },
-    "redundant-unique-on-id": {
+    "redundant-unique-on-key": {
       severity: "warning",
       messages: {
         default: paramMessage`@unique on "${"propName"}" is redundant - primary keys are inherently unique.`,
@@ -104,6 +104,24 @@ export const $lib = createTypeSpecLibrary({
         default: `@foreignKey reference could not be validated. Ensure the target table and column exist.`,
       },
     },
+    "duplicate-constraint-name": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@${"decorator"}("${"constraintName"}") has a duplicate name in this model.`,
+      },
+    },
+    "empty-index-columns": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@${"decorator"}("${"constraintName"}") must have at least one column.`,
+      },
+    },
+    "duplicate-column-in-index": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Column "${"columnName"}" is listed multiple times in @${"decorator"}("${"constraintName"}").`,
+      },
+    },
   },
   state: {
     table: { description: "Maps Model → table name" },
@@ -114,15 +132,15 @@ export const $lib = createTypeSpecLibrary({
     autoIncrement: { description: "Marks ModelProperty as auto-increment" },
     softDelete: { description: "Marks ModelProperty as soft-delete timestamp" },
     foreignKey: {
-      description: "Maps ModelProperty → { table, column } foreign key ref",
+      description: "Maps ModelProperty → field name for FK column (string)",
     },
-    relation: {
-      description: "Maps ModelProperty → { type, foreignKey? } relation config",
+    mappedBy: {
+      description: "Maps ModelProperty → inverse property name for collection-side relations",
     },
     compositeIndex: {
       description: "Maps Model → array of { name, columns } composite indexes",
     },
-    compositeUnique: {
+    compositeKey: {
       description: "Maps Model → array of { name, columns } composite unique constraints",
     },
     autoCreateTime: {
@@ -162,9 +180,9 @@ export const UniqueKey = $lib.stateKeys.unique;
 export const AutoIncrementKey = $lib.stateKeys.autoIncrement;
 export const SoftDeleteKey = $lib.stateKeys.softDelete;
 export const ForeignKeyKey = $lib.stateKeys.foreignKey;
-export const RelationKey = $lib.stateKeys.relation;
+export const MappedByKey = $lib.stateKeys.mappedBy;
 export const CompositeIndexKey = $lib.stateKeys.compositeIndex;
-export const CompositeUniqueKey = $lib.stateKeys.compositeUnique;
+export const CompositeUniqueKey = $lib.stateKeys.compositeKey;
 export const AutoCreateTimeKey = $lib.stateKeys.autoCreateTime;
 export const AutoUpdateTimeKey = $lib.stateKeys.autoUpdateTime;
 export const PrecisionKey = $lib.stateKeys.precision;

@@ -4,7 +4,7 @@
  * Returns plain strings. Called imperatively by PyModel.
  */
 
-import type { Enum, ModelProperty, Program } from "@typespec/compiler";
+import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getColumnName,
@@ -16,19 +16,26 @@ import {
   getMaxValue,
   getMinLength,
   getMinValue,
+  getMaxItems,
+  getMinItems,
+  getMinValueExclusive,
+  getMaxValueExclusive,
   getOnDelete,
   getOnUpdate,
   getPattern,
   getPrecision,
   getPropertyEnum,
+  getTableName,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
-  isId,
+  isKey,
   isIndex,
   isSoftDelete,
   isUnique,
   resolveDbType,
+  isArrayType,
+  getArrayElementType,
   camelToSnake,
   NUMERIC_TYPES,
 } from "@qninhdt/typespec-orm";
@@ -55,6 +62,23 @@ export function generateField(
 ): string {
   const columnName = getColumnName(program, prop);
   const pyFieldName = columnName;
+
+  // Check for array type - handle both "Array" kind and Model with indexer (newer TypeSpec)
+  const isArray = isArrayType(prop.type) || (prop.type.kind === "Model" && !!prop.type.indexer);
+  if (isArray) {
+    return generateArrayField(
+      program,
+      prop,
+      pyFieldName,
+      columnName,
+      stdImports,
+      saImports,
+      sqlmodelImports,
+      needsField,
+      needsColumn,
+    );
+  }
+
   const dbType = resolveDbType(prop.type);
 
   // Check for enum type
@@ -86,11 +110,12 @@ export function generateField(
   for (const imp of mapping.imports) stdImports.add(imp);
 
   let pyType = mapping.pyType;
+
   const isOptional = prop.optional;
-  const isPk = isId(program, prop);
+  const isPk = isKey(program, prop);
   const isSoft = isSoftDelete(program, prop);
   const isAutoInc = isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
-  const isIdx = isIndex(program, prop);
+  const isIndexed = isIndex(program, prop);
   const isUnq = isUnique(program, prop);
   const maxLen = getMaxLength(program, prop);
   const defaultVal = getDefaultValue(program, prop);
@@ -148,7 +173,7 @@ export function generateField(
   }
 
   // Index
-  if (isIdx || fk) {
+  if (isIndexed || fk) {
     needsField.value = true;
     fieldArgs.push("index=True");
   }
@@ -179,13 +204,24 @@ export function generateField(
   // Numeric range constraints
   const isNumericType = dbType !== undefined && NUMERIC_TYPES.has(dbType);
   if (isNumericType) {
+    // Exclusive constraints take precedence over inclusive
+    const minValExclusive = getMinValueExclusive(program, prop);
+    const maxValExclusive = getMaxValueExclusive(program, prop);
     const minVal = getMinValue(program, prop);
     const maxVal = getMaxValue(program, prop);
-    if (minVal !== undefined) {
+
+    if (minValExclusive !== undefined) {
+      needsField.value = true;
+      fieldArgs.push(`gt=${minValExclusive}`);
+    } else if (minVal !== undefined) {
       needsField.value = true;
       fieldArgs.push(`ge=${minVal}`);
     }
-    if (maxVal !== undefined) {
+
+    if (maxValExclusive !== undefined) {
+      needsField.value = true;
+      fieldArgs.push(`lt=${maxValExclusive}`);
+    } else if (maxVal !== undefined) {
       needsField.value = true;
       fieldArgs.push(`le=${maxVal}`);
     }
@@ -232,16 +268,28 @@ export function generateField(
     needsField.value = true;
     const onDel = getOnDelete(program, prop);
     const onUpd = getOnUpdate(program, prop);
+    const targetModel = prop.type as Model;
+    const targetTable =
+      targetModel && targetModel.kind === "Model" ? getTableName(program, targetModel) : undefined;
 
-    if (onDel || onUpd) {
+    if (!targetTable) {
+      reportDiagnostic(program, {
+        code: "foreign-key-target-not-table",
+        format: {
+          propName: prop.name,
+          typeName: targetModel?.kind === "Model" ? targetModel.name : prop.type.kind,
+        },
+        target: prop,
+      });
+    } else if (onDel || onUpd) {
       needsColumn.value = true;
       saImports.add("sqlalchemy.ForeignKey");
-      const fkArgs: string[] = [`"${fk.table}.${fk.column}"`];
+      const fkArgs: string[] = [`"${targetTable}.${fk}"`];
       if (onDel) fkArgs.push(`ondelete="${onDel}"`);
       if (onUpd) fkArgs.push(`onupdate="${onUpd}"`);
       columnArgs.unshift(`ForeignKey(${fkArgs.join(", ")})`);
     } else {
-      fieldArgs.push(`foreign_key="${fk.table}.${fk.column}"`);
+      fieldArgs.push(`foreign_key="${targetTable}.${fk}"`);
     }
   }
 
@@ -292,6 +340,98 @@ export function generateField(
 }
 
 /**
+ * Generate a field for an array-typed property with minItems/maxItems constraints.
+ */
+function generateArrayField(
+  program: Program,
+  prop: ModelProperty,
+  pyFieldName: string,
+  columnName: string,
+  stdImports: Set<string>,
+  saImports: Set<string>,
+  sqlmodelImports: Set<string>,
+  needsField: { value: boolean },
+  needsColumn: { value: boolean },
+): string {
+  // Handle both "Array" kind and Model with indexer (newer TypeSpec)
+  let elementType = getArrayElementType(prop.type);
+  if (!elementType && prop.type.kind === "Model" && prop.type.indexer) {
+    elementType = prop.type.indexer.value;
+  }
+
+  const elementDbType = elementType ? resolveDbType(elementType) : undefined;
+  const elementPyType = elementDbType ? getPythonTypeMap(elementDbType).pyType : "Any";
+
+  for (const imp of getPythonTypeMap(elementDbType ?? "unknown").imports) {
+    stdImports.add(imp);
+  }
+
+  let pyType = `list[${elementPyType}]`;
+  const isOptional = prop.optional;
+  if (isOptional) {
+    pyType = `${pyType} | None`;
+  }
+
+  const isPk = isKey(program, prop);
+  const doc = getDoc(program, prop);
+  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
+
+  const fieldArgs: string[] = [];
+  const columnArgs: string[] = [];
+
+  // Primary key
+  if (isPk) {
+    needsField.value = true;
+    fieldArgs.push("primary_key=True");
+  }
+
+  // Nullable
+  if (!isOptional && !isPk) {
+    columnArgs.push("nullable=False");
+  }
+  if (isOptional) {
+    needsField.value = true;
+    fieldArgs.push("default=None");
+  }
+
+  // Array constraints (minItems/maxItems)
+  const minItems = getMinItems(program, prop);
+  const maxItems = getMaxItems(program, prop);
+  if (minItems !== undefined) {
+    needsField.value = true;
+    fieldArgs.push(`min_length=${minItems}`);
+  }
+  if (maxItems !== undefined) {
+    needsField.value = true;
+    fieldArgs.push(`max_length=${maxItems}`);
+  }
+
+  // Default value
+  const defaultVal = getDefaultValue(program, prop);
+  if (defaultVal && !isPk) {
+    needsColumn.value = true;
+    columnArgs.push(`server_default="${defaultVal}"`);
+  }
+
+  // Doc comment
+  if (doc) {
+    needsColumn.value = true;
+    columnArgs.push(`comment="${doc.replace(/"/g, '\\"')}"`);
+  }
+
+  // Build the field
+  if (fieldArgs.length > 0 || columnArgs.length > 0) {
+    needsField.value = true;
+    if (columnArgs.length > 0) {
+      fieldArgs.push(`sa_column_kwargs=${serializeColumnKwargs(columnArgs)}`);
+    }
+    return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+  }
+
+  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType}\n`;
+}
+
+/**
  * Generate a field for an enum-typed property.
  */
 function generateEnumField(
@@ -308,7 +448,7 @@ function generateEnumField(
   const enumTypeName = enumInfo.enumType.name;
   let pyType = enumTypeName;
   const isOptional = prop.optional;
-  const isPk = isId(program, prop);
+  const isPk = isKey(program, prop);
 
   if (isOptional) {
     pyType = `${pyType} | None`;

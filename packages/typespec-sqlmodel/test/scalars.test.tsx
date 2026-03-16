@@ -7,7 +7,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.py",
@@ -22,7 +22,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,
@@ -38,7 +38,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         active: boolean;
       }
     `,
@@ -53,7 +53,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model IntTest {
-        @id id: uuid;
+        @key id: uuid;
         a: int8;
         b: int16;
         c: int32;
@@ -74,7 +74,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model FloatTest {
-        @id id: uuid;
+        @key id: uuid;
         a: float32;
         b: float64;
       }
@@ -91,7 +91,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         price: decimal;
       }
     `,
@@ -107,7 +107,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         eventAt: utcDateTime;
       }
     `,
@@ -123,7 +123,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         data: bytes;
       }
     `,
@@ -138,7 +138,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         bio?: string;
         age?: int32;
@@ -160,7 +160,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         displayName: string;
         avatarUrl?: string;
         isActive: boolean;
@@ -179,7 +179,7 @@ describe("Python scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @autoCreateTime createdAt: utcDateTime;
         amount: decimal;
       }

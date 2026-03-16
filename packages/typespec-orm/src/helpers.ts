@@ -15,22 +15,26 @@ import type {
 import {
   getDoc as tsGetDoc,
   getFormat as tsGetFormat,
+  getMaxItems as tsGetMaxItems,
+  getMaxValueExclusive as tsGetMaxValueExclusive,
   getMaxLength as tsGetMaxLength,
   getMaxValue as tsGetMaxValue,
+  getMinItems as tsGetMinItems,
+  getMinValueExclusive as tsGetMinValueExclusive,
   getMinLength as tsGetMinLength,
   getMinValue as tsGetMinValue,
   getPattern as tsGetPattern,
+  isKey as tsIsKey,
 } from "@typespec/compiler";
 import {
   TableKey,
-  IdKey,
   MapKey,
   IndexKey,
   UniqueKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
-  RelationKey,
+  MappedByKey,
   CompositeIndexKey,
   CompositeUniqueKey,
   AutoCreateTimeKey,
@@ -58,10 +62,6 @@ export function getTableName(program: Program, model: Model): string {
 }
 
 // ─── Property helpers ────────────────────────────────────────────────────────
-
-export function isId(program: Program, prop: ModelProperty): boolean {
-  return program.stateMap(IdKey).has(prop);
-}
 
 export function getColumnName(program: Program, prop: ModelProperty): string {
   const mapped = program.stateMap(MapKey).get(prop) as string | undefined;
@@ -110,6 +110,84 @@ export function isSoftDelete(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(SoftDeleteKey).has(prop);
 }
 
+// ─── Extended validation helpers (optional) ───────────────────────────────────
+
+/**
+ * Check if a property is the primary key using @key (TypeSpec built-in).
+ */
+export function isKey(program: Program, prop: ModelProperty): boolean {
+  // Use TypeSpec's built-in isKey function
+  return tsIsKey(program, prop);
+}
+
+export function isArrayType(type: Type): boolean {
+  // In TypeSpec, arrays are Models with an indexer
+  return type.kind === "Model" && (type as Model).indexer !== undefined;
+}
+
+export function getArrayElementType(type: Type): Type | undefined {
+  // In TypeSpec, arrays are Models with an indexer
+  if (type.kind === "Model") {
+    const model = type as Model;
+    if (model.indexer) {
+      return model.indexer.value;
+    }
+  }
+  return undefined;
+}
+
+export interface ValidatorInfo {
+  name: string;
+  args?: string;
+}
+
+/**
+ * Collect all validators for a property.
+ * Returns an array of ValidatorInfo objects with name and optional args.
+ */
+export function getValidators(program: Program, prop: ModelProperty): ValidatorInfo[] {
+  const validators: ValidatorInfo[] = [];
+
+  // Length validators
+  const maxLen = getMaxLength(program, prop);
+  if (maxLen !== undefined) validators.push({ name: "maxLength", args: String(maxLen) });
+
+  const minLen = getMinLength(program, prop);
+  if (minLen !== undefined) validators.push({ name: "minLength", args: String(minLen) });
+
+  // Value validators
+  const maxVal = getMaxValue(program, prop);
+  if (maxVal !== undefined) validators.push({ name: "maxValue", args: String(maxVal) });
+
+  const minVal = getMinValue(program, prop);
+  if (minVal !== undefined) validators.push({ name: "minValue", args: String(minVal) });
+
+  const maxValEx = getMaxValueExclusive(program, prop);
+  if (maxValEx !== undefined)
+    validators.push({ name: "maxValueExclusive", args: String(maxValEx) });
+
+  const minValEx = getMinValueExclusive(program, prop);
+  if (minValEx !== undefined)
+    validators.push({ name: "minValueExclusive", args: String(minValEx) });
+
+  // Array item validators
+  const maxItems = getMaxItems(program, prop);
+  if (maxItems !== undefined) validators.push({ name: "maxItems", args: String(maxItems) });
+
+  const minItems = getMinItems(program, prop);
+  if (minItems !== undefined) validators.push({ name: "minItems", args: String(minItems) });
+
+  // Pattern
+  const pattern = getPattern(program, prop);
+  if (pattern) validators.push({ name: "pattern", args: pattern });
+
+  // Format
+  const format = getFormat(program, prop);
+  if (format) validators.push({ name: "format", args: format });
+
+  return validators;
+}
+
 // ─── Lookup type support ─────────────────────────────────────────────────────
 
 /**
@@ -120,6 +198,32 @@ export function isSoftDelete(program: Program, prop: ModelProperty): boolean {
  */
 function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
   return prop.type.kind === "ModelProperty" ? (prop.type as ModelProperty) : undefined;
+}
+
+export function getMaxValueExclusive(program: Program, prop: ModelProperty): number | undefined {
+  const src = lookupSourceProp(prop);
+  return (
+    tsGetMaxValueExclusive(program, prop) ??
+    (src ? tsGetMaxValueExclusive(program, src) : undefined)
+  );
+}
+
+export function getMinValueExclusive(program: Program, prop: ModelProperty): number | undefined {
+  const src = lookupSourceProp(prop);
+  return (
+    tsGetMinValueExclusive(program, prop) ??
+    (src ? tsGetMinValueExclusive(program, src) : undefined)
+  );
+}
+
+export function getMaxItems(program: Program, prop: ModelProperty): number | undefined {
+  const src = lookupSourceProp(prop);
+  return tsGetMaxItems(program, prop) ?? (src ? tsGetMaxItems(program, src) : undefined);
+}
+
+export function getMinItems(program: Program, prop: ModelProperty): number | undefined {
+  const src = lookupSourceProp(prop);
+  return tsGetMinItems(program, prop) ?? (src ? tsGetMinItems(program, src) : undefined);
 }
 
 export function getMaxLength(program: Program, prop: ModelProperty): number | undefined {
@@ -157,22 +261,12 @@ export function getFormat(program: Program, prop: ModelProperty): string | undef
   return tsGetFormat(program, prop) ?? (src ? tsGetFormat(program, src) : undefined);
 }
 
-export interface ForeignKeyInfo {
-  table: string;
-  column: string;
+export function getForeignKey(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(ForeignKeyKey).get(prop) as string | undefined;
 }
 
-export function getForeignKey(program: Program, prop: ModelProperty): ForeignKeyInfo | undefined {
-  return program.stateMap(ForeignKeyKey).get(prop) as ForeignKeyInfo | undefined;
-}
-
-export interface RelationInfo {
-  type: string;
-  foreignKey: string;
-}
-
-export function getRelation(program: Program, prop: ModelProperty): RelationInfo | undefined {
-  return program.stateMap(RelationKey).get(prop) as RelationInfo | undefined;
+export function getMappedBy(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(MappedByKey).get(prop) as string | undefined;
 }
 
 // ─── Composite index / unique helpers ────────────────────────────────────────
@@ -461,7 +555,7 @@ export function deriveTableName(modelName: string): string {
 // ─── Auto-relation detection ─────────────────────────────────────────────────
 
 export interface ResolvedRelation {
-  /** Detected or explicit relation kind */
+  /** Relation kind */
   kind: "many-to-one" | "one-to-many" | "one-to-one" | "many-to-many";
   /** The referenced Model type */
   targetModel: Model;
@@ -473,10 +567,6 @@ export interface ResolvedRelation {
   fkTargetColumn: string;
   /** DB type of the FK (resolved from target PK type, e.g. "uuid") */
   fkDbType: string | undefined;
-  /** Whether the emitter should auto-inject an FK scalar field on this model */
-  autoInjectFk: boolean;
-  /** Whether the FK column should get a standalone index (false if covered by composite or @unique) */
-  autoInjectIndex: boolean;
   /** ON DELETE action */
   onDelete?: string;
   /** ON UPDATE action */
@@ -489,10 +579,12 @@ export interface ResolvedRelation {
 
 /**
  * Find the primary key property of a model.
+ * Checks for @key (TypeSpec built-in)
  */
 export function findPrimaryKey(program: Program, model: Model): ModelProperty | undefined {
+  // Check for @key decorator (TypeSpec built-in) - decorators is an array
   for (const [, prop] of model.properties) {
-    if (isId(program, prop)) return prop;
+    if (isKey(program, prop)) return prop;
   }
   return undefined;
 }
@@ -511,14 +603,13 @@ export function unwrapArrayType(type: Type): Model | undefined {
 }
 
 /**
- * Resolve a relation from a model property by auto-detecting the type.
+ * Resolve a relation from a model property.
  *
- * - Singular Model ref (`owner: User`) → many-to-one (auto-injects FK)
- * - Array Model ref (`items: Item[]`) → one-to-many (FK on target side)
- * - Explicit `@relation("one-to-one")` override supported
- * - `@foreignKey` on the relation field overrides target column
+ * Relations must be explicitly declared:
+ * - many-to-one: `@foreignKey("column_name")` on the Model reference property
+ * - one-to-many: `@mappedBy("inverse_property")` on the array property
  *
- * Returns undefined if the property is not a relation.
+ * Returns undefined if the property is not a valid relation.
  */
 export function resolveRelation(
   program: Program,
@@ -528,32 +619,31 @@ export function resolveRelation(
   const onDelete = getOnDelete(program, prop);
   const onUpdate = getOnUpdate(program, prop);
   const explicitFk = getForeignKey(program, prop);
-  const explicitRel = getRelation(program, prop);
+  const explicitMappedBy = getMappedBy(program, prop);
 
-  // Case 1: Singular @table Model reference → many-to-one (or one-to-one override)
+  // Case 1: Singular @table Model reference → many-to-one
   if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
     const targetModel = prop.type as Model;
     const targetTable = getTableName(program, targetModel);
-    const fkColumnName = camelToSnake(prop.name) + "_id";
-    const fkTargetColumn = explicitFk?.column ?? "id";
+
+    // FK column name is required for many-to-one
+    if (!explicitFk) {
+      return undefined;
+    }
+
+    const fkColumnName = explicitFk;
+    const fkTargetColumn = "id";
 
     // Resolve FK type from target's primary key
     const targetPk = findPrimaryKey(program, targetModel);
     const fkDbType = targetPk ? resolveDbType(targetPk.type) : "uuid";
 
-    // Don't auto-inject if parent already has a manual FK field
-    const fkFieldName = prop.name + "Id";
-    const hasManualFk = parentModel.properties.has(fkFieldName);
-
-    const kind = explicitRel?.type === "one-to-one" ? "one-to-one" : "many-to-one";
+    // Determine kind: @unique → one-to-one, otherwise → many-to-one
+    const hasUnique = isUnique(program, prop);
+    const kind = hasUnique ? "one-to-one" : "many-to-one";
 
     // Find inverse one-to-many on target for back_populates
-    const forwardRef = findForwardReference(parentModel, targetModel);
-
-    const coveredByLeadingComposite = [
-      ...getCompositeIndexes(program, parentModel),
-      ...getCompositeUniques(program, parentModel),
-    ].some((c) => c.columns.length > 0 && c.columns[0] === fkColumnName);
+    const forwardRef = findForwardReference(program, parentModel, targetModel, fkColumnName);
 
     return {
       kind,
@@ -562,8 +652,6 @@ export function resolveRelation(
       fkColumnName,
       fkTargetColumn,
       fkDbType,
-      autoInjectFk: !hasManualFk,
-      autoInjectIndex: !coveredByLeadingComposite,
       onDelete,
       onUpdate,
       backPopulates: forwardRef,
@@ -576,20 +664,29 @@ export function resolveRelation(
     const targetModel = arrayElement;
     const targetTable = getTableName(program, targetModel);
 
-    // Find the inverse many-to-one on the target that points back
-    const backRef = findBackReference(program, parentModel, targetModel);
-    const fkColumnName = backRef?.fkColumnName ?? camelToSnake(parentModel.name) + "_id";
-    const inverseFkFieldName = backRef
-      ? camelToPascal(backRef.fieldName + "Id")
-      : camelToPascal(parentModel.name.charAt(0).toLowerCase() + parentModel.name.slice(1) + "Id");
-    const backPopulates = backRef
-      ? camelToSnake(backRef.fieldName)
-      : camelToSnake(parentModel.name);
+    // mappedBy is required for one-to-many
+    if (!explicitMappedBy) {
+      return undefined;
+    }
 
-    // Propagate cascade from the inverse many-to-one field so the
-    // navigation field on the "has-many" side can carry the constraint.
-    const inverseOnDelete = backRef ? getOnDelete(program, backRef.prop) : undefined;
-    const inverseOnUpdate = backRef ? getOnUpdate(program, backRef.prop) : undefined;
+    // Find the property on target model that has @foreignKey
+    const targetProp = targetModel.properties.get(explicitMappedBy);
+    if (!targetProp) {
+      return undefined;
+    }
+
+    const targetFk = getForeignKey(program, targetProp);
+    if (!targetFk) {
+      return undefined;
+    }
+
+    const fkColumnName = targetFk;
+    const inverseFkFieldName = camelToPascal(explicitMappedBy + "Id");
+    const backPopulates = explicitMappedBy;
+
+    // Get cascade from the inverse property
+    const inverseOnDelete = getOnDelete(program, targetProp);
+    const inverseOnUpdate = getOnUpdate(program, targetProp);
 
     return {
       kind: "one-to-many",
@@ -598,8 +695,6 @@ export function resolveRelation(
       fkColumnName,
       fkTargetColumn: "id",
       fkDbType: undefined,
-      autoInjectFk: false,
-      autoInjectIndex: false,
       onDelete: inverseOnDelete ?? onDelete,
       onUpdate: inverseOnUpdate ?? onUpdate,
       inverseFkFieldName,
@@ -611,49 +706,30 @@ export function resolveRelation(
 }
 
 /**
- * Find the back-reference field on targetModel that points to parentModel.
- * Used to resolve the FK column name for one-to-many relations.
- */
-function findBackReference(
-  program: Program,
-  parentModel: Model,
-  targetModel: Model,
-): { fieldName: string; fkColumnName: string; prop: ModelProperty } | undefined {
-  for (const [, prop] of targetModel.properties) {
-    if (prop.type === parentModel) {
-      return {
-        fieldName: prop.name,
-        fkColumnName: camelToSnake(prop.name) + "_id",
-        prop,
-      };
-    }
-  }
-  // Secondary: uuid scalar field with @foreignKey referencing parentModel's table
-  const parentTable = getTableName(program, parentModel);
-  for (const [, prop] of targetModel.properties) {
-    const fkInfo = getForeignKey(program, prop);
-    if (fkInfo?.table === parentTable) {
-      const columnName = getColumnName(program, prop);
-      const fieldNameBase = prop.name.endsWith("Id") ? prop.name.slice(0, -2) : prop.name;
-      return {
-        fieldName: fieldNameBase,
-        fkColumnName: columnName,
-        prop,
-      };
-    }
-  }
-  return undefined;
-}
-
-/**
  * Find the forward-reference (one-to-many) on targetModel that collects parentModel.
  * Used for SQLModel back_populates on the many-to-one side.
  */
-function findForwardReference(parentModel: Model, targetModel: Model): string | undefined {
+function findForwardReference(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  fkColumnName: string,
+): string | undefined {
+  // Search on targetModel for one-to-many arrays that collect parentModel
   for (const [, prop] of targetModel.properties) {
     const arrElement = unwrapArrayType(prop.type);
-    if (arrElement === parentModel) {
-      return camelToSnake(prop.name);
+    if (arrElement && arrElement === parentModel) {
+      // Check if this array has @mappedBy pointing to a property with matching FK column
+      const mappedBy = getMappedBy(program, prop);
+      if (mappedBy) {
+        const targetProp = parentModel.properties.get(mappedBy);
+        if (targetProp) {
+          const targetFk = getForeignKey(program, targetProp);
+          if (targetFk === fkColumnName) {
+            return camelToSnake(prop.name);
+          }
+        }
+      }
     }
   }
   return undefined;

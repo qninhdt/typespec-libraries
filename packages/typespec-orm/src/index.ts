@@ -2,14 +2,12 @@
 export { $lib } from "./lib.js";
 export {
   TableKey,
-  IdKey,
   MapKey,
   IndexKey,
   UniqueKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
-  RelationKey,
   CompositeIndexKey,
   CompositeUniqueKey,
   AutoCreateTimeKey,
@@ -37,16 +35,15 @@ export { $onValidate } from "./validators.js";
 
 import {
   $table,
-  $id,
   $map,
   $index,
   $unique,
   $autoIncrement,
   $softDelete,
   $foreignKey,
-  $relation,
+  $mappedBy,
   $compositeIndex,
-  $compositeUnique,
+  $compositeKey,
   $autoCreateTime,
   $autoUpdateTime,
   $precision,
@@ -62,16 +59,15 @@ import {
 export const $decorators = {
   "Qninhdt.Orm": {
     table: $table,
-    id: $id,
     map: $map,
     index: $index,
     unique: $unique,
     autoIncrement: $autoIncrement,
     softDelete: $softDelete,
     foreignKey: $foreignKey,
-    relation: $relation,
+    mappedBy: $mappedBy,
     compositeIndex: $compositeIndex,
-    compositeUnique: $compositeUnique,
+    compositeKey: $compositeKey,
     autoCreateTime: $autoCreateTime,
     autoUpdateTime: $autoUpdateTime,
     precision: $precision,
@@ -89,7 +85,6 @@ export const $decorators = {
 export {
   isTable,
   getTableName,
-  isId,
   getColumnName,
   isIndex,
   getIndexName,
@@ -105,7 +100,7 @@ export {
   getFormat,
   getDoc,
   getForeignKey,
-  getRelation,
+  getMappedBy,
   getCompositeIndexes,
   getCompositeUniques,
   isAutoCreateTime,
@@ -134,16 +129,24 @@ export {
   collectDataModels,
   getPlaceholder,
   getInputType,
+  // Extended validation helpers
+  isKey,
+  isArrayType,
+  getArrayElementType,
+  getMaxItems,
+  getMinItems,
+  getMinValueExclusive,
+  getMaxValueExclusive,
+  getValidators,
 } from "./helpers.js";
 
 export type {
-  ForeignKeyInfo,
-  RelationInfo,
   ResolvedRelation,
   CompositeConstraint,
   PrecisionInfo,
   EnumMemberInfo,
   TableModel,
+  ValidatorInfo,
 } from "./helpers.js";
 
 // ─── Shared emitter utilities ────────────────────────────────────────────────

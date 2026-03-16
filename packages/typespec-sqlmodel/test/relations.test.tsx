@@ -7,15 +7,17 @@ describe("SQLModel one-to-many relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
+        @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
       }
@@ -35,13 +37,15 @@ describe("SQLModel one-to-many relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("user_id")
         @onDelete("CASCADE") user: User;
       }
     `,
@@ -53,20 +57,22 @@ describe("SQLModel one-to-many relationships", () => {
 });
 
 describe("SQLModel many-to-one relationships", () => {
-  it("generates auto FK field with ForeignKey and cascade", async () => {
+  it("generates FK field with ForeignKey and cascade", async () => {
     const output = await emitPyFile(
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
+        @mappedBy("user")
         posts: Post[];
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
+        @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
       }
@@ -74,7 +80,7 @@ describe("SQLModel many-to-one relationships", () => {
       "post.py",
     );
 
-    // Auto-injected FK field
+    // FK field
     expect(output).toContain("user_id: UUID");
     expect(output).toContain("ForeignKey(");
     expect(output).toContain('ondelete="CASCADE"');
@@ -92,12 +98,13 @@ describe("SQLModel optional relationships", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
+        @foreignKey("author_id")
         author?: User;
       }
     `,

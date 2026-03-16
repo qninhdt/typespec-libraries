@@ -7,7 +7,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.go",
@@ -23,7 +23,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,
@@ -39,7 +39,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         bio: text;
       }
     `,
@@ -55,7 +55,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         active: boolean;
       }
     `,
@@ -71,7 +71,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model IntTest {
-        @id id: uuid;
+        @key id: uuid;
         a: int8;
         b: int16;
         c: int32;
@@ -100,7 +100,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model FloatTest {
-        @id id: uuid;
+        @key id: uuid;
         a: float32;
         b: float64;
       }
@@ -119,7 +119,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         price: decimal;
       }
     `,
@@ -136,7 +136,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model Post {
-        @id id: serial;
+        @key id: serial;
       }
     `,
       "post.go",
@@ -151,7 +151,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         eventAt: utcDateTime;
       }
     `,
@@ -168,7 +168,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         data: bytes;
       }
     `,
@@ -184,7 +184,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
         bio?: string;
         age?: int32;
@@ -205,7 +205,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         displayName: string;
         avatarUrl?: string;
         isActive: boolean;
@@ -225,7 +225,7 @@ describe("Go scalar type mappings", () => {
       `
       @table
       model Simple {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,

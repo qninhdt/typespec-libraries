@@ -7,13 +7,13 @@ describe("SQLModel __init__.py generation", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
 
       @table
       model Post {
-        @id id: uuid;
+        @key id: uuid;
         title: string;
       }
 

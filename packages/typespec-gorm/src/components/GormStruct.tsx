@@ -16,13 +16,14 @@ import {
   getCompositeUniques,
   getDoc,
   classifyProperties,
+  isKey,
   camelToPascal,
   camelToSnake,
   resolveDbType,
 } from "@qninhdt/typespec-orm";
 import { GO_TYPE_MAP, buildCompositeMap } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
-import { generateAutoFkFieldLine, generateRelationFieldLine } from "./GormRelationField.jsx";
+import { generateRelationFieldLine } from "./GormRelationField.jsx";
 
 export interface GormModelFileProps {
   readonly program: Program;
@@ -57,6 +58,20 @@ export function GormModelFile(props: GormModelFileProps): Children {
   const fieldLines: string[] = [];
   const relationFieldLines: string[] = [];
 
+  // First: Key fields - always at the top
+  for (const { prop } of regularProps) {
+    if (isKey(program, prop)) {
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+    }
+  }
+
+  // Second: Regular fields (excluding keys which are already output)
+  for (const { prop } of regularProps) {
+    if (!isKey(program, prop)) {
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+    }
+  }
+
   // Ignored fields → gorm:"-"
   for (const { prop, enumInfo } of ignored) {
     const dbType = resolveDbType(prop.type);
@@ -69,17 +84,9 @@ export function GormModelFile(props: GormModelFileProps): Children {
     fieldLines.push(generateIgnoredFieldLine(program, prop, imports, goType));
   }
 
-  // Relation FK auto-injection + navigation fields
+  // Relation navigation fields
   for (const { prop, resolved } of relations) {
-    if (resolved.autoInjectFk) {
-      fieldLines.push(generateAutoFkFieldLine(program, prop, resolved, imports, compositeMap));
-    }
     relationFieldLines.push(generateRelationFieldLine(program, prop, resolved));
-  }
-
-  // Regular DB-mapped fields
-  for (const { prop } of regularProps) {
-    fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
   }
 
   // Build enum block

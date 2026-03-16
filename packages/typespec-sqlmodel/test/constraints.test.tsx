@@ -7,7 +7,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @index email: string;
       }
     `,
@@ -22,7 +22,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @unique email: string;
       }
     `,
@@ -37,7 +37,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @maxLength(100) name: string;
       }
     `,
@@ -52,7 +52,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,
@@ -67,7 +67,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         @precision(10, 2) price: decimal;
       }
     `,
@@ -84,7 +84,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         credits: int32 = 0;
       }
     `,
@@ -100,7 +100,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         name: string;
       }
     `,
@@ -115,7 +115,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @minLength(2) name: string;
       }
     `,
@@ -130,7 +130,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model Product {
-        @id id: uuid;
+        @key id: uuid;
         @minValue(0) @maxValue(999) quantity: int32;
       }
     `,
@@ -146,7 +146,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @pattern("^[A-Z]+$") code: string;
       }
     `,
@@ -161,7 +161,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @format("email") email: string;
       }
     `,
@@ -177,7 +177,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @format("url") website?: string;
       }
     `,
@@ -193,7 +193,7 @@ describe("SQLModel field constraints", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         @ignore computed?: string;
       }
     `,
@@ -211,7 +211,7 @@ describe("SQLModel field constraints", () => {
       /** A registered user */
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
         /** The user's email */
         email: string;
       }
@@ -234,7 +234,7 @@ describe("SQLModel primary key generation", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.py",
@@ -251,7 +251,7 @@ describe("SQLModel file structure", () => {
       `
       @table
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.py",
@@ -268,12 +268,62 @@ describe("SQLModel file structure", () => {
       `
       @table("my_users")
       model User {
-        @id id: uuid;
+        @key id: uuid;
       }
     `,
       "user.py",
     );
 
     expect(output).toContain('__tablename__ = "my_users"');
+  });
+});
+
+describe("SQLModel value constraints", () => {
+  it("generates min/max for @minValue/@maxValue", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minValue(0) @maxValue(100)
+        quantity: int32;
+      }
+    `,
+      "test.py",
+    );
+    expect(output).toContain("ge=0");
+    expect(output).toContain("le=100");
+  });
+
+  it("generates min/max for @minValueExclusive/@maxValueExclusive", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minValueExclusive(0) @maxValueExclusive(100)
+        quantity: int32;
+      }
+    `,
+      "test.py",
+    );
+    expect(output).toContain("gt=0");
+    expect(output).toContain("lt=100");
+  });
+
+  it("generates min/max for @minItems/@maxItems", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model Test {
+        @key id: uuid;
+        @minItems(1) @maxItems(10)
+        items: string[];
+      }
+    `,
+      "test.py",
+    );
+    expect(output).toContain("min_length=1");
+    expect(output).toContain("max_length=10");
   });
 });

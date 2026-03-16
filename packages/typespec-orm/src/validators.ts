@@ -10,7 +10,7 @@ import { reportDiagnostic, MapKey, TableKey } from "./lib.js";
 import {
   isTable,
   getColumnName,
-  isId,
+  isKey,
   isUnique,
   isIndex,
   isAutoIncrement,
@@ -22,7 +22,7 @@ import {
   getForeignKey,
   getOnDelete,
   getOnUpdate,
-  getRelation,
+  getMappedBy,
   getCompositeIndexes,
   getCompositeUniques,
   resolveDbType,
@@ -115,8 +115,7 @@ function validateModel(program: Program, model: Model): void {
       continue;
     }
 
-    // Count @id
-    if (isId(program, prop)) idCount++;
+    if (isKey(program, prop)) idCount++;
 
     // Count @softDelete
     if (isSoftDelete(program, prop)) softDeleteCount++;
@@ -140,18 +139,18 @@ function validateModel(program: Program, model: Model): void {
     validatePropertyDecorators(program, prop);
   }
 
-  // Multiple @id
+  // Multiple @key
   if (idCount > 1) {
     reportDiagnostic(program, {
-      code: "multiple-ids",
+      code: "multiple-keys",
       target: model,
     });
   }
 
-  // Missing @id
+  // Missing @key
   if (idCount === 0) {
     reportDiagnostic(program, {
-      code: "missing-id",
+      code: "missing-key",
       target: model,
     });
   }
@@ -177,7 +176,7 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
   // @ignore conflicts
   if (isIgnored(program, prop)) {
     const conflicts: string[] = [];
-    if (isId(program, prop)) conflicts.push("id");
+    if (isKey(program, prop)) conflicts.push("key");
     if (isIndex(program, prop)) conflicts.push("index");
     if (isUnique(program, prop)) conflicts.push("unique");
     if (isAutoIncrement(program, prop)) conflicts.push("autoIncrement");
@@ -245,10 +244,10 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
     }
   }
 
-  // @unique on @id (redundant)
-  if (isId(program, prop) && isUnique(program, prop)) {
+  // @unique on @key (redundant)
+  if (isKey(program, prop) && isUnique(program, prop)) {
     reportDiagnostic(program, {
-      code: "redundant-unique-on-id",
+      code: "redundant-unique-on-key",
       target: prop,
       format: { propName: prop.name },
     });
@@ -289,9 +288,9 @@ function validateCascadeOnScalar(
       if (prop.type.kind === "Model") continue;
 
       const hasFk = !!getForeignKey(program, prop);
-      const hasRelation = !!getRelation(program, prop);
+      const hasMappedBy = !!getMappedBy(program, prop);
 
-      if (!hasFk && !hasRelation) {
+      if (!hasFk && !hasMappedBy) {
         if (getOnDelete(program, prop)) {
           reportDiagnostic(program, {
             code: "cascade-without-relation",
@@ -322,12 +321,58 @@ function validateCompositeConstraints(
 
   const constraints: { entries: { name: string; columns: string[] }[]; decorator: string }[] = [
     { entries: getCompositeIndexes(program, model), decorator: "compositeIndex" },
-    { entries: getCompositeUniques(program, model), decorator: "compositeUnique" },
+    { entries: getCompositeUniques(program, model), decorator: "compositeKey" },
   ];
 
   for (const { entries, decorator } of constraints) {
+    // Track seen constraint names to detect duplicates
+    const seenNames = new Set<string>();
+
     for (const entry of entries) {
+      // Check for duplicate constraint names
+      if (seenNames.has(entry.name)) {
+        reportDiagnostic(program, {
+          code: "duplicate-constraint-name",
+          target: model,
+          format: {
+            constraintName: entry.name,
+            decorator,
+          },
+        });
+      }
+      seenNames.add(entry.name);
+
+      // Check for empty columns
+      if (entry.columns.length === 0) {
+        reportDiagnostic(program, {
+          code: "empty-index-columns",
+          target: model,
+          format: {
+            constraintName: entry.name,
+            decorator,
+          },
+        });
+        continue;
+      }
+
+      // Track columns in this constraint to detect duplicates
+      const seenColumns = new Set<string>();
       for (const col of entry.columns) {
+        // Check for duplicate columns in same index
+        if (seenColumns.has(col)) {
+          reportDiagnostic(program, {
+            code: "duplicate-column-in-index",
+            target: model,
+            format: {
+              columnName: col,
+              constraintName: entry.name,
+              decorator,
+            },
+          });
+        }
+        seenColumns.add(col);
+
+        // Check for non-existent column
         if (!validColumns.has(col)) {
           reportDiagnostic(program, {
             code: "composite-column-not-found",
