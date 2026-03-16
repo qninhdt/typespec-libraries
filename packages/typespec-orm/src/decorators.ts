@@ -8,8 +8,6 @@ import {
   SoftDeleteKey,
   ForeignKeyKey,
   MappedByKey,
-  CompositeIndexKey,
-  CompositeUniqueKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
@@ -37,6 +35,8 @@ export function $map(context: DecoratorContext, target: ModelProperty, columnNam
 // ─── @index ──────────────────────────────────────────────────────────────────
 
 export function $index(context: DecoratorContext, target: ModelProperty, name?: string): void {
+  // Auto-generate name from table name + column name if not specified
+  // Name format: [tableName]_[columnName]_idx
   context.program.stateMap(IndexKey).set(target, name ?? "");
 }
 
@@ -68,46 +68,6 @@ export function $foreignKey(context: DecoratorContext, target: ModelProperty, fi
 
 export function $mappedBy(context: DecoratorContext, target: ModelProperty, field: string): void {
   context.program.stateMap(MappedByKey).set(target, field);
-}
-
-// ─── Shared composite constraint helper ──────────────────────────────────────
-
-function appendCompositeConstraint(
-  context: DecoratorContext,
-  target: Model,
-  stateKey: typeof CompositeIndexKey,
-  name: string,
-  columns: string[],
-): void {
-  const existing =
-    (context.program.stateMap(stateKey).get(target) as Array<{
-      name: string;
-      columns: string[];
-    }>) ?? [];
-  existing.push({ name, columns });
-  context.program.stateMap(stateKey).set(target, existing);
-}
-
-// ─── @compositeIndex ─────────────────────────────────────────────────────────
-
-export function $compositeIndex(
-  context: DecoratorContext,
-  target: Model,
-  name: string,
-  ...columns: string[]
-): void {
-  appendCompositeConstraint(context, target, CompositeIndexKey, name, columns);
-}
-
-// ─── @compositeKey ────────────────────────────────────────────────────────
-
-export function $compositeKey(
-  context: DecoratorContext,
-  target: Model,
-  name: string,
-  ...columns: string[]
-): void {
-  appendCompositeConstraint(context, target, CompositeUniqueKey, name, columns);
 }
 
 // ─── @autoCreateTime ─────────────────────────────────────────────────────────

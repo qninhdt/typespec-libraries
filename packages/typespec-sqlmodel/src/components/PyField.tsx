@@ -8,6 +8,7 @@ import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getColumnName,
+  getCompositeFields,
   getDefaultValue,
   getDoc,
   getForeignKey,
@@ -59,7 +60,14 @@ export function generateField(
   sqlmodelImports: Set<string>,
   needsField: { value: boolean },
   needsColumn: { value: boolean },
+  isPartOfCompositeUnique?: boolean,
+  fkTargetTable?: string,
 ): string {
+  // Skip composite type fields - they are configuration only
+  if (getCompositeFields(program, prop)) {
+    return "";
+  }
+
   const columnName = getColumnName(program, prop);
   const pyFieldName = columnName;
 
@@ -94,6 +102,7 @@ export function generateField(
       sqlmodelImports,
       needsField,
       needsColumn,
+      isPartOfCompositeUnique,
     );
   }
 
@@ -116,7 +125,8 @@ export function generateField(
   const isSoft = isSoftDelete(program, prop);
   const isAutoInc = isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
   const isIndexed = isIndex(program, prop);
-  const isUnq = isUnique(program, prop);
+  // Skip unique=True if field is part of composite unique (handled by __table_args__)
+  const isUnq = isUnique(program, prop) && !isPartOfCompositeUnique;
   const maxLen = getMaxLength(program, prop);
   const defaultVal = getDefaultValue(program, prop);
   const fk = getForeignKey(program, prop);
@@ -264,32 +274,45 @@ export function generateField(
   }
 
   // Foreign key with cascade constraints
-  if (fk) {
+  // Handle both: 1) explicit @foreignKey on this property, 2) FK field referenced by a relation
+  const hasForeignKey = fk || fkTargetTable;
+  if (hasForeignKey) {
     needsField.value = true;
+
+    // Get FK info from either explicit @foreignKey or from relation
     const onDel = getOnDelete(program, prop);
     const onUpd = getOnUpdate(program, prop);
-    const targetModel = prop.type as Model;
-    const targetTable =
-      targetModel && targetModel.kind === "Model" ? getTableName(program, targetModel) : undefined;
 
-    if (!targetTable) {
-      reportDiagnostic(program, {
-        code: "foreign-key-target-not-table",
-        format: {
-          propName: prop.name,
-          typeName: targetModel?.kind === "Model" ? targetModel.name : prop.type.kind,
-        },
-        target: prop,
-      });
-    } else if (onDel || onUpd) {
-      needsColumn.value = true;
-      saImports.add("sqlalchemy.ForeignKey");
-      const fkArgs: string[] = [`"${targetTable}.${fk}"`];
-      if (onDel) fkArgs.push(`ondelete="${onDel}"`);
-      if (onUpd) fkArgs.push(`onupdate="${onUpd}"`);
-      columnArgs.unshift(`ForeignKey(${fkArgs.join(", ")})`);
-    } else {
-      fieldArgs.push(`foreign_key="${targetTable}.${fk}"`);
+    let targetTable: string | undefined;
+    let fkColumn: string | undefined;
+
+    if (fk) {
+      // Explicit @foreignKey on this property
+      const targetModel = prop.type as Model;
+      targetTable =
+        targetModel && targetModel.kind === "Model"
+          ? getTableName(program, targetModel)
+          : undefined;
+      fkColumn = fk;
+    } else if (fkTargetTable) {
+      // FK field referenced by a relation - use target table, FK is the primary key of target
+      targetTable = fkTargetTable;
+      fkColumn = "id";
+    }
+
+    if (targetTable && fkColumn) {
+      // Always add foreign_key to Field
+      fieldArgs.push(`foreign_key="${targetTable}.${fkColumn}"`);
+
+      // If has cascade constraints, add to Column
+      if (onDel || onUpd) {
+        needsColumn.value = true;
+        saImports.add("sqlalchemy.ForeignKey");
+        const fkArgs: string[] = [`"${targetTable}.${fkColumn}"`];
+        if (onDel) fkArgs.push(`ondelete="${onDel}"`);
+        if (onUpd) fkArgs.push(`onupdate="${onUpd}"`);
+        columnArgs.unshift(`ForeignKey(${fkArgs.join(", ")})`);
+      }
     }
   }
 
@@ -319,6 +342,7 @@ export function generateField(
 
   if (needsExplicitColumn) {
     for (const imp of mapping.saImports) saImports.add(imp);
+    saImports.add("sqlalchemy.Column");
     needsColumn.value = true;
     needsField.value = true;
     const filteredFieldArgs = promoteFieldArgsToColumn(fieldArgs, columnArgs, saImports);
@@ -444,6 +468,7 @@ function generateEnumField(
   sqlmodelImports: Set<string>,
   needsField: { value: boolean },
   needsColumn: { value: boolean },
+  isPartOfCompositeUnique?: boolean,
 ): string {
   const enumTypeName = enumInfo.enumType.name;
   let pyType = enumTypeName;
@@ -462,7 +487,8 @@ function generateEnumField(
 
   if (!isOptional && !isPk) columnArgs.push("nullable=False");
   if (isIndex(program, prop)) columnArgs.push("index=True");
-  if (isUnique(program, prop)) columnArgs.push("unique=True");
+  // Skip unique=True if field is part of composite unique (handled by __table_args__)
+  if (isUnique(program, prop) && !isPartOfCompositeUnique) columnArgs.push("unique=True");
 
   const defaultVal = getDefaultValue(program, prop);
   if (defaultVal) columnArgs.push(`server_default="${defaultVal}"`);

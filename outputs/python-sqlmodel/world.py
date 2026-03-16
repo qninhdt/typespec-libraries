@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -24,12 +24,10 @@ class World(SQLModel, table=True):
 
     __tablename__ = "worlds"
     __table_args__ = (
-        Index("idx_worlds_visibility_active", "visibility", "deleted_at"),
-        Index("idx_worlds_owner_created", "owner_id", "created_at"),
+        Index("worlds_owner_id_created_at_idx", "owner_id", "created_at"),
+        Index("worlds_visibility_deleted_at_idx", "visibility", "deleted_at"),
     )
 
-    # User who owns and manages this world - cascades deletion
-    owner_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="User who owns and manages this world - cascades deletion", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -40,12 +38,13 @@ class World(SQLModel, table=True):
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Soft delete timestamp - null if active, set to deletion time when \"deleted\".", index=True))
     # Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. `worldName: World.name`).
     name: str = Field(index=True, max_length=200, sa_column_kwargs={"nullable": False, "comment": "Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. `worldName: World.name`)."})
-    # System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with @
-    prompt: str = Field(sa_column=Column(Text, nullable=False, comment="System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with @"))
+    # System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`.
+    prompt: str = Field(sa_column=Column(Text, nullable=False, comment="System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`."))
     # Visibility setting - controls who can discover and access this world
     visibility: WorldVisibility = Field(sa_column=Column(SAEnum(WorldVisibility), nullable=False, index=True, server_default="private", comment="Visibility setting - controls who can discover and access this world"))
     # Optional JSON configuration for world-specific settings
     settings: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Optional JSON configuration for world-specific settings"))
+    owner_id: UUID = Field(index=True, foreign_key="users.id", sa_column_kwargs={"nullable": False})
 
     # ─── Relationships ─────────────────────
     # User who owns and manages this world - cascades deletion

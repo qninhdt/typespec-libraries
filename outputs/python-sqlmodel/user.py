@@ -15,7 +15,7 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"
     __table_args__ = (
-        UniqueConstraint("email", "deleted_at", name="uq_users_email_deleted"),
+        UniqueConstraint("email", "deleted_at", name="users_email_deleted_at_unique"),
     )
 
     # Virtual field combining display name and email - not persisted to the database. Decorated with @ignore so emitters skip it.
@@ -29,7 +29,7 @@ class User(SQLModel, table=True):
     # Soft delete timestamp - null if active, set to deletion time when "deleted".
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Soft delete timestamp - null if active, set to deletion time when \"deleted\".", index=True))
     # Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.
-    email: EmailStr = Field(index=True, unique=True, max_length=320, sa_column_kwargs={"nullable": False, "comment": "Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format(\"email\") validation."})
+    email: EmailStr = Field(max_length=320, sa_column_kwargs={"nullable": False, "comment": "Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format(\"email\") validation."})
     # Hashed password - never store or return plain text
     password_hash: str = Field(max_length=255, sa_column_kwargs={"nullable": False, "comment": "Hashed password - never store or return plain text"})
     # Display name shown in the UI - max 100 characters

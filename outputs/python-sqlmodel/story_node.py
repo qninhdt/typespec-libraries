@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, func
+from sqlalchemy import Column, DateTime, Index, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -15,13 +15,9 @@ class StoryNode(SQLModel, table=True):
 
     __tablename__ = "story_nodes"
     __table_args__ = (
-        Index("idx_story_nodes_world_depth", "world_id", "depth"),
+        Index("story_nodes_world_id_depth_idx", "world_id", "depth"),
     )
 
-    # World this story node belongs to - cascades deletion
-    world_id: UUID = Field(sa_column=Column(ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="World this story node belongs to - cascades deletion", index=True))
-    # Parent node in the story tree - null for root nodes
-    parent_id: UUID | None = Field(default=None, sa_column=Column(ForeignKey("story_nodes.id", ondelete="CASCADE"), comment="Parent node in the story tree - null for root nodes", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -38,9 +34,13 @@ class StoryNode(SQLModel, table=True):
     new_content: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False, comment="Content introduced at this specific node"))
     # IDs of lazily-expanded child nodes
     child_ids: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False, comment="IDs of lazily-expanded child nodes"))
+    # Foreign key to World - required
+    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False, "comment": "Foreign key to World - required"})
+    # Foreign key to parent StoryNode - nullable for root nodes
+    parent_id: UUID | None = Field(default=None, foreign_key="story_nodes.id", sa_column_kwargs={"comment": "Foreign key to parent StoryNode - nullable for root nodes"})
 
     # ─── Relationships ─────────────────────
     # World this story node belongs to - cascades deletion
     world: "World" | None = Relationship(back_populates="story_nodes")
     # Parent node in the story tree - null for root nodes
-    parent: "StoryNode" | None = Relationship(sa_relationship_kwargs={"foreign_keys": "[StoryNode.parent_id]"})
+    parent: "StoryNode" | None = Relationship(sa_relationship_kwargs={"remote_side": "StoryNode.id"})

@@ -21,14 +21,14 @@ type Tag struct {
 	// Soft delete timestamp - null if active, set to deletion time when "deleted".
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
 	// Tag name - max 100 characters, unique within its world
-	Name string `gorm:"column:name;type:varchar(100);not null;uniqueIndex:uq_tags_world_name,priority:2;comment:Tag name - max 100 characters, unique within its world" validate:"required,max=100" json:"name"`
+	Name string `gorm:"column:name;type:varchar(100);not null;uniqueIndex:tags_world_id_name_unique,priority:2;comment:Tag name - max 100 characters, unique within its world" validate:"required,max=100" json:"name"`
 	// Category used to group related tags - indexed for filtering, max 50 characters
-	Category string `gorm:"column:category;type:varchar(50);not null;index:idx_tags_category;comment:Category used to group related tags - indexed for filtering, max 50 characters" validate:"required,max=50" json:"category"`
+	Category string `gorm:"column:category;type:varchar(50);not null;index:tags_category_idx;comment:Category used to group related tags - indexed for filtering, max 50 characters" validate:"required,max=50" json:"category"`
+	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null;uniqueIndex:tags_world_id_name_unique,priority:1" validate:"required" json:"worldId"`
 
 	// ─── Relationships ─────────────────────
 	// World this tag belongs to - cascades deletion
-	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world,omitempty"`
-
+	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Tag.

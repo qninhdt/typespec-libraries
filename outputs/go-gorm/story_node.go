@@ -22,20 +22,22 @@ type StoryNode struct {
 	// Soft delete timestamp - null if active, set to deletion time when "deleted".
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
 	// Depth of this node in the story tree - root is 0
-	Depth int32 `gorm:"column:depth;type:integer;not null;index:idx_story_nodes_depth;index:idx_story_nodes_world_depth,priority:2;default:0;comment:Depth of this node in the story tree - root is 0" validate:"required" json:"depth"`
+	Depth int32 `gorm:"column:depth;type:integer;not null;index:story_nodes_depth_idx;index:story_nodes_world_id_depth_idx,priority:2;default:0;comment:Depth of this node in the story tree - root is 0" validate:"required" json:"depth"`
 	// Cumulative pool - NPC, tag, event, and location IDs from all ancestors
 	Pool datatypes.JSON `gorm:"column:pool;type:jsonb;not null;comment:Cumulative pool - NPC, tag, event, and location IDs from all ancestors" validate:"required" json:"pool"`
 	// Content introduced at this specific node
 	NewContent datatypes.JSON `gorm:"column:new_content;type:jsonb;not null;comment:Content introduced at this specific node" validate:"required" json:"newContent"`
 	// IDs of lazily-expanded child nodes
 	ChildIDs datatypes.JSON `gorm:"column:child_ids;type:jsonb;not null;comment:IDs of lazily-expanded child nodes" validate:"required" json:"childIds"`
+	// Foreign key to World - required
+	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null;index:story_nodes_world_id_depth_idx,priority:1;comment:Foreign key to World - required" validate:"required" json:"worldId"`
+	// Foreign key to parent StoryNode - nullable for root nodes
+	ParentID *uuid.UUID `gorm:"column:parent_id;type:uuid;comment:Foreign key to parent StoryNode - nullable for root nodes" validate:"omitempty" json:"parentId,omitempty"`
 
 	// ─── Relationships ─────────────────────
 	// World this story node belongs to - cascades deletion
-	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world,omitempty"`
-	// Parent node in the story tree - null for root nodes
+	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`	// Parent node in the story tree - null for root nodes
 	Parent *StoryNode `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`
-
 }
 
 // TableName returns the table name for StoryNode.

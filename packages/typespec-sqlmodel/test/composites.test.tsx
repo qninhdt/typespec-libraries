@@ -2,37 +2,39 @@ import { describe, expect, it } from "vitest";
 import { emitPyFile } from "./utils.jsx";
 
 describe("SQLModel composite index", () => {
-  it("generates __table_args__ with Index for @compositeIndex", async () => {
+  it("generates __table_args__ with Index for composite<>", async () => {
     const output = await emitPyFile(
       `
       @table
-      @compositeIndex("idx_name_email", "name", "email")
       model User {
         @key id: uuid;
         name: string;
         email: string;
+        idxNameEmail: composite<"name", "email">;
       }
     `,
       "user.py",
     );
 
     expect(output).toContain("__table_args__");
-    expect(output).toContain('Index("idx_name_email", "name", "email")');
+    // New naming: [tableName]_[col1]_[col2]_..._[idx]
+    expect(output).toContain('Index("users_name_email_idx", "name", "email")');
     expect(output).toContain("from sqlalchemy import");
     expect(output).toContain("Index");
   });
 });
 
 describe("SQLModel composite unique", () => {
-  it("generates __table_args__ with UniqueConstraint for @compositeKey", async () => {
+  it("generates __table_args__ with UniqueConstraint for composite<> with @unique", async () => {
     const output = await emitPyFile(
       `
       @table
-      @compositeKey("uq_email_name", "email", "name")
       model User {
         @key id: uuid;
         email: string;
         name: string;
+        @unique
+        uqEmailName: composite<"email", "name">;
       }
     `,
       "user.py",
@@ -40,20 +42,21 @@ describe("SQLModel composite unique", () => {
 
     expect(output).toContain("__table_args__");
     expect(output).toContain("UniqueConstraint");
-    expect(output).toContain('name="uq_email_name"');
+    expect(output).toContain('name="users_email_name_unique"');
   });
 
   it("generates multiple composite constraints", async () => {
     const output = await emitPyFile(
       `
       @table
-      @compositeIndex("idx_a_b", "name", "email")
-      @compositeKey("uq_c_d", "code", "name")
       model Product {
         @key id: uuid;
         name: string;
         email: string;
         code: string;
+        idxAB: composite<"name", "email">;
+        @unique
+        uqCD: composite<"code", "name">;
       }
     `,
       "product.py",

@@ -32,7 +32,7 @@ type Subscription struct {
 	// Soft delete timestamp - null if active, set to deletion time when "deleted".
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
 	// Subscription plan tier - determines access level and billing. Indexed for fast filtering by plan type.
-	Plan SubscriptionPlan `gorm:"column:plan;type:varchar(20);not null;index:idx_subscriptions_plan;comment:Subscription plan tier - determines access level and billing. Indexed for fast filtering by plan type." validate:"oneof=free,basic,premium,enterprise" json:"plan"`
+	Plan SubscriptionPlan `gorm:"column:plan;type:varchar(20);not null;index:subscriptions_plan_idx;comment:Subscription plan tier - determines access level and billing. Indexed for fast filtering by plan type." validate:"oneof=free,basic,premium,enterprise" json:"plan"`
 	// Monthly price stored as NUMERIC(10,2) to avoid floating-point rounding errors. Use @precision(10, 2) - do NOT use float or double for monetary values.
 	MonthlyPrice decimal.Decimal `gorm:"column:monthly_price;type:numeric(10,2);not null;comment:Monthly price stored as NUMERIC(10,2) to avoid floating-point rounding errors. Use @precision(10, 2) - do NOT use float or double for monetary values." validate:"required" json:"monthlyPrice"`
 	// Start date of the subscription period
@@ -40,12 +40,13 @@ type Subscription struct {
 	// Optional end date - null means the subscription is open-ended
 	EndDate *time.Time `gorm:"column:end_date;type:timestamptz;comment:Optional end date - null means the subscription is open-ended" validate:"omitempty" json:"endDate,omitempty"`
 	// Quick flag for access-control checks without date comparisons
-	IsActive bool `gorm:"column:is_active;type:boolean;not null;index:idx_subscriptions_user_active,priority:2;default:true;comment:Quick flag for access-control checks without date comparisons" json:"isActive"`
+	IsActive bool `gorm:"column:is_active;type:boolean;not null;index:subscriptions_user_id_is_active_idx,priority:2;default:true;comment:Quick flag for access-control checks without date comparisons" json:"isActive"`
+	// FK field for the owning user
+	UserID uuid.UUID `gorm:"column:user_id;type:uuid;not null;index:subscriptions_user_id_is_active_idx,priority:1;comment:FK field for the owning user" validate:"required" json:"userId"`
 
 	// ─── Relationships ─────────────────────
 	// Owning user - cascades deletion to subscriptions when the user is removed
-	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"user,omitempty"`
-
+	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"user"`
 }
 
 // TableName returns the table name for Subscription.

@@ -16,14 +16,12 @@ enum SubscriptionPlan {
 
 /** Registered user account */
 @table
-@compositeKey("uq_users_email_deleted", "email", "deleted_at")
 model User is Timestamped {
   /**
    * Email address used for login - indexed for fast lookup.
    * Constrained to max 320 characters with \@format("email") validation.
    */
   @unique
-  @index("idx_users_email")
   @maxLength(320)
   @format("email")
   email: string;
@@ -53,6 +51,10 @@ model User is Timestamped {
   @ignore
   fullTitle?: string;
 
+  // ─── Composite Unique Constraints ─────────────────
+  @unique
+  emailDeletedAt: composite<"email", "deletedAt">;
+
   // ─── Relationships ─────────────────
 
   /** Subscription plans associated with this user */
@@ -66,13 +68,12 @@ model User is Timestamped {
 
 /** User subscription plan */
 @table("subscriptions")
-@compositeIndex("idx_subscriptions_user_active", "user_id", "is_active")
 model Subscription is Timestamped {
   /**
    * Subscription plan tier - determines access level and billing.
    * Indexed for fast filtering by plan type.
    */
-  @index("idx_subscriptions_plan")
+  @index
   plan: SubscriptionPlan;
 
   /**
@@ -80,24 +81,27 @@ model Subscription is Timestamped {
    * Use \@precision(10, 2) - do NOT use float or double for monetary values.
    */
   @precision(10, 2)
-  @map("monthly_price")
   monthlyPrice: decimal;
 
   /** Start date of the subscription period */
-  @map("start_date")
   startDate: utcDateTime;
 
   /** Optional end date - null means the subscription is open-ended */
-  @map("end_date")
   endDate?: utcDateTime;
 
   /** Quick flag for access-control checks without date comparisons */
   isActive: boolean = true;
 
+  // ─── Composite Indexes ─────────────────
+  userIdIsActive: composite<"userId", "isActive">;
+
   // ─── Relationships ─────────────────
 
+  /** FK field for the owning user */
+  userId: uuid;
+
   /** Owning user - cascades deletion to subscriptions when the user is removed */
-  @foreignKey("user_id")
+  @foreignKey("userId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   user: User;

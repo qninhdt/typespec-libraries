@@ -23,8 +23,7 @@ import {
   getOnDelete,
   getOnUpdate,
   getMappedBy,
-  getCompositeIndexes,
-  getCompositeUniques,
+  getCompositeFields,
   resolveDbType,
   camelToSnake,
   deriveTableName,
@@ -319,71 +318,80 @@ function validateCompositeConstraints(
 ): void {
   const validColumns = new Set(columnNames.keys());
 
-  const constraints: { entries: { name: string; columns: string[] }[]; decorator: string }[] = [
-    { entries: getCompositeIndexes(program, model), decorator: "compositeIndex" },
-    { entries: getCompositeUniques(program, model), decorator: "compositeKey" },
-  ];
+  // Track all composite field columns (from composite<> type) to detect conflicts
+  const compositeFieldColumns = new Map<
+    string,
+    { propName: string; isUnique: boolean; isPrimary: boolean }
+  >();
 
-  for (const { entries, decorator } of constraints) {
-    // Track seen constraint names to detect duplicates
-    const seenNames = new Set<string>();
+  // First, collect all composite type fields from properties
+  for (const [propName, prop] of model.properties) {
+    const compositeColumns = getCompositeFields(program, prop);
+    if (!compositeColumns) continue;
 
-    for (const entry of entries) {
-      // Check for duplicate constraint names
-      if (seenNames.has(entry.name)) {
+    const propIsUnique = isUnique(program, prop);
+    const propIsPrimary = isKey(program, prop);
+
+    for (const col of compositeColumns) {
+      const existing = compositeFieldColumns.get(col);
+      if (existing) {
+        // Conflict: same column in multiple composite fields
         reportDiagnostic(program, {
-          code: "duplicate-constraint-name",
-          target: model,
+          code: "composite-column-conflict",
+          target: prop,
           format: {
-            constraintName: entry.name,
-            decorator,
+            columnName: col,
+            existingProp: existing.propName,
+            currentProp: propName,
           },
         });
       }
-      seenNames.add(entry.name);
+      compositeFieldColumns.set(col, {
+        propName,
+        isUnique: propIsUnique,
+        isPrimary: propIsPrimary,
+      });
+    }
+  }
 
-      // Check for empty columns
-      if (entry.columns.length === 0) {
+  // Check composite type fields reference valid columns
+  for (const [propName, prop] of model.properties) {
+    const compositeColumns = getCompositeFields(program, prop);
+    if (!compositeColumns) continue;
+
+    // Check for empty columns
+    if (compositeColumns.length === 0) {
+      reportDiagnostic(program, {
+        code: "empty-composite-columns",
+        target: prop,
+        format: { propName },
+      });
+      continue;
+    }
+
+    // Check for duplicate columns in same composite
+    const seenColumns = new Set<string>();
+    for (const col of compositeColumns) {
+      if (seenColumns.has(col)) {
         reportDiagnostic(program, {
-          code: "empty-index-columns",
-          target: model,
+          code: "duplicate-column-in-composite",
+          target: prop,
+          format: { columnName: col, propName },
+        });
+      }
+      seenColumns.add(col);
+
+      // Check for non-existent column
+      if (!validColumns.has(col)) {
+        reportDiagnostic(program, {
+          code: "composite-column-not-found",
+          target: prop,
           format: {
-            constraintName: entry.name,
-            decorator,
+            columnName: col,
+            decorator: "composite",
+            constraintName: propName,
           },
         });
-        continue;
-      }
-
-      // Track columns in this constraint to detect duplicates
-      const seenColumns = new Set<string>();
-      for (const col of entry.columns) {
-        // Check for duplicate columns in same index
-        if (seenColumns.has(col)) {
-          reportDiagnostic(program, {
-            code: "duplicate-column-in-index",
-            target: model,
-            format: {
-              columnName: col,
-              constraintName: entry.name,
-              decorator,
-            },
-          });
-        }
-        seenColumns.add(col);
-
-        // Check for non-existent column
-        if (!validColumns.has(col)) {
-          reportDiagnostic(program, {
-            code: "composite-column-not-found",
-            target: model,
-            format: {
-              columnName: col,
-              decorator,
-              constraintName: entry.name,
-            },
-          });
-        }
       }
     }
   }

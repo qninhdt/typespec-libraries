@@ -17,8 +17,7 @@ import {
   getPrecision,
   getTitle,
   getPlaceholder,
-  getCompositeIndexes,
-  getCompositeUniques,
+  getCompositeFields,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
@@ -279,43 +278,43 @@ describe("@onUpdate decorator", () => {
   });
 });
 
-describe("@compositeIndex decorator", () => {
-  it("creates a composite index", async () => {
+describe("composite<> type", () => {
+  it("extracts composite fields from property", async () => {
     const runner = await createTestRunner();
     const { Test } = (await runner.compile(`
       @table
-      @compositeIndex("idx_name_email", "name", "email")
       @test model Test {
         @key id: uuid;
         name: string;
         email: string;
+        @unique
+        idxNameEmail: composite<"name", "email">;
       }
     `)) as Record<string, Model>;
 
-    const indexes = getCompositeIndexes(runner.program, Test);
-    expect(indexes).toHaveLength(1);
-    expect(indexes[0].name).toBe("idx_name_email");
-    expect(indexes[0].columns).toEqual(["name", "email"]);
+    const props = Test.properties;
+    const idxProp = props.get("idxNameEmail")!;
+    const compositeFields = getCompositeFields(runner.program, idxProp);
+    expect(compositeFields).toEqual(["name", "email"]);
   });
-});
 
-describe("@compositeKey decorator", () => {
-  it("creates a composite unique constraint", async () => {
+  it("extracts composite fields with @key for primary index", async () => {
     const runner = await createTestRunner();
     const { Test } = (await runner.compile(`
       @table
-      @compositeKey("unq_name_email", "name", "email")
       @test model Test {
         @key id: uuid;
-        name: string;
-        email: string;
+        @key
+        primaryIdx: composite<"tenantId", "code">;
+        tenantId: string;
+        code: string;
       }
     `)) as Record<string, Model>;
 
-    const uniques = getCompositeUniques(runner.program, Test);
-    expect(uniques).toHaveLength(1);
-    expect(uniques[0].name).toBe("unq_name_email");
-    expect(uniques[0].columns).toEqual(["name", "email"]);
+    const props = Test.properties;
+    const idxProp = props.get("primaryIdx")!;
+    const compositeFields = getCompositeFields(runner.program, idxProp);
+    expect(compositeFields).toEqual(["tenantId", "code"]);
   });
 });
 

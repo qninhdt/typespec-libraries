@@ -36,6 +36,7 @@ model PublicUser
       | "fullTitle"
       | "subscriptions"
       | "worlds"
+      | "emailDeletedAt"
   >;
 
 // ─── 3. Lookup type (Model.property) ───────────────────────────────────────
@@ -67,7 +68,6 @@ model Invitation {
 
   /** Timestamp when the invitation was sent */
   @autoCreateTime
-  @map("created_at")
   createdAt: utcDateTime;
 }
 
@@ -117,7 +117,6 @@ model CreateInvitationForm {
    */
   @title("Personal Message")
   @placeholder("Write a short note to your invitee…")
-  @maxLength(1000)
   message?: text;
 }
 

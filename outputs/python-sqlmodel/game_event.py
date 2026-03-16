@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import Column, DateTime, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -15,8 +15,6 @@ class GameEvent(SQLModel, table=True):
 
     __tablename__ = "game_events"
 
-    # World this event belongs to - cascades deletion
-    world_id: UUID = Field(sa_column=Column(ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="World this event belongs to - cascades deletion", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -33,6 +31,7 @@ class GameEvent(SQLModel, table=True):
     conditions: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Predicate expression evaluated at runtime"))
     # Mutations applied when the event fires
     effects: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Mutations applied when the event fires"))
+    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False})
 
     # ─── Relationships ─────────────────────
     # World this event belongs to - cascades deletion

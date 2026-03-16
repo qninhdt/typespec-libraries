@@ -4,7 +4,7 @@
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, UniqueConstraint, func
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -13,11 +13,9 @@ class Tag(SQLModel, table=True):
 
     __tablename__ = "tags"
     __table_args__ = (
-        UniqueConstraint("world_id", "name", name="uq_tags_world_name"),
+        UniqueConstraint("world_id", "name", name="tags_world_id_name_unique"),
     )
 
-    # World this tag belongs to - cascades deletion
-    world_id: UUID = Field(sa_column=Column(ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="World this tag belongs to - cascades deletion", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -30,6 +28,7 @@ class Tag(SQLModel, table=True):
     name: str = Field(max_length=100, sa_column_kwargs={"nullable": False, "comment": "Tag name - max 100 characters, unique within its world"})
     # Category used to group related tags - indexed for filtering, max 50 characters
     category: str = Field(index=True, max_length=50, sa_column_kwargs={"nullable": False, "comment": "Category used to group related tags - indexed for filtering, max 50 characters"})
+    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False})
 
     # ─── Relationships ─────────────────────
     # World this tag belongs to - cascades deletion

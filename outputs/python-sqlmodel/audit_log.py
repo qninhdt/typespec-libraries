@@ -5,8 +5,8 @@ from uuid import UUID
 from typing import Any
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, DateTime, Index, func
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -15,12 +15,10 @@ class AuditLog(SQLModel, table=True):
 
     __tablename__ = "audit_logs"
     __table_args__ = (
-        Index("idx_audit_actor_time", "actor_id", "created_at"),
-        Index("idx_audit_entity", "entity_type", "entity_id"),
+        Index("audit_logs_entity_type_entity_id_idx", "entity_type", "entity_id"),
+        Index("audit_logs_actor_id_created_at_idx", "actor_id", "created_at"),
     )
 
-    # User who performed the action - SET NULL when the user is deleted so audit history is preserved even after account removal
-    user_id: UUID | None = Field(default=None, sa_column=Column(ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"), comment="User who performed the action - SET NULL when the user is deleted so audit history is preserved even after account removal", index=True))
     # Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance
     id: int = Field(primary_key=True, sa_column_kwargs={"comment": "Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance"})
     # Logical type of the changed entity, e.g. "World" or "StoryNode"
@@ -31,6 +29,8 @@ class AuditLog(SQLModel, table=True):
     action: str = Field(max_length=50, sa_column_kwargs={"nullable": False, "comment": "Action performed: \"create\", \"update\", or \"delete\""})
     # JSON patch or before/after snapshot
     diff: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="JSON patch or before/after snapshot"))
+    # Foreign key to Actor (User) - nullable for deleted users
+    actor_id: UUID | None = Field(default=None, foreign_key="users.id", sa_column_kwargs={"comment": "Foreign key to Actor (User) - nullable for deleted users"})
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
 
     # ─── Relationships ─────────────────────

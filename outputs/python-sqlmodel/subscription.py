@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Numeric, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, Index, Numeric, func
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -24,11 +24,9 @@ class Subscription(SQLModel, table=True):
 
     __tablename__ = "subscriptions"
     __table_args__ = (
-        Index("idx_subscriptions_user_active", "user_id", "is_active"),
+        Index("subscriptions_user_id_is_active_idx", "user_id", "is_active"),
     )
 
-    # Owning user - cascades deletion to subscriptions when the user is removed
-    user_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="Owning user - cascades deletion to subscriptions when the user is removed", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -47,6 +45,8 @@ class Subscription(SQLModel, table=True):
     end_date: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Optional end date - null means the subscription is open-ended"))
     # Quick flag for access-control checks without date comparisons
     is_active: bool = Field(sa_column_kwargs={"nullable": False, "server_default": "true", "comment": "Quick flag for access-control checks without date comparisons"})
+    # FK field for the owning user
+    user_id: UUID = Field(foreign_key="users.id", sa_column_kwargs={"nullable": False, "comment": "FK field for the owning user"})
 
     # ─── Relationships ─────────────────────
     # Owning user - cascades deletion to subscriptions when the user is removed

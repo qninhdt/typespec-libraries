@@ -12,6 +12,6 @@ type CreateInvitationForm struct {
 	// Prompt text for the target world. Lookup type whose source scalar is `text` (custom, not a built-in) - used below to demonstrate `@@inputType` via `World.prompt::type`.
 	WorldPrompt string `validate:"required" json:"worldPrompt" form:"worldPrompt,title=World Prompt"`
 	// Optional personal message included in the invitation. Direct custom scalar (`text`) - @inputType applied via `::type` below.
-	Message *string `validate:"omitempty,max=1000" json:"message,omitempty" form:"message,title=Personal Message,placeholder=Write a short note to your invitee…"`
+	Message *string `validate:"omitempty" json:"message,omitempty" form:"message,title=Personal Message,placeholder=Write a short note to your invitee…"`
 
 }

@@ -35,6 +35,24 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Column "${"columnName"}" referenced in @${"decorator"}("${"constraintName"}") does not exist in this model.`,
       },
     },
+    "empty-composite-columns": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Composite type on property "${"propName"}" has no columns specified.`,
+      },
+    },
+    "duplicate-column-in-composite": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Column "${"columnName"}" is duplicated in composite type on property "${"propName"}".`,
+      },
+    },
+    "composite-column-conflict": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Column "${"columnName"}" is referenced by multiple composite types: "${"existingProp"}" and "${"currentProp"}". Each column can only be in one composite.`,
+      },
+    },
     "precision-on-non-numeric": {
       severity: "error",
       messages: {
@@ -137,12 +155,6 @@ export const $lib = createTypeSpecLibrary({
     mappedBy: {
       description: "Maps ModelProperty → inverse property name for collection-side relations",
     },
-    compositeIndex: {
-      description: "Maps Model → array of { name, columns } composite indexes",
-    },
-    compositeKey: {
-      description: "Maps Model → array of { name, columns } composite unique constraints",
-    },
     autoCreateTime: {
       description: "Marks ModelProperty as auto-set on creation",
     },
@@ -181,8 +193,6 @@ export const AutoIncrementKey = $lib.stateKeys.autoIncrement;
 export const SoftDeleteKey = $lib.stateKeys.softDelete;
 export const ForeignKeyKey = $lib.stateKeys.foreignKey;
 export const MappedByKey = $lib.stateKeys.mappedBy;
-export const CompositeIndexKey = $lib.stateKeys.compositeIndex;
-export const CompositeUniqueKey = $lib.stateKeys.compositeKey;
 export const AutoCreateTimeKey = $lib.stateKeys.autoCreateTime;
 export const AutoUpdateTimeKey = $lib.stateKeys.autoUpdateTime;
 export const PrecisionKey = $lib.stateKeys.precision;

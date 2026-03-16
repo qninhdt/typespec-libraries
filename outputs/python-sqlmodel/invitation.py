@@ -6,7 +6,7 @@ from pydantic import EmailStr
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, Text, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Invitation(SQLModel, table=True):

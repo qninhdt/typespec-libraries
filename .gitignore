@@ -30,3 +30,6 @@ __snapshots__/
 .idea/
 *.swp
 *.swo
+
+# Ruff cache
+.ruff_cache/

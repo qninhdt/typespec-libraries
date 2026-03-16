@@ -22,9 +22,12 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "compile-examples": "tsp compile examples/ --config tspconfig.yaml --output-dir ./outputs",
-    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm --output-dir ./outputs",
-    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel --output-dir ./outputs"
+    "compile-examples": "tsp compile examples/ --config tspconfig.yaml",
+    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm",
+    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel",
+    "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel",
+    "format-examples:gorm": "gofmt -w outputs/go-gorm/",
+    "format-examples:sqlmodel": "ruff format outputs/python-sqlmodel/"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

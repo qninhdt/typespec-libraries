@@ -11,10 +11,9 @@ namespace WorldCard.Models;
  * Stores the cumulative content-pool IDs inherited from all ancestor nodes.
  */
 @table("story_nodes")
-@compositeIndex("idx_story_nodes_world_depth", "world_id", "depth")
 model StoryNode is Timestamped {
   /** Depth of this node in the story tree - root is 0 */
-  @index("idx_story_nodes_depth")
+  @index
   depth: int32 = 0;
 
   /** Cumulative pool - NPC, tag, event, and location IDs from all ancestors */
@@ -28,16 +27,27 @@ model StoryNode is Timestamped {
   @map("child_ids")
   childIds: jsonb;
 
+  // ─── Composite Indexes ─────────────────
+  worldIdDepth: composite<"worldId", "depth">;
+
+  // ─── Explicit FK Fields ─────────────────
+
+  /** Foreign key to World - required */
+  worldId: uuid;
+
+  /** Foreign key to parent StoryNode - nullable for root nodes */
+  parentId?: uuid;
+
   // ─── Relationships ─────────────────
 
   /** World this story node belongs to - cascades deletion */
-  @foreignKey("world_id")
+  @foreignKey("worldId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
 
   /** Parent node in the story tree - null for root nodes */
-  @foreignKey("parent_id")
+  @foreignKey("parentId")
   @onDelete("CASCADE")
   parent?: StoryNode;
 }
@@ -48,10 +58,9 @@ model StoryNode is Timestamped {
  * Non-player character belonging to a world
  */
 @table("npcs")
-@compositeIndex("idx_npcs_world_name", "world_id", "name")
 model Npc is Timestamped {
   /** Name of the NPC - indexed for lookup, max 200 characters */
-  @index("idx_npcs_name")
+  @index
   @maxLength(200)
   name: string;
 
@@ -61,10 +70,16 @@ model Npc is Timestamped {
   /** Optional JSON object holding personality traits and attributes */
   traits?: jsonb;
 
+  // ─── Composite Indexes ─────────────────
+  worldIdName: composite<"worldId", "name">;
+
+  // ─── Explicit FK Fields ─────────────────
+  worldId: uuid;
+
   // ─── Relationships ─────────────────
 
   /** World this NPC belongs to - cascades deletion */
-  @foreignKey("world_id")
+  @foreignKey("worldId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -76,7 +91,7 @@ model Npc is Timestamped {
 @table("locations")
 model Location is Timestamped {
   /** Name of the location - indexed for lookup, max 200 characters */
-  @index("idx_locations_name")
+  @index
   @maxLength(200)
   name: string;
 
@@ -86,10 +101,13 @@ model Location is Timestamped {
   /** Bounding box or point stored as GeoJSON */
   coordinates?: jsonb;
 
+  // ─── Explicit FK Fields ─────────────────
+  worldId: uuid;
+
   // ─── Relationships ─────────────────
 
   /** World this location belongs to - cascades deletion */
-  @foreignKey("world_id")
+  @foreignKey("worldId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -101,7 +119,7 @@ model Location is Timestamped {
 @table("game_events")
 model GameEvent is Timestamped {
   /** Name of the event - indexed for lookup, max 200 characters */
-  @index("idx_game_events_name")
+  @index
   @maxLength(200)
   name: string;
 
@@ -114,10 +132,13 @@ model GameEvent is Timestamped {
   /** Mutations applied when the event fires */
   effects?: jsonb;
 
+  // ─── Explicit FK Fields ─────────────────
+  worldId: uuid;
+
   // ─── Relationships ─────────────────
 
   /** World this event belongs to - cascades deletion */
-  @foreignKey("world_id")
+  @foreignKey("worldId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -128,21 +149,27 @@ model GameEvent is Timestamped {
  * The (world_id, name) pair is globally unique per world.
  */
 @table("tags")
-@compositeKey("uq_tags_world_name", "world_id", "name")
 model Tag is Timestamped {
   /** Tag name - max 100 characters, unique within its world */
   @maxLength(100)
   name: string;
 
   /** Category used to group related tags - indexed for filtering, max 50 characters */
-  @index("idx_tags_category")
+  @index
   @maxLength(50)
   category: string;
+
+  // ─── Composite Unique Constraints ─────────────────
+  @unique
+  worldIdName: composite<"worldId", "name">;
+
+  // ─── Explicit FK Fields ─────────────────
+  worldId: uuid;
 
   // ─── Relationships ─────────────────
 
   /** World this tag belongs to - cascades deletion */
-  @foreignKey("world_id")
+  @foreignKey("worldId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   world: World;
@@ -155,11 +182,9 @@ model Tag is Timestamped {
  *
  * Uses an auto-incrementing bigserial surrogate key so entries can be
  * ordered and paginated efficiently without UUIDs.
- * Demonstrates: @autoIncrement, bigserial, @compositeIndex, @relation.
+ * Demonstrates: @autoIncrement, bigserial, composite<>, @relation.
  */
 @table("audit_logs")
-@compositeIndex("idx_audit_entity", "entity_type", "entity_id")
-@compositeIndex("idx_audit_actor_time", "actor_id", "created_at")
 model AuditLog {
   /**
    * Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput
@@ -172,7 +197,7 @@ model AuditLog {
   /**
    * Logical type of the changed entity, e.g. "World" or "StoryNode"
    */
-  @index("idx_audit_entity_type")
+  @index
   @maxLength(100)
   @map("entity_type")
   entityType: string;
@@ -192,6 +217,14 @@ model AuditLog {
   /** JSON patch or before/after snapshot */
   diff?: jsonb;
 
+  // ─── Composite Indexes ─────────────────
+  entityTypeEntityId: composite<"entityType", "entityId">;
+  actorIdCreatedAt: composite<"actorId", "createdAt">;
+
+  // ─── Explicit FK Fields ─────────────────
+  /** Foreign key to Actor (User) - nullable for deleted users */
+  actorId?: uuid;
+
   // ─── Timestamp fields (only createdAt - no update/delete for audit logs) ───
 
   @autoCreateTime
@@ -204,7 +237,7 @@ model AuditLog {
    * User who performed the action - SET NULL when the user is deleted
    * so audit history is preserved even after account removal
    */
-  @foreignKey("user_id")
+  @foreignKey("actorId")
   @onDelete("SET NULL")
   @onUpdate("CASCADE")
   actor?: User;

@@ -19,6 +19,6 @@ export {
 export type { PythonTypeMapping } from "./PyConstants.js";
 
 export { generateField, generateIgnoredField } from "./PyField.jsx";
-export { generateAutoFkField, generateRelationField } from "./PyRelationField.jsx";
+export { generateRelationField } from "./PyRelationField.jsx";
 export { PyModelFile } from "./PyModel.jsx";
 export { PyDataFile } from "./PyDataModel.jsx";

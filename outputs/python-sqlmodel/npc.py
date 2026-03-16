@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Text, func
+from sqlalchemy import Column, DateTime, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -15,11 +15,9 @@ class Npc(SQLModel, table=True):
 
     __tablename__ = "npcs"
     __table_args__ = (
-        Index("idx_npcs_world_name", "world_id", "name"),
+        Index("npcs_world_id_name_idx", "world_id", "name"),
     )
 
-    # World this NPC belongs to - cascades deletion
-    world_id: UUID = Field(sa_column=Column(ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="World this NPC belongs to - cascades deletion", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -34,6 +32,7 @@ class Npc(SQLModel, table=True):
     description: str = Field(sa_column=Column(Text, nullable=False, comment="Narrative description used in AI generation"))
     # Optional JSON object holding personality traits and attributes
     traits: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Optional JSON object holding personality traits and attributes"))
+    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False})
 
     # ─── Relationships ─────────────────────
     # World this NPC belongs to - cascades deletion

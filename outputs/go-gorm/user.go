@@ -19,9 +19,9 @@ type User struct {
 	// Timestamp of the last update - omit in extending model to skip
 	UpdatedAt *time.Time `gorm:"column:updated_at;type:timestamptz;comment:Timestamp of the last update - omit in extending model to skip" validate:"omitempty" json:"updatedAt,omitempty"`
 	// Soft delete timestamp - null if active, set to deletion time when "deleted".
-	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;uniqueIndex:users_email_deleted_at_unique,priority:2;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
 	// Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.
-	Email string `gorm:"column:email;type:varchar(320);not null;uniqueIndex;index:idx_users_email;uniqueIndex:uq_users_email_deleted,priority:1;comment:Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format('email') validation." validate:"required,max=320,email" json:"email"`
+	Email string `gorm:"column:email;type:varchar(320);not null;uniqueIndex:users_email_deleted_at_unique,priority:1;comment:Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format('email') validation." validate:"required,max=320,email" json:"email"`
 	// Hashed password - never store or return plain text
 	PasswordHash string `gorm:"column:password_hash;type:varchar(255);not null;comment:Hashed password - never store or return plain text" validate:"required" json:"passwordHash"`
 	// Display name shown in the UI - max 100 characters
@@ -37,10 +37,8 @@ type User struct {
 
 	// ─── Relationships ─────────────────────
 	// Subscription plans associated with this user
-	Subscriptions []Subscription `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"`
-	// Worlds owned by this user
+	Subscriptions []Subscription `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"`	// Worlds owned by this user
 	Worlds []World `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"worlds,omitempty"`
-
 }
 
 // TableName returns the table name for User.

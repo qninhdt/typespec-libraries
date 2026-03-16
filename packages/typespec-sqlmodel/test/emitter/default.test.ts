@@ -71,17 +71,19 @@ describe("SQLModel emitter end-to-end", () => {
     const runner = await createEmitterTestRunner();
     await runner.compile(`
       @table
-      @compositeIndex("idx_name_email", "name", "email")
-      @compositeKey("unq_code_ver", "code", "version")
       model Product {
         @key id: uuid;
         name: string;
         email: string;
         code: string;
         version: int32;
+        idxNameEmail: composite<"name", "email">;
+        @unique
+        unqCodeVer: composite<"code", "version">;
       }
     `);
 
+    // Filter only errors (warnings about composite type are expected)
     const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
     expect(errors).toHaveLength(0);
   });

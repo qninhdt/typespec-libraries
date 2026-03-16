@@ -12,11 +12,11 @@ import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import type { Model, Program } from "@typespec/compiler";
 import {
-  getCompositeIndexes,
-  getCompositeUniques,
+  getCompositeFields,
   getDoc,
   classifyProperties,
   isKey,
+  isUnique,
   camelToPascal,
   camelToSnake,
   resolveDbType,
@@ -41,10 +41,32 @@ export function GormModelFile(props: GormModelFileProps): Children {
 
   const imports = new Set<string>();
 
-  // Build composite constraint map
-  const compIdxs = getCompositeIndexes(program, model);
-  const compUnqs = getCompositeUniques(program, model);
-  const compositeMap = buildCompositeMap(compIdxs, compUnqs);
+  // Collect composite type fields from properties (composite<col1, col2>)
+  const compositeTypeFields: {
+    name: string;
+    columns: string[];
+    isUnique: boolean;
+    isPrimary: boolean;
+  }[] = [];
+  for (const [, prop] of model.properties) {
+    const columns = getCompositeFields(program, prop);
+    if (columns) {
+      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
+      // Use snake_case for column names in the generated name
+      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
+      const snakeColumns = columns.map((c) => camelToSnake(c));
+      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
+      compositeTypeFields.push({
+        name: generatedName,
+        columns,
+        isUnique: isUnique(program, prop),
+        isPrimary: isKey(program, prop),
+      });
+    }
+  }
+
+  // Build composite map from composite type fields
+  const compositeMap = buildCompositeMap(compositeTypeFields);
 
   // Classify properties
   const {
@@ -61,6 +83,8 @@ export function GormModelFile(props: GormModelFileProps): Children {
   // First: Key fields - always at the top
   for (const { prop } of regularProps) {
     if (isKey(program, prop)) {
+      // Skip composite type fields - they are configuration only
+      if (getCompositeFields(program, prop)) continue;
       fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
     }
   }
@@ -68,6 +92,8 @@ export function GormModelFile(props: GormModelFileProps): Children {
   // Second: Regular fields (excluding keys which are already output)
   for (const { prop } of regularProps) {
     if (!isKey(program, prop)) {
+      // Skip composite type fields - they are configuration only
+      if (getCompositeFields(program, prop)) continue;
       fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
     }
   }

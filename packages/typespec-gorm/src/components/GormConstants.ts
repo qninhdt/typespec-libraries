@@ -69,7 +69,7 @@ export const GO_FORMAT_VALIDATORS: Record<string, string> = {
 };
 
 export interface CompositeFieldTag {
-  kind: "index" | "uniqueIndex";
+  kind: "index" | "uniqueIndex" | "primaryIndex";
   name: string;
   priority: number;
 }
@@ -83,28 +83,33 @@ export function escapeFormTagValue(value: string): string {
 
 /**
  * Build a lookup from column name → composite index/unique tags for that field.
+ * Uses composite<> type syntax: composite<field1, field2>
+ * Note: Uses snake_case keys to match database column names.
  */
 export function buildCompositeMap(
-  indexes: { name: string; columns: string[] }[],
-  uniques: { name: string; columns: string[] }[],
+  compositeTypes?: { name: string; columns: string[]; isUnique: boolean; isPrimary: boolean }[],
 ): Map<string, CompositeFieldTag[]> {
   const map = new Map<string, CompositeFieldTag[]>();
 
-  const addEntries = (
-    constraints: { name: string; columns: string[] }[],
-    kind: CompositeFieldTag["kind"],
-  ) => {
-    for (const c of constraints) {
-      for (let i = 0; i < c.columns.length; i++) {
-        const col = c.columns[i];
-        const tags = map.get(col) ?? [];
-        tags.push({ kind, name: c.name, priority: i + 1 });
-        map.set(col, tags);
-      }
-    }
-  };
+  if (!compositeTypes) return map;
 
-  addEntries(indexes, "index");
-  addEntries(uniques, "uniqueIndex");
+  for (const ct of compositeTypes) {
+    let kind: CompositeFieldTag["kind"] = "index";
+    if (ct.isPrimary) {
+      kind = "primaryIndex";
+    } else if (ct.isUnique) {
+      kind = "uniqueIndex";
+    }
+
+    for (let i = 0; i < ct.columns.length; i++) {
+      // Convert camelCase to snake_case for the key (e.g., "ownerId" -> "owner_id")
+      const camelCol = ct.columns[i];
+      const snakeCol = camelCol.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+      const tags = map.get(snakeCol) ?? [];
+      tags.push({ kind, name: ct.name, priority: i + 1 });
+      map.set(snakeCol, tags);
+    }
+  }
+
   return map;
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emitGoFile } from "./utils.jsx";
 
 describe("GORM one-to-many relationships", () => {
-  it("generates []TargetModel field with foreignKey tag", async () => {
+  it("generates []TargetModel field with foreignKey tag in PascalCase", async () => {
     const output = await emitGoFile(
       `
       @table
@@ -29,11 +29,13 @@ describe("GORM one-to-many relationships", () => {
     expect(output).toContain("// ─── Relationships ─────────────────────");
     // Slice field
     expect(output).toContain("Posts []Post");
-    // foreignKey tag pointing to FK field on Post
+    // foreignKey tag must be PascalCase (UserID, not userId or user_id)
     expect(output).toContain("foreignKey:UserID");
+    // Must NOT contain invalid rel: tag
+    expect(output).not.toContain("rel:");
   });
 
-  it("generates cascade constraint when child has @onDelete/@onUpdate", async () => {
+  it("generates cascade constraint in constraint: format with comma separator", async () => {
     const output = await emitGoFile(
       `
       @table
@@ -54,7 +56,39 @@ describe("GORM one-to-many relationships", () => {
       "user.go",
     );
 
+    // Must use constraint: format with comma separator
     expect(output).toContain("constraint:OnDelete:CASCADE,OnUpdate:CASCADE");
+    // Must NOT have old semicolon format
+    expect(output).not.toContain("OnDelete:CASCADE;OnUpdate:CASCADE");
+  });
+
+  it("generates correct FK field naming with @map", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model World {
+        @key id: uuid;
+        @mappedBy("owner")
+        worlds: GameEvent[];
+      }
+
+      @table
+      model GameEvent {
+        @key id: uuid;
+        @map("owner_id")
+        ownerId: uuid;
+        @foreignKey("owner_id")
+        @onDelete("CASCADE") @onUpdate("CASCADE")
+        owner: World;
+      }
+    `,
+      "game_event.go",
+    );
+
+    // FK field should be named OwnerID (PascalCase)
+    expect(output).toContain("OwnerID uuid.UUID");
+    // Relationship should use foreignKey:OwnerID
+    expect(output).toContain("foreignKey:OwnerID");
   });
 });
 

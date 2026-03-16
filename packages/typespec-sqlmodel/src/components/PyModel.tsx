@@ -8,10 +8,12 @@ import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import type { Model, Program } from "@typespec/compiler";
 import {
-  getCompositeIndexes,
-  getCompositeUniques,
+  getColumnName,
+  getCompositeFields,
   getDoc,
   classifyProperties,
+  isKey,
+  isUnique,
   camelToSnake,
 } from "@qninhdt/typespec-orm";
 import {
@@ -21,7 +23,7 @@ import {
   buildPythonImportBlock,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
-import { generateAutoFkField, generateRelationField } from "./PyRelationField.jsx";
+import { generateRelationField } from "./PyRelationField.jsx";
 
 export interface PyModelFileProps {
   readonly program: Program;
@@ -38,7 +40,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
 
   const stdImports = new Set<string>();
   const saImports = new Set<string>();
-  const sqlmodelImports = new Set<string>(["SQLModel"]);
+  const sqlmodelImports = new Set<string>(["SQLModel", "Field", "Relationship"]);
   const needsField = { value: false };
   const needsColumn = { value: false };
   const needsRelationship = { value: false };
@@ -60,45 +62,95 @@ export function PyModelFile(props: PyModelFileProps): Children {
   }
 
   // Relation navigation properties
+  // Generate relation fields only - NO auto FK generation (everything must be explicit)
   for (const { prop, resolved } of relations) {
     needsRelationship.value = true;
-    // Only generate FK field for many-to-one/one-to-one (the FK column is on THIS model)
-    // For one-to-many, the FK is on the target model, not here
-    if (resolved.kind === "many-to-one" || resolved.kind === "one-to-one") {
-      fieldDefs.push(
-        generateAutoFkField(
-          program,
-          prop,
-          resolved,
-          stdImports,
-          saImports,
-          sqlmodelImports,
-          needsField,
-          needsColumn,
-        ),
-      );
-    }
     relationDefs.push(generateRelationField(program, prop, resolved));
+  }
+
+  // Collect composite type fields from properties (composite<col1, col2>)
+  // This needs to be done BEFORE generating regular fields so we can skip unique=True for composite fields
+  const compositeTypeFields: {
+    name: string;
+    columns: string[];
+    isUnique: boolean;
+    isPrimary: boolean;
+  }[] = [];
+  for (const [, prop] of model.properties) {
+    const columns = getCompositeFields(program, prop);
+    if (columns) {
+      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
+      // Use snake_case for column names in the generated name
+      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
+      const snakeColumns = columns.map((c) => camelToSnake(c));
+      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
+      compositeTypeFields.push({
+        name: generatedName,
+        columns,
+        isUnique: isUnique(program, prop),
+        isPrimary: isKey(program, prop),
+      });
+    }
+  }
+
+  // Build a map of column names that are part of composite unique
+  const compositeUniqueColumns = new Set<string>();
+  for (const ct of compositeTypeFields) {
+    if (ct.isUnique) {
+      for (const col of ct.columns) {
+        compositeUniqueColumns.add(camelToSnake(col));
+      }
+    }
+  }
+
+  // Build a map of FK column name -> targetTable for use in field generation
+  // Note: fkColumnName from relation is the TypeSpec property name, need to convert to DB column name
+  const fkInfoMap = new Map<string, string>();
+  for (const { resolved } of relations) {
+    // Convert the FK column name to snake_case (database column name)
+    const dbColumnName = camelToSnake(resolved.fkColumnName);
+    fkInfoMap.set(dbColumnName, resolved.targetTable);
   }
 
   // Regular DB-mapped fields
   for (const { prop } of regularProps) {
+    // Skip composite type fields - they are configuration only
+    if (getCompositeFields(program, prop)) continue;
+    // Skip unique=True for fields that are part of composite unique
+    const columnName = getColumnName(program, prop);
+    const isPartOfCompositeUnique = compositeUniqueColumns.has(columnName);
+    // Check if this field is a FK (used by any relation) - get target table name
+    const targetTable = fkInfoMap.get(columnName);
     fieldDefs.push(
-      generateField(program, prop, stdImports, saImports, sqlmodelImports, needsField, needsColumn),
+      generateField(
+        program,
+        prop,
+        stdImports,
+        saImports,
+        sqlmodelImports,
+        needsField,
+        needsColumn,
+        isPartOfCompositeUnique,
+        targetTable,
+      ),
     );
   }
 
-  // Finalize imports
-  if (needsField.value) sqlmodelImports.add("Field");
-  if (needsColumn.value) saImports.add("sqlalchemy.Column");
-  if (needsRelationship.value) sqlmodelImports.add("Relationship");
-
   // Composite indexes & unique constraints
-  const compIdxs = getCompositeIndexes(program, model);
-  const compUnqs = getCompositeUniques(program, model);
-  const hasTableArgs = compIdxs.length > 0 || compUnqs.length > 0;
-  if (compIdxs.length > 0) saImports.add("sqlalchemy.Index");
-  if (compUnqs.length > 0) saImports.add("sqlalchemy.UniqueConstraint");
+  const hasTableArgs = compositeTypeFields.length > 0;
+  let hasIndex = false;
+  let hasUniqueConstraint = false;
+  if (compositeTypeFields.length > 0) {
+    for (const ct of compositeTypeFields) {
+      if (ct.isPrimary || ct.isUnique) {
+        hasUniqueConstraint = true;
+      } else {
+        hasIndex = true;
+      }
+    }
+    if (hasIndex) saImports.add("sqlalchemy.Index");
+    if (hasUniqueConstraint) saImports.add("sqlalchemy.UniqueConstraint");
+  }
 
   // Enum imports
   if (enumTypes.size > 0) {
@@ -126,15 +178,20 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // Table args
   if (hasTableArgs) {
     const tableArgEntries: string[] = [];
-    for (const idx of compIdxs) {
-      const cols = idx.columns.map((c) => `"${c}"`).join(", ");
-      tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index("${idx.name}", ${cols})`);
-    }
-    for (const unq of compUnqs) {
-      const cols = unq.columns.map((c) => `"${c}"`).join(", ");
-      tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${unq.name}")`,
-      );
+    for (const ct of compositeTypeFields) {
+      // Convert camelCase column names to snake_case for SQL
+      const cols = ct.columns.map((c) => `"${camelToSnake(c)}"`).join(", ");
+      if (ct.isPrimary || ct.isUnique) {
+        // Primary or unique constraint
+        tableArgEntries.push(
+          `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${camelToSnake(ct.name)}")`,
+        );
+      } else {
+        // Regular index
+        tableArgEntries.push(
+          `${FOUR_SPACES}${FOUR_SPACES}Index("${camelToSnake(ct.name)}", ${cols})`,
+        );
+      }
     }
     code += `${FOUR_SPACES}__table_args__ = (\n`;
     code += tableArgEntries.join(",\n") + ",\n";

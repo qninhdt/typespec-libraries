@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import Column, DateTime, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -15,8 +15,6 @@ class Location(SQLModel, table=True):
 
     __tablename__ = "locations"
 
-    # World this location belongs to - cascades deletion
-    world_id: UUID = Field(sa_column=Column(ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"), nullable=False, comment="World this location belongs to - cascades deletion", index=True))
     # Unique identifier - use
     id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
     # Timestamp when the record was created
@@ -31,6 +29,7 @@ class Location(SQLModel, table=True):
     description: str = Field(sa_column=Column(Text, nullable=False, comment="Narrative description used in AI generation"))
     # Bounding box or point stored as GeoJSON
     coordinates: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Bounding box or point stored as GeoJSON"))
+    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False})
 
     # ─── Relationships ─────────────────────
     # World this location belongs to - cascades deletion

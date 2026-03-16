@@ -31,6 +31,19 @@ scalar serial extends int32;
  */
 scalar bigserial extends int64;
 
+/**
+ * Composite index/unique configuration marker.
+ * Use @key for primary composite index, @unique for composite unique constraint.
+ * Example: composite<"ownerId", "createdAt">
+ */
+scalar composite<
+  Col1 extends string,
+  Col2 extends string,
+  Col3 extends string = "",
+  Col4 extends string = "",
+  Col5 extends string = ""
+>;
+
 // ─── Table & Column Decorators ───────────────────────────────────────────────
 
 /**
@@ -74,18 +87,6 @@ extern dec foreignKey(target: ModelProperty, field: valueof string);
  * Specifies the inverse side of a relationship defined with `@foreignKey`. The `target` parameter is the collection/navigation property on the owning model, and the `field` parameter is the name of the **local property** on the related model that carries the `@foreignKey` decorator (i.e. the property referencing this model).
  */
 extern dec mappedBy(target: ModelProperty, field: valueof string);
-
-// ─── Composite Indexes & Unique Constraints ──────────────────────────────────
-
-/**
- * Defines a composite index on multiple columns. The `name` parameter is the name of the index, and the `columns` parameters are the names of the properties that make up the index. The column names should match the property names, not the database column names (i.e. use `Model.field`, not `Model.field::map`).
- */
-extern dec compositeIndex(target: Model, name: valueof string, ...columns: valueof string[]);
-
-/**
- * Defines a composite unique constraint on multiple columns. The `name` parameter is the name of the constraint, and the `columns` parameters are the names of the properties that make up the unique constraint. The column names should match the property names, not the database column names (i.e. use `Model.field`, not `Model.field::map`).
- */
-extern dec compositeKey(target: Model, name: valueof string, ...columns: valueof string[]);
 
 // ─── Timestamp auto-fill ─────────────────────────────────────────────────────
 

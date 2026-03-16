@@ -22,16 +22,16 @@ type Npc struct {
 	// Soft delete timestamp - null if active, set to deletion time when "deleted".
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;comment:Soft delete timestamp - null if active, set to deletion time when 'deleted'." json:"deletedAt"`
 	// Name of the NPC - indexed for lookup, max 200 characters
-	Name string `gorm:"column:name;type:varchar(200);not null;index:idx_npcs_name;index:idx_npcs_world_name,priority:2;comment:Name of the NPC - indexed for lookup, max 200 characters" validate:"required,max=200" json:"name"`
+	Name string `gorm:"column:name;type:varchar(200);not null;index:npcs_name_idx;index:npcs_world_id_name_idx,priority:2;comment:Name of the NPC - indexed for lookup, max 200 characters" validate:"required,max=200" json:"name"`
 	// Narrative description used in AI generation
 	Description string `gorm:"column:description;type:text;not null;comment:Narrative description used in AI generation" validate:"required" json:"description"`
 	// Optional JSON object holding personality traits and attributes
 	Traits *datatypes.JSON `gorm:"column:traits;type:jsonb;comment:Optional JSON object holding personality traits and attributes" validate:"omitempty" json:"traits,omitempty"`
+	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null;index:npcs_world_id_name_idx,priority:1" validate:"required" json:"worldId"`
 
 	// ─── Relationships ─────────────────────
 	// World this NPC belongs to - cascades deletion
-	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world,omitempty"`
-
+	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Npc.

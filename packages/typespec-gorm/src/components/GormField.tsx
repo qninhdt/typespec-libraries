@@ -13,6 +13,7 @@ import {
   getDoc,
   getForeignKey,
   getIndexName,
+  getUniqueName,
   getMaxLength,
   getOnDelete,
   getOnUpdate,
@@ -52,6 +53,15 @@ export function generateFieldLine(
     const doc = getDoc(program, prop);
     const docComment = doc ? `\t// ${doc}\n` : "";
     const tagParts = [`column:${columnName}`, "index"];
+
+    // Add composite tags if this field is part of a composite constraint
+    const compositeTags = compositeMap.get(columnName);
+    if (compositeTags) {
+      for (const ct of compositeTags) {
+        tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
+      }
+    }
+
     if (doc) {
       tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
     }
@@ -187,7 +197,10 @@ function resolveGoType(
   const fk = getForeignKey(program, prop);
   if (fk) {
     const compositeTags = compositeMap.get(columnName);
-    if (!isIndex(program, prop) && !compositeTags?.some((ct) => ct.kind === "index")) {
+    if (
+      !isIndex(program, prop) &&
+      !compositeTags?.some((ct) => ct.kind === "index" || ct.kind === "primaryIndex")
+    ) {
       tagParts.push("index");
     }
     const onDel = getOnDelete(program, prop);
@@ -244,17 +257,29 @@ function appendCommonGormTags(
   tagParts: string[],
 ): void {
   if (!prop.optional && !isKey(program, prop)) tagParts.push("not null");
-  if (isUnique(program, prop)) tagParts.push("uniqueIndex");
+
+  // Check if this field is part of a composite constraint
+  const compositeTags = compositeMap.get(columnName);
+  const isPartOfCompositeUnique = compositeTags?.some((ct) => ct.kind === "uniqueIndex");
+
+  // Only add standalone uniqueIndex if NOT part of a composite unique
+  if (isUnique(program, prop) && !isPartOfCompositeUnique) {
+    const uniqName = getUniqueName(program, prop);
+    tagParts.push(`uniqueIndex:${uniqName}`);
+  }
+
   if (isIndex(program, prop)) {
     const idxName = getIndexName(program, prop);
-    tagParts.push(idxName ? `index:${idxName}` : "index");
+    tagParts.push(`index:${idxName}`);
   }
-  const compositeTags = compositeMap.get(columnName);
+
+  // compositeMap uses snake_case keys (matching database column names)
   if (compositeTags) {
     for (const ct of compositeTags) {
       tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
     }
   }
+
   if (!isKey(program, prop)) {
     const defaultVal = getDefaultValue(program, prop);
     if (defaultVal) tagParts.push(`default:${defaultVal}`);

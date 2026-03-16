@@ -16,4 +16,4 @@ class CreateInvitationForm(BaseModel):
     # Prompt text for the target world. Lookup type whose source scalar is `text` (custom, not a built-in) - used below to demonstrate `@@inputType` via `World.prompt::type`.
     world_prompt: str = Field(..., title="World Prompt", description="Prompt text for the target world. Lookup type whose source scalar is `text` (custom, not a built-in) - used below to demonstrate `@@inputType` via `World.prompt::type`.")
     # Optional personal message included in the invitation. Direct custom scalar (`text`) - @inputType applied via `::type` below.
-    message: Optional[str] = Field(None, max_length=1000, title="Personal Message", description="Optional personal message included in the invitation. Direct custom scalar (`text`) - @inputType applied via `::type` below.", json_schema_extra={"placeholder": "Write a short note to your invitee…"})
+    message: Optional[str] = Field(None, title="Personal Message", description="Optional personal message included in the invitation. Direct custom scalar (`text`) - @inputType applied via `::type` below.", json_schema_extra={"placeholder": "Write a short note to your invitee…"})

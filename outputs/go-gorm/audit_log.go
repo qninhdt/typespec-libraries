@@ -15,19 +15,20 @@ type AuditLog struct {
 	// Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance
 	ID int64 `gorm:"column:id;type:bigserial;primaryKey;autoIncrement;comment:Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance" json:"id"`
 	// Logical type of the changed entity, e.g. "World" or "StoryNode"
-	EntityType string `gorm:"column:entity_type;type:varchar(100);not null;index:idx_audit_entity_type;index:idx_audit_entity,priority:1;comment:Logical type of the changed entity, e.g. 'World' or 'StoryNode'" validate:"required,max=100" json:"entityType"`
+	EntityType string `gorm:"column:entity_type;type:varchar(100);not null;index:audit_logs_entity_type_idx;index:audit_logs_entity_type_entity_id_idx,priority:1;comment:Logical type of the changed entity, e.g. 'World' or 'StoryNode'" validate:"required,max=100" json:"entityType"`
 	// Primary key of the changed entity
-	EntityID uuid.UUID `gorm:"column:entity_id;type:uuid;not null;index:idx_audit_entity,priority:2;comment:Primary key of the changed entity" validate:"required" json:"entityId"`
+	EntityID uuid.UUID `gorm:"column:entity_id;type:uuid;not null;index:audit_logs_entity_type_entity_id_idx,priority:2;comment:Primary key of the changed entity" validate:"required" json:"entityId"`
 	// Action performed: "create", "update", or "delete"
 	Action string `gorm:"column:action;type:varchar(50);not null;comment:Action performed: 'create', 'update', or 'delete'" validate:"required,max=50" json:"action"`
 	// JSON patch or before/after snapshot
 	Diff *datatypes.JSON `gorm:"column:diff;type:jsonb;comment:JSON patch or before/after snapshot" validate:"omitempty" json:"diff,omitempty"`
-	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:idx_audit_actor_time,priority:2" json:"createdAt"`
+	// Foreign key to Actor (User) - nullable for deleted users
+	ActorID *uuid.UUID `gorm:"column:actor_id;type:uuid;index:audit_logs_actor_id_created_at_idx,priority:1;comment:Foreign key to Actor (User) - nullable for deleted users" validate:"omitempty" json:"actorId,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:audit_logs_actor_id_created_at_idx,priority:2" json:"createdAt"`
 
 	// ─── Relationships ─────────────────────
 	// User who performed the action - SET NULL when the user is deleted so audit history is preserved even after account removal
 	Actor *User `gorm:"foreignKey:ActorID;constraint:OnDelete:SET NULL,OnUpdate:CASCADE" json:"actor,omitempty"`
-
 }
 
 // TableName returns the table name for AuditLog.

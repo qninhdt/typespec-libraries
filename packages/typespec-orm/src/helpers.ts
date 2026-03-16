@@ -35,8 +35,6 @@ import {
   SoftDeleteKey,
   ForeignKeyKey,
   MappedByKey,
-  CompositeIndexKey,
-  CompositeUniqueKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
@@ -74,11 +72,29 @@ export function isIndex(program: Program, prop: ModelProperty): boolean {
 }
 
 export function getIndexName(program: Program, prop: ModelProperty): string {
-  return (program.stateMap(IndexKey).get(prop) as string) ?? "";
+  const stored = program.stateMap(IndexKey).get(prop) as string | undefined;
+  if (stored !== undefined && stored !== "") {
+    return stored;
+  }
+  // Auto-derive index name: [tableName]_[columnName]_idx
+  const model = prop.model;
+  if (!model) return "";
+  const tableName = getTableName(program, model);
+  const columnName = getColumnName(program, prop);
+  return `${tableName}_${columnName}_idx`;
 }
 
 export function isUnique(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(UniqueKey).has(prop);
+}
+
+export function getUniqueName(program: Program, prop: ModelProperty): string {
+  // Auto-derive unique constraint name: [tableName]_[columnName]_unique
+  const model = prop.model;
+  if (!model) return "";
+  const tableName = getTableName(program, model);
+  const columnName = getColumnName(program, prop);
+  return `${tableName}_${columnName}_unique`;
 }
 
 export function getDefaultValue(program: Program, prop: ModelProperty): string | undefined {
@@ -269,23 +285,158 @@ export function getMappedBy(program: Program, prop: ModelProperty): string | und
   return program.stateMap(MappedByKey).get(prop) as string | undefined;
 }
 
-// ─── Composite index / unique helpers ────────────────────────────────────────
+export function getCompositeFields(program: Program, prop: ModelProperty): string[] | undefined {
+  const type = prop.type;
 
-export interface CompositeConstraint {
-  name: string;
-  columns: string[];
+  // Handle scalar-based composite type (composite<field1, field2>)
+  if (type.kind === "Scalar") {
+    // Get the scalar name
+    let typeName = type.name;
+    if (!typeName) {
+      typeName = (type as any).node?.id?.escapedText;
+    }
+
+    if (typeName === "composite") {
+      // For template instantiations, check templateMapper
+      const scalar = type as any;
+
+      // templateMapper.args contains the template arguments
+      const args = scalar.templateMapper?.args;
+      if (args && Array.isArray(args)) {
+        const columns: string[] = [];
+        for (const arg of args) {
+          // Template arg structure: { entityKind: "Indeterminate", type: { kind: "String", value: "columnName" } }
+          if (arg && typeof arg === "object" && arg.type) {
+            const typeObj = arg.type;
+            if (typeObj.kind === "String" && typeObj.value && typeObj.value !== "") {
+              // Keep camelCase - emitters will convert to snake_case
+              columns.push(typeObj.value);
+            }
+          }
+        }
+        if (columns.length > 0) return columns;
+      }
+    }
+  }
+
+  return undefined;
 }
 
-export function getCompositeIndexes(program: Program, model: Model): CompositeConstraint[] {
-  return (
-    (program.stateMap(CompositeIndexKey).get(model) as CompositeConstraint[] | undefined) ?? []
-  );
+/**
+ * Extract column names from the property's type information.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _extractCompositeColumnsFromProp(prop: ModelProperty): string[] | undefined {
+  // Try to get template arguments from the type directly
+  const typeAny = prop.type as any;
+
+  // Template arguments might be stored on the type's node or directly
+  // Check various possible locations
+  let templateArgs = typeAny.templateArguments;
+
+  if (!templateArgs) {
+    // Try the instantiator
+    templateArgs = typeAny.instantiator?.templateArguments;
+  }
+
+  if (!templateArgs) {
+    // Try the node
+    templateArgs = typeAny.node?.templateArguments;
+  }
+
+  if (!templateArgs) {
+    // Try the projection
+    templateArgs = typeAny.projection?.templateArguments;
+  }
+
+  if (!templateArgs || !Array.isArray(templateArgs)) {
+    // No template args found - this might not be a composite type
+    return undefined;
+  }
+
+  const columns: string[] = [];
+  for (const arg of templateArgs) {
+    // Template argument could be a string value
+    let value: string | undefined = arg.value;
+
+    // Also check direct string value
+    if (!value && typeof arg === "string") {
+      value = arg;
+    }
+
+    // Check for StringValue
+    if (!value && arg.valueKind === "StringValue") {
+      value = arg.value;
+    }
+
+    if (typeof value === "string" && value) {
+      columns.push(value.replace(/^["']|["']$/g, ""));
+    }
+  }
+
+  return columns.length > 0 ? columns : undefined;
 }
 
-export function getCompositeUniques(program: Program, model: Model): CompositeConstraint[] {
-  return (
-    (program.stateMap(CompositeUniqueKey).get(model) as CompositeConstraint[] | undefined) ?? []
-  );
+/**
+ * Extract column names from a templated composite type instantiation.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _extractCompositeColumnsFromType(type: Model | Scalar): string[] | undefined {
+  // For templated types, the template arguments contain the column names
+  // Check various possible locations where template args might be stored
+  const typeAny = type as any;
+  let templateArgs =
+    typeAny.templateArguments ?? typeAny.templateArgs ?? typeAny.node?.templateArguments;
+
+  // Also try to get from the instantiator
+  if (!templateArgs) {
+    templateArgs = typeAny.instantiator?.templateArguments;
+  }
+
+  if (!templateArgs || !Array.isArray(templateArgs)) {
+    return undefined;
+  }
+
+  const columns: string[] = [];
+  for (const arg of templateArgs) {
+    // Template argument could be a string value or a reference
+    const value = arg.value ?? arg;
+    if (typeof value === "string" && value) {
+      columns.push(value.replace(/^["']|["']$/g, "")); // Remove quotes
+    }
+  }
+
+  return columns.length > 0 ? columns : undefined;
+}
+
+/**
+ * Parse composite value from string default.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _parseCompositeValue(value: string): string[] | undefined {
+  const columns: string[] = [];
+
+  // Match quoted strings or identifiers
+  const matches = value.matchAll(/(?:^|,\s*)(["']?)([^"']+)\1/g);
+  for (const match of matches) {
+    const col = match[2].trim();
+    if (col) columns.push(col);
+  }
+
+  return columns.length > 0 ? columns : undefined;
+}
+
+/**
+ * Get the scalar name, walking up the inheritance chain.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _getScalarName(scalar: Scalar): string {
+  let current: Scalar | undefined = scalar;
+  while (current) {
+    if (current.name) return current.name;
+    current = current.baseScalar;
+  }
+  return scalar.name ?? "unknown";
 }
 
 // ─── Timestamp auto-fill helpers ─────────────────────────────────────────────

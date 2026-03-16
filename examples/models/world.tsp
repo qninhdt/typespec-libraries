@@ -17,34 +17,39 @@ enum WorldVisibility {
 
 /** A game world created by a user - contains story trees and content pools */
 @table
-@compositeIndex("idx_worlds_owner_created", "owner_id", "created_at")
-@compositeIndex("idx_worlds_visibility_active", "visibility", "deleted_at")
 model World is Timestamped {
   /**
    * Display name of the world - max 200 characters, indexed for lookup.
    * Referenced via lookup type in derived models (e.g. `worldName: World.name`).
    */
-  @index("idx_worlds_name")
+  @index
   @maxLength(200)
   name: string;
 
   /**
    * System prompt used to guide AI generation within this world.
-   * Custom 'text' scalar - safe to target with \@@inputType(World.prompt::type, ...).
+   * Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`.
    */
   prompt: text;
 
   /** Visibility setting - controls who can discover and access this world */
-  @index("idx_worlds_visibility")
+  @index
   visibility: WorldVisibility = WorldVisibility.private;
 
   /** Optional JSON configuration for world-specific settings */
   settings?: jsonb;
 
+  // ─── Composite Indexes ─────────────────
+  ownerIdCreatedAt: composite<"ownerId", "createdAt">;
+  visibilityDeletedAt: composite<"visibility", "deletedAt">;
+
   // ─── Relationships ─────────────────
 
+  @index
+  ownerId: uuid;
+
   /** User who owns and manages this world - cascades deletion */
-  @foreignKey("owner_id")
+  @foreignKey("ownerId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
   owner: User;
