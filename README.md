@@ -14,13 +14,14 @@ Built on [TypeSpec](https://typespec.io) - Microsoft's API specification languag
 | [`@qninhdt/typespec-orm`](packages/typespec-orm)           | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-orm)](https://www.npmjs.com/package/@qninhdt/typespec-orm)           | Decorator library - annotate your models    |
 | [`@qninhdt/typespec-gorm`](packages/typespec-gorm)         | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-gorm)](https://www.npmjs.com/package/@qninhdt/typespec-gorm)         | Emitter - generates Go GORM structs         |
 | [`@qninhdt/typespec-sqlmodel`](packages/typespec-sqlmodel) | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-sqlmodel)](https://www.npmjs.com/package/@qninhdt/typespec-sqlmodel) | Emitter - generates Python SQLModel classes |
+| [`@qninhdt/typespec-dbml`](packages/typespec-dbml)         | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-dbml)](https://www.npmjs.com/package/@qninhdt/typespec-dbml)         | Emitter - generates DBML schema files       |
 
 ---
 
 ## Quick Start
 
 ```bash
-pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmodel
+pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmodel @qninhdt/typespec-dbml
 ```
 
 **`tspconfig.yaml`:**
@@ -29,11 +30,14 @@ pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmo
 emit:
   - "@qninhdt/typespec-gorm"
   - "@qninhdt/typespec-sqlmodel"
+  - "@qninhdt/typespec-dbml"
 options:
   "@qninhdt/typespec-gorm":
     package-name: "models"
   "@qninhdt/typespec-sqlmodel":
     module-name: "models"
+  "@qninhdt/typespec-dbml":
+    filename: "schema"
 ```
 
 ---
