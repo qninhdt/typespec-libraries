@@ -23,8 +23,8 @@ type AuditLog struct {
 	// JSON patch or before/after snapshot
 	Diff *datatypes.JSON `gorm:"column:diff;type:jsonb;comment:JSON patch or before/after snapshot" validate:"omitempty" json:"diff,omitempty"`
 	// Foreign key to Actor (User) - nullable for deleted users
-	ActorID *uuid.UUID `gorm:"column:actor_id;type:uuid;index:audit_logs_actor_id_created_at_idx,priority:1;comment:Foreign key to Actor (User) - nullable for deleted users" validate:"omitempty" json:"actorId,omitempty"`
-	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:audit_logs_actor_id_created_at_idx,priority:2" json:"createdAt"`
+	ActorID   *uuid.UUID `gorm:"column:actor_id;type:uuid;index:audit_logs_actor_id_created_at_idx,priority:1;comment:Foreign key to Actor (User) - nullable for deleted users" validate:"omitempty" json:"actorId,omitempty"`
+	CreatedAt time.Time  `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:audit_logs_actor_id_created_at_idx,priority:2" json:"createdAt"`
 
 	// ─── Relationships ─────────────────────
 	// User who performed the action - SET NULL when the user is deleted so audit history is preserved even after account removal

@@ -17,5 +17,4 @@ type UserProfile struct {
 	DisplayName string `validate:"required,max=100" json:"displayName"`
 	// Optional avatar image URL - must be a valid URL, max 512 characters
 	AvatarURL *string `validate:"omitempty,max=512,url" json:"avatarUrl,omitempty"`
-
 }

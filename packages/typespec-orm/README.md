@@ -33,7 +33,6 @@ enum Role {
 
 /** Platform user account */
 @table("users")
-@compositeIndex("idx_users_email_role", "email", "role")
 model User {
   @key id: uuid;
 
@@ -54,6 +53,63 @@ model User {
   @autoCreateTime @map("created_at") createdAt: utcDateTime;
   @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
   @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
+
+  // ─── Composite Indexes & Unique Constraints ─────────────────
+  // Use composite<> type instead of @compositeIndex/@compositeKey decorators
+  emailRole: composite<"email", "role">;
+}
+```
+
+---
+
+## Composite Indexes & Unique Constraints (`composite<>`)
+
+Use the `composite<>` type to define multi-column indexes and unique constraints. This replaces the old `@compositeIndex` and `@compositeKey` decorators.
+
+### Basic Usage
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  authorId: uuid;
+  status: string;
+
+  // Multi-column index
+  authorStatus: composite<"authorId", "status">;
+}
+```
+
+### Unique Constraints
+
+Add `@unique` decorator to create a unique constraint instead of a regular index:
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  email: string;
+  deletedAt?: utcDateTime;
+
+  // Unique composite constraint on (email, deletedAt)
+  @unique
+  emailDeletedAt: composite<"email", "deletedAt">;
+}
+```
+
+### Primary Key Constraints
+
+Use `@key` to create a composite primary key:
+
+```typescript
+@table
+model Membership {
+  // Composite primary key
+  @key
+  userRole: composite<"user_id", "role_id">;
+
+  userId: uuid;
+  roleId: uuid;
 }
 ```
 
@@ -283,12 +339,10 @@ model UserRole {
 
 ### Model-level decorators
 
-| Decorator                           | Arguments                         | Description                                    |
-| ----------------------------------- | --------------------------------- | ---------------------------------------------- |
-| `@table(name?)`                     | `name?: string`                   | Maps model to a database table                 |
-| `@compositeIndex(name, ...columns)` | `name: string, columns: string[]` | Creates a named multi-column index             |
-| `@compositeKey(name, ...columns)`   | `name: string, columns: string[]` | Creates a named multi-column unique constraint |
-| `@data(label?)`                     | `label?: string`                  | Marks model as a non-DB data / form shape      |
+| Decorator       | Arguments        | Description                         |
+| --------------- | ---------------- | ----------------------------------- |
+| `@table(name?)` | `name?: string`  | Maps model to a database table      |
+| `@data(label?)` | `label?: string` | Marks model as a non-DB data / form |
 
 ### Property-level decorators
 
@@ -310,6 +364,14 @@ model UserRole {
 | `@ignore`             | -                  | Exclude from DB schema (virtual / computed field)         |
 | `@title(text)`        | `text: string`     | Human-readable field label for form / DTO models          |
 | `@placeholder(text)`  | `text: string`     | Placeholder hint shown before user types                  |
+
+### Composite type
+
+| Type                  | Arguments                 | Description                                  |
+| --------------------- | ------------------------- | -------------------------------------------- |
+| `composite<col, ...>` | `column names as strings` | Defines multi-column index/unique constraint |
+
+Use `composite<"col1", "col2", ...>` as a property type. Add `@unique` to create a unique constraint, or `@key` for a composite primary key.
 
 ### Scalar-level decorator (augment syntax)
 
@@ -341,27 +403,28 @@ Standard TypeSpec scalars (`string`, `int32`, `boolean`, `utcDateTime`, …) are
 
 The validator runs at compile time and reports the following diagnostics:
 
-| Code                            | Severity | Description                                                                   |
-| ------------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `multiple-keys`                 | error    | Model has more than one `@key` property                                       |
-| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                                |
-| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                                |
-| `duplicate-column-name`         | error    | Two properties produce the same column name                                   |
-| `composite-column-not-found`    | error    | Column in `@compositeIndex`/`@compositeKey` does not exist                    |
-| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                                    |
-| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                                |
-| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                                        |
-| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type                  |
-| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.)               |
-| `duplicate-constraint-name`     | error    | `@compositeIndex`/`@compositeKey` constraint name is not unique in this model |
-| `empty-index-columns`           | error    | `@compositeIndex`/`@compositeKey` has no columns                              |
-| `duplicate-column-in-index`     | error    | A column appears more than once in the same `@compositeIndex`/`@compositeKey` |
-| `missing-key`                   | warning  | `@table` model has no `@key` property                                         |
-| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                              |
-| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                                 |
-| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name                             |
-| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property                            |
-| `invalid-foreign-key`           | warning  | `@foreignKey` reference could not be validated                                |
+| Code                            | Severity | Description                                                     |
+| ------------------------------- | -------- | --------------------------------------------------------------- |
+| `multiple-keys`                 | error    | Model has more than one `@key` property                         |
+| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                  |
+| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                  |
+| `duplicate-column-name`         | error    | Two properties produce the same column name                     |
+| `composite-column-not-found`    | error    | Column in `composite<>` type does not exist                     |
+| `composite-column-conflict`     | error    | Same column used in multiple composite fields                   |
+| `duplicate-column-in-composite` | error    | A column appears more than once in the same `composite<>` type  |
+| `empty-composite-columns`       | error    | `composite<>` type has no columns                               |
+| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                      |
+| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                  |
+| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                          |
+| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type    |
+| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.) |
+| `missing-key`                   | warning  | `@table` model has no `@key` property                           |
+| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                |
+| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                   |
+| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name               |
+| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property              |
+| `invalid-foreign-key`           | warning  | `@foreignKey` reference could not be validated                  |
+| `missing-back-reference`        | warning  | One-to-many relation missing `@mappedBy` on the inverse side    |
 
 ---
 

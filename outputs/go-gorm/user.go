@@ -37,8 +37,8 @@ type User struct {
 
 	// ─── Relationships ─────────────────────
 	// Subscription plans associated with this user
-	Subscriptions []Subscription `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"`	// Worlds owned by this user
-	Worlds []World `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"worlds,omitempty"`
+	Subscriptions []Subscription `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"` // Worlds owned by this user
+	Worlds        []World        `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"worlds,omitempty"`
 }
 
 // TableName returns the table name for User.

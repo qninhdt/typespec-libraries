@@ -21,7 +21,6 @@ type Invitation struct {
 	Message *string `gorm:"column:message;type:text;comment:Optional personal message" validate:"omitempty,max=1000" json:"message,omitempty"`
 	// Timestamp when the invitation was sent
 	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;comment:Timestamp when the invitation was sent" json:"createdAt"`
-
 }
 
 // TableName returns the table name for Invitation.

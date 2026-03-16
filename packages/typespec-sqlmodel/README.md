@@ -49,7 +49,6 @@ enum PostStatus {
 
 /** A blog post authored by a user. */
 @table("posts")
-@compositeIndex("idx_posts_author_status", "author_id", "status")
 model Post {
   @key id: uuid;
 
@@ -67,6 +66,9 @@ model Post {
 
   @foreignKey("author_id") @onDelete("CASCADE")
   author: User;
+
+  // Use composite<> type for multi-column indexes
+  authorStatus: composite<"author_id", "status">;
 }
 ```
 
@@ -99,7 +101,7 @@ class Post(SQLModel, table=True):
 
     __tablename__ = "posts"
     __table_args__ = (
-        Index("idx_posts_author_status", "author_id", "status"),
+        Index("posts_author_status_idx", "author_id", "status"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -110,7 +112,7 @@ class Post(SQLModel, table=True):
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
     updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now()))
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), index=True))
-    author_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
+    author_id: UUID = Field(foreign_key="users.id", sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
 
     # ─── Relationships ─────────────────────
     author: "User" | None = Relationship(back_populates="posts")
@@ -245,6 +247,41 @@ model UserRole {
   @foreignKey("role_id")
   role: Role;
 }
+```
+
+---
+
+## Composite Indexes & Unique Constraints (`composite<>`)
+
+Use the `composite<>` type to define multi-column indexes and unique constraints:
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  authorId: uuid;
+  status: string;
+
+  // Multi-column index
+  authorStatus: composite<"authorId", "status">;
+
+  // Unique constraint
+  @unique
+  authorStatus: composite<"authorId", "status">;
+}
+```
+
+**Python (SQLModel):**
+
+```python
+class Post(SQLModel, table=True):
+    __table_args__ = (
+        Index("posts_author_status_idx", "author_id", "status"),
+    )
+    # or for unique constraints:
+    __table_args__ = (
+        UniqueConstraint("author_id", "status", name="posts_author_status_unique"),
+    )
 ```
 
 ---

@@ -49,7 +49,6 @@ enum PostStatus {
 
 /** A blog post authored by a user. */
 @table("posts")
-@compositeIndex("idx_posts_author_status", "author_id", "status")
 model Post {
   @key id: uuid;
 
@@ -67,6 +66,9 @@ model Post {
 
   @foreignKey("author_id") @onDelete("CASCADE")
   author: User;
+
+  // Use composite<> type for multi-column indexes
+  authorStatus: composite<"author_id", "status">;
 }
 ```
 
@@ -100,12 +102,12 @@ type Post struct {
     ID        uuid.UUID       `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
     Title     string          `gorm:"column:title;type:varchar(255);not null" validate:"required,max=255" json:"title"`
     Body      string          `gorm:"column:body;type:text;not null" validate:"required" json:"body"`
-    Status    PostStatus      `gorm:"column:status;type:varchar(9);not null;index;index:idx_posts_author_status,priority:2" validate:"required,oneof=draft published archived" json:"status"`
+    Status    PostStatus      `gorm:"column:status;type:varchar(9);not null;index" validate:"required,oneof=draft published archived" json:"status"`
     ViewCount decimal.Decimal `gorm:"column:view_count;type:numeric(10,2);not null" json:"viewCount"`
     CreatedAt time.Time       `gorm:"column:created_at;type:timestamptz;not null;autoCreateTime" json:"createdAt"`
     UpdatedAt *time.Time      `gorm:"column:updated_at;type:timestamptz;autoUpdateTime" json:"updatedAt,omitempty"`
     DeletedAt gorm.DeletedAt  `gorm:"column:deleted_at;index" json:"deletedAt"`
-    AuthorID  uuid.UUID       `gorm:"column:author_id;type:uuid;not null;index;index:idx_posts_author_status,priority:1;constraint:OnDelete:CASCADE" json:"authorId"`
+    AuthorID  uuid.UUID       `gorm:"column:author_id;type:uuid;not null;index;constraint:OnDelete:CASCADE" json:"authorId"`
 
     // ─── Relationships ─────────────────────
     Author User `gorm:"foreignKey:AuthorID;constraint:OnDelete:CASCADE" json:"author,omitempty"`
@@ -242,6 +244,37 @@ model UserRole {
 
   @foreignKey("role_id")
   role: Role;
+}
+```
+
+---
+
+## Composite Indexes & Unique Constraints (`composite<>`)
+
+Use the `composite<>` type to define multi-column indexes and unique constraints:
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  authorId: uuid;
+  status: string;
+
+  // Multi-column index
+  authorStatus: composite<"authorId", "status">;
+
+  // Unique constraint
+  @unique
+  authorStatus: composite<"authorId", "status">;
+}
+```
+
+**Go (GORM):**
+
+```go
+type Post struct {
+    AuthorID uuid.UUID `gorm:"column:author_id;index;index:posts_author_status_idx,priority:1"`
+    Status   string    `gorm:"column:status;index;index:posts_author_status_idx,priority:2"`
 }
 ```
 

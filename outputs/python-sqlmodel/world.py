@@ -29,33 +29,95 @@ class World(SQLModel, table=True):
     )
 
     # Unique identifier - use
-    id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
+    id: UUID = Field(
+        default_factory=uuid4,
+        primary_key=True,
+        sa_column_kwargs={"comment": "Unique identifier - use"},
+    )
     # Timestamp when the record was created
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="Timestamp when the record was created"))
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            comment="Timestamp when the record was created",
+        )
+    )
     # Timestamp of the last update - omit in extending model to skip
-    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Timestamp of the last update - omit in extending model to skip"))
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment="Timestamp of the last update - omit in extending model to skip",
+        ),
+    )
     # Soft delete timestamp - null if active, set to deletion time when "deleted".
-    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Soft delete timestamp - null if active, set to deletion time when \"deleted\".", index=True))
+    deleted_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment='Soft delete timestamp - null if active, set to deletion time when "deleted".',
+            index=True,
+        ),
+    )
     # Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. `worldName: World.name`).
-    name: str = Field(index=True, max_length=200, sa_column_kwargs={"nullable": False, "comment": "Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. `worldName: World.name`)."})
+    name: str = Field(
+        index=True,
+        max_length=200,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. `worldName: World.name`).",
+        },
+    )
     # System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`.
-    prompt: str = Field(sa_column=Column(Text, nullable=False, comment="System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`."))
+    prompt: str = Field(
+        sa_column=Column(
+            Text,
+            nullable=False,
+            comment="System prompt used to guide AI generation within this world. Custom 'text' scalar - safe to target with `@@inputType(World.prompt::type, ...)`.",
+        )
+    )
     # Visibility setting - controls who can discover and access this world
-    visibility: WorldVisibility = Field(sa_column=Column(SAEnum(WorldVisibility), nullable=False, index=True, server_default="private", comment="Visibility setting - controls who can discover and access this world"))
+    visibility: WorldVisibility = Field(
+        sa_column=Column(
+            SAEnum(WorldVisibility),
+            nullable=False,
+            index=True,
+            server_default="private",
+            comment="Visibility setting - controls who can discover and access this world",
+        )
+    )
     # Optional JSON configuration for world-specific settings
-    settings: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="Optional JSON configuration for world-specific settings"))
-    owner_id: UUID = Field(index=True, foreign_key="users.id", sa_column_kwargs={"nullable": False})
+    settings: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(
+            JSONB, comment="Optional JSON configuration for world-specific settings"
+        ),
+    )
+    owner_id: UUID = Field(
+        index=True, foreign_key="users.id", sa_column_kwargs={"nullable": False}
+    )
 
     # ─── Relationships ─────────────────────
     # User who owns and manages this world - cascades deletion
     owner: "User" | None = Relationship(back_populates="worlds")
     # Story tree nodes belonging to this world
-    story_nodes: list["StoryNode"] = Relationship(back_populates="world", cascade="all, delete-orphan")
+    story_nodes: list["StoryNode"] = Relationship(
+        back_populates="world", cascade="all, delete-orphan"
+    )
     # NPCs defined in this world
-    npcs: list["Npc"] = Relationship(back_populates="world", cascade="all, delete-orphan")
+    npcs: list["Npc"] = Relationship(
+        back_populates="world", cascade="all, delete-orphan"
+    )
     # Locations defined in this world
-    locations: list["Location"] = Relationship(back_populates="world", cascade="all, delete-orphan")
+    locations: list["Location"] = Relationship(
+        back_populates="world", cascade="all, delete-orphan"
+    )
     # Events defined in this world
-    game_events: list["GameEvent"] = Relationship(back_populates="world", cascade="all, delete-orphan")
+    game_events: list["GameEvent"] = Relationship(
+        back_populates="world", cascade="all, delete-orphan"
+    )
     # Tags used to classify content in this world
-    tags: list["Tag"] = Relationship(back_populates="world", cascade="all, delete-orphan")
+    tags: list["Tag"] = Relationship(
+        back_populates="world", cascade="all, delete-orphan"
+    )

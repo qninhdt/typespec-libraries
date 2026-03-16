@@ -29,7 +29,7 @@ type GameEvent struct {
 	Conditions *datatypes.JSON `gorm:"column:conditions;type:jsonb;comment:Predicate expression evaluated at runtime" validate:"omitempty" json:"conditions,omitempty"`
 	// Mutations applied when the event fires
 	Effects *datatypes.JSON `gorm:"column:effects;type:jsonb;comment:Mutations applied when the event fires" validate:"omitempty" json:"effects,omitempty"`
-	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null" validate:"required" json:"worldId"`
+	WorldID uuid.UUID       `gorm:"column:world_id;type:uuid;not null" validate:"required" json:"worldId"`
 
 	// ─── Relationships ─────────────────────
 	// World this event belongs to - cascades deletion

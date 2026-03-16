@@ -15,9 +15,9 @@ import (
 type WorldVisibility string
 
 const (
-	WorldVisibilityPrivate WorldVisibility = "private"
+	WorldVisibilityPrivate  WorldVisibility = "private"
 	WorldVisibilityUnlisted WorldVisibility = "unlisted"
-	WorldVisibilityPublic WorldVisibility = "public"
+	WorldVisibilityPublic   WorldVisibility = "public"
 )
 
 // World A game world created by a user - contains story trees and content pools
@@ -38,16 +38,16 @@ type World struct {
 	Visibility WorldVisibility `gorm:"column:visibility;type:varchar(20);not null;index:worlds_visibility_idx;index:worlds_visibility_deleted_at_idx,priority:1;default:private;comment:Visibility setting - controls who can discover and access this world" validate:"oneof=private,unlisted,public" json:"visibility"`
 	// Optional JSON configuration for world-specific settings
 	Settings *datatypes.JSON `gorm:"column:settings;type:jsonb;comment:Optional JSON configuration for world-specific settings" validate:"omitempty" json:"settings,omitempty"`
-	OwnerID uuid.UUID `gorm:"column:owner_id;type:uuid;not null;index:worlds_owner_id_idx;index:worlds_owner_id_created_at_idx,priority:1" validate:"required" json:"ownerId"`
+	OwnerID  uuid.UUID       `gorm:"column:owner_id;type:uuid;not null;index:worlds_owner_id_idx;index:worlds_owner_id_created_at_idx,priority:1" validate:"required" json:"ownerId"`
 
 	// ─── Relationships ─────────────────────
 	// User who owns and manages this world - cascades deletion
-	Owner User `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"owner"`	// Story tree nodes belonging to this world
-	StoryNodes []StoryNode `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"storyNodes,omitempty"`	// NPCs defined in this world
-	Npcs []Npc `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"npcs,omitempty"`	// Locations defined in this world
-	Locations []Location `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"locations,omitempty"`	// Events defined in this world
-	GameEvents []GameEvent `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"gameEvents,omitempty"`	// Tags used to classify content in this world
-	Tags []Tag `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"tags,omitempty"`
+	Owner      User        `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"owner"`                // Story tree nodes belonging to this world
+	StoryNodes []StoryNode `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"storyNodes,omitempty"` // NPCs defined in this world
+	Npcs       []Npc       `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"npcs,omitempty"`       // Locations defined in this world
+	Locations  []Location  `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"locations,omitempty"`  // Events defined in this world
+	GameEvents []GameEvent `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"gameEvents,omitempty"` // Tags used to classify content in this world
+	Tags       []Tag       `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"tags,omitempty"`
 }
 
 // TableName returns the table name for World.

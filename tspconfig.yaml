@@ -2,6 +2,7 @@ output-dir: "{project-root}/outputs"
 emit:
   - "@qninhdt/typespec-gorm"
   - "@qninhdt/typespec-sqlmodel"
+  - "@qninhdt/typespec-dbml"
 options:
   "@qninhdt/typespec-gorm":
     emitter-output-dir: "{output-dir}/go-gorm"
@@ -9,3 +10,6 @@ options:
   "@qninhdt/typespec-sqlmodel":
     emitter-output-dir: "{output-dir}/python-sqlmodel"
     module-name: "models"
+  "@qninhdt/typespec-dbml":
+    emitter-output-dir: "{output-dir}/dbml"
+    filename: "schema"

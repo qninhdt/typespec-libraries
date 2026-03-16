@@ -13,5 +13,4 @@ type CreateInvitationForm struct {
 	WorldPrompt string `validate:"required" json:"worldPrompt" form:"worldPrompt,title=World Prompt"`
 	// Optional personal message included in the invitation. Direct custom scalar (`text`) - @inputType applied via `::type` below.
 	Message *string `validate:"omitempty" json:"message,omitempty" form:"message,title=Personal Message,placeholder=Write a short note to your invitee…"`
-
 }

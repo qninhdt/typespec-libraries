@@ -21,5 +21,4 @@ type PublicUser struct {
 	Credits int32 `validate:"required" json:"credits"`
 	// Whether the account is active - false for suspended or deactivated accounts
 	IsActive bool `json:"isActive"`
-
 }

@@ -15,9 +15,9 @@ import (
 type SubscriptionPlan string
 
 const (
-	SubscriptionPlanFree SubscriptionPlan = "free"
-	SubscriptionPlanBasic SubscriptionPlan = "basic"
-	SubscriptionPlanPremium SubscriptionPlan = "premium"
+	SubscriptionPlanFree       SubscriptionPlan = "free"
+	SubscriptionPlanBasic      SubscriptionPlan = "basic"
+	SubscriptionPlanPremium    SubscriptionPlan = "premium"
 	SubscriptionPlanEnterprise SubscriptionPlan = "enterprise"
 )
 

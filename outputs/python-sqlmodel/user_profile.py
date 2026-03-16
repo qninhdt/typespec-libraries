@@ -13,8 +13,20 @@ class UserProfile(BaseModel):
     # Unique identifier - use
     id: UUID = Field(..., description="Unique identifier - use")
     # Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.
-    email: EmailStr = Field(..., max_length=320, description="Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format(\"email\") validation.")
+    email: EmailStr = Field(
+        ...,
+        max_length=320,
+        description='Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.',
+    )
     # Display name shown in the UI - max 100 characters
-    display_name: str = Field(..., max_length=100, description="Display name shown in the UI - max 100 characters")
+    display_name: str = Field(
+        ...,
+        max_length=100,
+        description="Display name shown in the UI - max 100 characters",
+    )
     # Optional avatar image URL - must be a valid URL, max 512 characters
-    avatar_url: Optional[AnyUrl] = Field(None, max_length=512, description="Optional avatar image URL - must be a valid URL, max 512 characters")
+    avatar_url: Optional[AnyUrl] = Field(
+        None,
+        max_length=512,
+        description="Optional avatar image URL - must be a valid URL, max 512 characters",
+    )

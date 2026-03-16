@@ -36,7 +36,7 @@ type StoryNode struct {
 
 	// ─── Relationships ─────────────────────
 	// World this story node belongs to - cascades deletion
-	World World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`	// Parent node in the story tree - null for root nodes
+	World  World      `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"` // Parent node in the story tree - null for root nodes
 	Parent *StoryNode `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`
 }
 

@@ -20,18 +20,54 @@ class AuditLog(SQLModel, table=True):
     )
 
     # Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance
-    id: int = Field(primary_key=True, sa_column_kwargs={"comment": "Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance"})
+    id: int = Field(
+        primary_key=True,
+        sa_column_kwargs={
+            "comment": "Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance"
+        },
+    )
     # Logical type of the changed entity, e.g. "World" or "StoryNode"
-    entity_type: str = Field(index=True, max_length=100, sa_column_kwargs={"nullable": False, "comment": "Logical type of the changed entity, e.g. \"World\" or \"StoryNode\""})
+    entity_type: str = Field(
+        index=True,
+        max_length=100,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": 'Logical type of the changed entity, e.g. "World" or "StoryNode"',
+        },
+    )
     # Primary key of the changed entity
-    entity_id: UUID = Field(sa_column_kwargs={"nullable": False, "comment": "Primary key of the changed entity"})
+    entity_id: UUID = Field(
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Primary key of the changed entity",
+        }
+    )
     # Action performed: "create", "update", or "delete"
-    action: str = Field(max_length=50, sa_column_kwargs={"nullable": False, "comment": "Action performed: \"create\", \"update\", or \"delete\""})
+    action: str = Field(
+        max_length=50,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": 'Action performed: "create", "update", or "delete"',
+        },
+    )
     # JSON patch or before/after snapshot
-    diff: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, comment="JSON patch or before/after snapshot"))
+    diff: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, comment="JSON patch or before/after snapshot"),
+    )
     # Foreign key to Actor (User) - nullable for deleted users
-    actor_id: UUID | None = Field(default=None, foreign_key="users.id", sa_column_kwargs={"comment": "Foreign key to Actor (User) - nullable for deleted users"})
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
+    actor_id: UUID | None = Field(
+        default=None,
+        foreign_key="users.id",
+        sa_column_kwargs={
+            "comment": "Foreign key to Actor (User) - nullable for deleted users"
+        },
+    )
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True), nullable=False, server_default=func.now()
+        )
+    )
 
     # ─── Relationships ─────────────────────
     # User who performed the action - SET NULL when the user is deleted so audit history is preserved even after account removal

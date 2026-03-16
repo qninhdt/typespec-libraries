@@ -1,0 +1,180 @@
+// Database Schema
+
+Enum SubscriptionPlan {
+  free
+  basic
+  premium
+  enterprise
+}
+
+Enum WorldVisibility {
+  private
+  unlisted
+  public
+}
+
+Table audit_logs {
+  id bigserial [pk, increment, not null, note: 'Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput Note: Does NOT use base id - overrides with bigserial for performance']
+  entity_type varchar(255) [not null, note: 'Logical type of the changed entity, e.g. World or StoryNode']
+  entity_id uuid [not null, note: 'Primary key of the changed entity']
+  action varchar(255) [not null, note: 'Action performed: create, update, or delete']
+  diff jsonb [note: 'JSON patch or before/after snapshot']
+  actor_id uuid [note: 'Foreign key to Actor (User) - nullable for deleted users']
+  created_at timestamp [not null, default: 'now()']
+
+  indexes {
+    (entity_type, entity_id)
+    (actor_id, created_at)
+    entity_type
+  }
+}
+
+Table game_events {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  name varchar(255) [not null, note: 'Name of the event - indexed for lookup, max 200 characters']
+  description text [not null, note: 'Narrative description used in AI generation']
+  conditions jsonb [note: 'Predicate expression evaluated at runtime']
+  effects jsonb [note: 'Mutations applied when the event fires']
+  world_id uuid [not null]
+
+  indexes {
+    name
+  }
+}
+
+Table invitations {
+  id uuid [pk, not null, note: 'Unique identifier for the invitation']
+  message text [note: 'Optional personal message']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the invitation was sent']
+}
+
+Table locations {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  name varchar(255) [not null, note: 'Name of the location - indexed for lookup, max 200 characters']
+  description text [not null, note: 'Narrative description used in AI generation']
+  coordinates jsonb [note: 'Bounding box or point stored as GeoJSON']
+  world_id uuid [not null]
+
+  indexes {
+    name
+  }
+}
+
+Table npcs {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  name varchar(255) [not null, note: 'Name of the NPC - indexed for lookup, max 200 characters']
+  description text [not null, note: 'Narrative description used in AI generation']
+  traits jsonb [note: 'Optional JSON object holding personality traits and attributes']
+  world_id uuid [not null]
+
+  indexes {
+    (world_id, name)
+    name
+  }
+}
+
+Table story_nodes {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  depth integer [not null, note: 'Depth of this node in the story tree - root is 0']
+  pool jsonb [not null, note: 'Cumulative pool - NPC, tag, event, and location IDs from all ancestors']
+  new_content jsonb [not null, note: 'Content introduced at this specific node']
+  child_ids jsonb [not null, note: 'IDs of lazily-expanded child nodes']
+  world_id uuid [not null, note: 'Foreign key to World - required']
+  parent_id uuid [note: 'Foreign key to parent StoryNode - nullable for root nodes']
+
+  indexes {
+    (world_id, depth)
+    depth
+  }
+}
+
+Table subscriptions {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  plan SubscriptionPlan [note: 'Subscription plan tier - determines access level and billing. Indexed for fast filtering by plan type.']
+  monthly_price decimal(10, 2) [not null, note: 'Monthly price stored as NUMERIC(10,2) to avoid floating-point rounding errors. Use @precision(10, 2) - do NOT use float or double for monetary values.']
+  start_date timestamp [not null, note: 'Start date of the subscription period']
+  end_date timestamp [note: 'Optional end date - null means the subscription is open-ended']
+  is_active boolean [not null, note: 'Quick flag for access-control checks without date comparisons']
+  user_id uuid [not null, note: 'FK field for the owning user']
+
+  indexes {
+    (user_id, is_active)
+  }
+}
+
+Table tags {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  name varchar(255) [not null, note: 'Tag name - max 100 characters, unique within its world']
+  category varchar(255) [not null, note: 'Category used to group related tags - indexed for filtering, max 50 characters']
+  world_id uuid [not null]
+
+  indexes {
+    (world_id, name) [unique]
+    category
+  }
+}
+
+Table users {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  email varchar(255) [not null, note: 'Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format(email) validation.']
+  password_hash varchar(255) [not null, note: 'Hashed password - never store or return plain text']
+  display_name varchar(255) [not null, note: 'Display name shown in the UI - max 100 characters']
+  avatar_url varchar(255) [note: 'Optional avatar image URL - must be a valid URL, max 512 characters']
+  credits integer [not null, note: 'Credits balance - defaults to 0 on registration']
+  is_active boolean [not null, note: 'Whether the account is active - false for suspended or deactivated accounts']
+
+  indexes {
+    (email, deleted_at) [unique]
+    email [unique]
+  }
+}
+
+Table worlds {
+  id uuid [pk, not null, note: 'Unique identifier - use']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created']
+  updated_at timestamp [note: 'Timestamp of the last update - omit in extending model to skip']
+  deleted_at timestamp [note: 'Soft delete timestamp - null if active, set to deletion time when deleted.']
+  name varchar(255) [not null, note: 'Display name of the world - max 200 characters, indexed for lookup. Referenced via lookup type in derived models (e.g. worldName: World.name).']
+  prompt text [not null, note: 'System prompt used to guide AI generation within this world. Custom text scalar - safe to target with @@inputType(World.prompt::type, ...).']
+  visibility WorldVisibility [note: 'Visibility setting - controls who can discover and access this world']
+  settings jsonb [note: 'Optional JSON configuration for world-specific settings']
+  owner_id uuid [not null]
+
+  indexes {
+    (owner_id, created_at)
+    (visibility, deleted_at)
+    name
+    owner_id
+  }
+}
+
+Ref: audit_logs.actor_id > users.id
+Ref: game_events.world_id > worlds.id
+Ref: locations.world_id > worlds.id
+Ref: npcs.world_id > worlds.id
+Ref: story_nodes.world_id > worlds.id
+Ref: story_nodes.parent_id > story_nodes.id
+Ref: subscriptions.user_id > users.id
+Ref: tags.world_id > worlds.id
+Ref: worlds.owner_id > users.id

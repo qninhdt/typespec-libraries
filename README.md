@@ -54,7 +54,6 @@ enum PostStatus {
 
 /** A blog post authored by a user. */
 @table("posts")
-@compositeIndex("idx_posts_author_status", "author_id", "status")
 model Post {
   @key id: uuid;
 
@@ -76,6 +75,10 @@ model Post {
 
   @foreignKey("users", "id") @onDelete("CASCADE")
   author: User;
+
+  // ─── Composite Indexes & Unique Constraints ─────────────────
+  // Use composite<> type to define multi-column indexes
+  authorStatus: composite<"author_id", "status">;
 }
 ```
 
@@ -109,12 +112,12 @@ type Post struct {
     ID        uuid.UUID       `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
     Title     string          `gorm:"column:title;type:varchar(255);not null" validate:"required,max=255" json:"title"`
     Body      string          `gorm:"column:body;type:text;not null" validate:"required" json:"body"`
-    Status    PostStatus      `gorm:"column:status;type:varchar(9);not null;index;index:idx_posts_author_status,priority:2" validate:"required,oneof=draft published archived" json:"status"`
+    Status    PostStatus      `gorm:"column:status;type:varchar(9);not null;index" validate:"required,oneof=draft published archived" json:"status"`
     ViewCount decimal.Decimal `gorm:"column:view_count;type:numeric(10,2);not null" json:"viewCount"`
     CreatedAt time.Time       `gorm:"column:created_at;type:timestamptz;not null;autoCreateTime" json:"createdAt"`
     UpdatedAt *time.Time      `gorm:"column:updated_at;type:timestamptz;autoUpdateTime" json:"updatedAt,omitempty"`
     DeletedAt gorm.DeletedAt  `gorm:"column:deleted_at;index" json:"deletedAt"`
-    AuthorID  uuid.UUID       `gorm:"column:author_id;type:uuid;not null;index;index:idx_posts_author_status,priority:1;constraint:OnDelete:CASCADE" json:"authorId"`
+    AuthorID  uuid.UUID       `gorm:"column:author_id;type:uuid;not null;index;constraint:OnDelete:CASCADE" json:"authorId"`
 
     // ─── Relationships ─────────────────────
     Author User `gorm:"foreignKey:AuthorID;constraint:OnDelete:CASCADE" json:"author,omitempty"`
@@ -153,7 +156,7 @@ class Post(SQLModel, table=True):
 
     __tablename__ = "posts"
     __table_args__ = (
-        Index("idx_posts_author_status", "author_id", "status"),
+        Index("posts_author_status_idx", "author_id", "status"),
     )
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
@@ -164,7 +167,7 @@ class Post(SQLModel, table=True):
     created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
     updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now()))
     deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), index=True))
-    author_id: UUID = Field(sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
+    author_id: UUID = Field(foreign_key="users.id", sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
 
     # ─── Relationships ─────────────────────
     author: "User" | None = Relationship(back_populates="posts")
@@ -311,6 +314,86 @@ model UserRole {
   @foreignKey("role_id")
   role: Role;
 }
+```
+
+---
+
+## Composite Indexes & Unique Constraints (`composite<>`)
+
+Use the `composite<>` type to define multi-column indexes and unique constraints. This replaces the old `@compositeIndex` and `@compositeKey` decorators.
+
+### Basic Usage
+
+```typescript
+@table
+model Post {
+  @key id: uuid;
+  title: string;
+  status: string;
+
+  // Single-column index
+  @index
+  status: string;
+
+  // Multi-column index using composite<> type
+  authorStatus: composite<"author_id", "status">;
+}
+```
+
+### Unique Constraints
+
+Add `@unique` decorator to create a unique constraint instead of a regular index:
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+  email: string;
+  deletedAt?: utcDateTime;
+
+  // Unique composite constraint on (email, deletedAt)
+  @unique
+  emailDeletedAt: composite<"email", "deletedAt">;
+}
+```
+
+### Primary Key Constraints
+
+Use `@key` to create a primary key composite constraint:
+
+```typescript
+@table
+model Membership {
+  // Composite primary key
+  @key
+  userRole: composite<"user_id", "role_id">;
+
+  userId: uuid;
+  roleId: uuid;
+}
+```
+
+### Generated Output
+
+**Go (GORM):**
+
+```go
+type Post struct {
+    // ...
+    AuthorID uuid.UUID `gorm:"column:author_id;index;index:posts_author_status_idx,priority:1"`
+    Status   string    `gorm:"column:status;index;index:posts_author_status_idx,priority:2"`
+    // ...
+}
+```
+
+**Python (SQLModel):**
+
+```python
+class Post(SQLModel, table=True):
+    __table_args__ = (
+        Index("posts_author_status_idx", "author_id", "status"),
+    )
+    # ...
 ```
 
 ---

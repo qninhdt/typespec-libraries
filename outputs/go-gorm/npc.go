@@ -26,8 +26,8 @@ type Npc struct {
 	// Narrative description used in AI generation
 	Description string `gorm:"column:description;type:text;not null;comment:Narrative description used in AI generation" validate:"required" json:"description"`
 	// Optional JSON object holding personality traits and attributes
-	Traits *datatypes.JSON `gorm:"column:traits;type:jsonb;comment:Optional JSON object holding personality traits and attributes" validate:"omitempty" json:"traits,omitempty"`
-	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null;index:npcs_world_id_name_idx,priority:1" validate:"required" json:"worldId"`
+	Traits  *datatypes.JSON `gorm:"column:traits;type:jsonb;comment:Optional JSON object holding personality traits and attributes" validate:"omitempty" json:"traits,omitempty"`
+	WorldID uuid.UUID       `gorm:"column:world_id;type:uuid;not null;index:npcs_world_id_name_idx,priority:1" validate:"required" json:"worldId"`
 
 	// ─── Relationships ─────────────────────
 	// World this NPC belongs to - cascades deletion

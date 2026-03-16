@@ -10,7 +10,7 @@ namespace WorldCard.Models;
  * Node in a lazily-generated story tree.
  * Stores the cumulative content-pool IDs inherited from all ancestor nodes.
  */
-@table("story_nodes")
+@table
 model StoryNode is Timestamped {
   /** Depth of this node in the story tree - root is 0 */
   @index
@@ -57,7 +57,7 @@ model StoryNode is Timestamped {
 /**
  * Non-player character belonging to a world
  */
-@table("npcs")
+@table
 model Npc is Timestamped {
   /** Name of the NPC - indexed for lookup, max 200 characters */
   @index
@@ -88,7 +88,7 @@ model Npc is Timestamped {
 /**
  * Physical or virtual location within a world
  */
-@table("locations")
+@table
 model Location is Timestamped {
   /** Name of the location - indexed for lookup, max 200 characters */
   @index
@@ -116,7 +116,7 @@ model Location is Timestamped {
 /**
  * World event that triggers state mutations when its conditions are met
  */
-@table("game_events")
+@table
 model GameEvent is Timestamped {
   /** Name of the event - indexed for lookup, max 200 characters */
   @index
@@ -148,7 +148,7 @@ model GameEvent is Timestamped {
  * Tag used to classify and filter content pool entries.
  * The (world_id, name) pair is globally unique per world.
  */
-@table("tags")
+@table
 model Tag is Timestamped {
   /** Tag name - max 100 characters, unique within its world */
   @maxLength(100)
@@ -184,7 +184,7 @@ model Tag is Timestamped {
  * ordered and paginated efficiently without UUIDs.
  * Demonstrates: @autoIncrement, bigserial, composite<>, @relation.
  */
-@table("audit_logs")
+@table
 model AuditLog {
   /**
    * Auto-incrementing surrogate key - uses bigserial (64-bit) for high throughput
@@ -205,7 +205,6 @@ model AuditLog {
   /**
    * Primary key of the changed entity
    */
-  @map("entity_id")
   entityId: uuid;
 
   /**
@@ -219,6 +218,7 @@ model AuditLog {
 
   // ─── Composite Indexes ─────────────────
   entityTypeEntityId: composite<"entityType", "entityId">;
+
   actorIdCreatedAt: composite<"actorId", "createdAt">;
 
   // ─── Explicit FK Fields ─────────────────

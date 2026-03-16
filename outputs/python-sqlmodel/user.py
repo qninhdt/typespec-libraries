@@ -21,28 +21,92 @@ class User(SQLModel, table=True):
     # Virtual field combining display name and email - not persisted to the database. Decorated with @ignore so emitters skip it.
     full_title: ClassVar[str | None]  # @ignore - not persisted
     # Unique identifier - use
-    id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
+    id: UUID = Field(
+        default_factory=uuid4,
+        primary_key=True,
+        sa_column_kwargs={"comment": "Unique identifier - use"},
+    )
     # Timestamp when the record was created
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="Timestamp when the record was created"))
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            comment="Timestamp when the record was created",
+        )
+    )
     # Timestamp of the last update - omit in extending model to skip
-    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Timestamp of the last update - omit in extending model to skip"))
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment="Timestamp of the last update - omit in extending model to skip",
+        ),
+    )
     # Soft delete timestamp - null if active, set to deletion time when "deleted".
-    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Soft delete timestamp - null if active, set to deletion time when \"deleted\".", index=True))
+    deleted_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment='Soft delete timestamp - null if active, set to deletion time when "deleted".',
+            index=True,
+        ),
+    )
     # Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.
-    email: EmailStr = Field(max_length=320, sa_column_kwargs={"nullable": False, "comment": "Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format(\"email\") validation."})
+    email: EmailStr = Field(
+        max_length=320,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": 'Email address used for login - indexed for fast lookup. Constrained to max 320 characters with @format("email") validation.',
+        },
+    )
     # Hashed password - never store or return plain text
-    password_hash: str = Field(max_length=255, sa_column_kwargs={"nullable": False, "comment": "Hashed password - never store or return plain text"})
+    password_hash: str = Field(
+        max_length=255,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Hashed password - never store or return plain text",
+        },
+    )
     # Display name shown in the UI - max 100 characters
-    display_name: str = Field(max_length=100, sa_column_kwargs={"nullable": False, "comment": "Display name shown in the UI - max 100 characters"})
+    display_name: str = Field(
+        max_length=100,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Display name shown in the UI - max 100 characters",
+        },
+    )
     # Optional avatar image URL - must be a valid URL, max 512 characters
-    avatar_url: AnyUrl | None = Field(default=None, max_length=512, sa_column_kwargs={"comment": "Optional avatar image URL - must be a valid URL, max 512 characters"})
+    avatar_url: AnyUrl | None = Field(
+        default=None,
+        max_length=512,
+        sa_column_kwargs={
+            "comment": "Optional avatar image URL - must be a valid URL, max 512 characters"
+        },
+    )
     # Credits balance - defaults to 0 on registration
-    credits: int = Field(sa_column_kwargs={"nullable": False, "server_default": "0", "comment": "Credits balance - defaults to 0 on registration"})
+    credits: int = Field(
+        sa_column_kwargs={
+            "nullable": False,
+            "server_default": "0",
+            "comment": "Credits balance - defaults to 0 on registration",
+        }
+    )
     # Whether the account is active - false for suspended or deactivated accounts
-    is_active: bool = Field(sa_column_kwargs={"nullable": False, "server_default": "true", "comment": "Whether the account is active - false for suspended or deactivated accounts"})
+    is_active: bool = Field(
+        sa_column_kwargs={
+            "nullable": False,
+            "server_default": "true",
+            "comment": "Whether the account is active - false for suspended or deactivated accounts",
+        }
+    )
 
     # ─── Relationships ─────────────────────
     # Subscription plans associated with this user
-    subscriptions: list["Subscription"] = Relationship(back_populates="user", cascade="all, delete-orphan")
+    subscriptions: list["Subscription"] = Relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     # Worlds owned by this user
-    worlds: list["World"] = Relationship(back_populates="owner", cascade="all, delete-orphan")
+    worlds: list["World"] = Relationship(
+        back_populates="owner", cascade="all, delete-orphan"
+    )

@@ -17,18 +17,57 @@ class Tag(SQLModel, table=True):
     )
 
     # Unique identifier - use
-    id: UUID = Field(default_factory=uuid4, primary_key=True, sa_column_kwargs={"comment": "Unique identifier - use"})
+    id: UUID = Field(
+        default_factory=uuid4,
+        primary_key=True,
+        sa_column_kwargs={"comment": "Unique identifier - use"},
+    )
     # Timestamp when the record was created
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="Timestamp when the record was created"))
+    created_at: datetime = Field(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=func.now(),
+            comment="Timestamp when the record was created",
+        )
+    )
     # Timestamp of the last update - omit in extending model to skip
-    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Timestamp of the last update - omit in extending model to skip"))
+    updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment="Timestamp of the last update - omit in extending model to skip",
+        ),
+    )
     # Soft delete timestamp - null if active, set to deletion time when "deleted".
-    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), comment="Soft delete timestamp - null if active, set to deletion time when \"deleted\".", index=True))
+    deleted_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime(timezone=True),
+            comment='Soft delete timestamp - null if active, set to deletion time when "deleted".',
+            index=True,
+        ),
+    )
     # Tag name - max 100 characters, unique within its world
-    name: str = Field(max_length=100, sa_column_kwargs={"nullable": False, "comment": "Tag name - max 100 characters, unique within its world"})
+    name: str = Field(
+        max_length=100,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Tag name - max 100 characters, unique within its world",
+        },
+    )
     # Category used to group related tags - indexed for filtering, max 50 characters
-    category: str = Field(index=True, max_length=50, sa_column_kwargs={"nullable": False, "comment": "Category used to group related tags - indexed for filtering, max 50 characters"})
-    world_id: UUID = Field(foreign_key="worlds.id", sa_column_kwargs={"nullable": False})
+    category: str = Field(
+        index=True,
+        max_length=50,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Category used to group related tags - indexed for filtering, max 50 characters",
+        },
+    )
+    world_id: UUID = Field(
+        foreign_key="worlds.id", sa_column_kwargs={"nullable": False}
+    )
 
     # ─── Relationships ─────────────────────
     # World this tag belongs to - cascades deletion

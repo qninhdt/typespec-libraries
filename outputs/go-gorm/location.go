@@ -27,7 +27,7 @@ type Location struct {
 	Description string `gorm:"column:description;type:text;not null;comment:Narrative description used in AI generation" validate:"required" json:"description"`
 	// Bounding box or point stored as GeoJSON
 	Coordinates *datatypes.JSON `gorm:"column:coordinates;type:jsonb;comment:Bounding box or point stored as GeoJSON" validate:"omitempty" json:"coordinates,omitempty"`
-	WorldID uuid.UUID `gorm:"column:world_id;type:uuid;not null" validate:"required" json:"worldId"`
+	WorldID     uuid.UUID       `gorm:"column:world_id;type:uuid;not null" validate:"required" json:"worldId"`
 
 	// ─── Relationships ─────────────────────
 	// World this location belongs to - cascades deletion
