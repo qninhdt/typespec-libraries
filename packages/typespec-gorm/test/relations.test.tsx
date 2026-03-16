@@ -74,6 +74,8 @@ describe("GORM many-to-one relationships", () => {
       model Post {
         @key id: uuid;
         title: string;
+        @map("user_id")
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
@@ -82,7 +84,7 @@ describe("GORM many-to-one relationships", () => {
       "post.go",
     );
 
-    // FK field
+    // Explicit FK field
     expect(output).toContain("UserID uuid.UUID");
     expect(output).toContain("column:user_id");
     expect(output).toContain("type:uuid");
@@ -106,6 +108,9 @@ describe("GORM many-to-one relationships", () => {
       @table
       model Post {
         @key id: uuid;
+        @map("user_id")
+        @index
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE")
         user: User;
@@ -132,6 +137,8 @@ describe("GORM optional relationships", () => {
       @table
       model Post {
         @key id: uuid;
+        @map("author_id")
+        authorId?: uuid;
         @foreignKey("author_id")
         author?: User;
       }
@@ -139,8 +146,8 @@ describe("GORM optional relationships", () => {
       "post.go",
     );
 
-    // Optional FK should be pointer
-    expect(output).toMatch(/Author\w+ \*uuid\.UUID/);
+    // Optional FK field should be pointer
+    expect(output).toMatch(/AuthorID \*uuid\.UUID/);
   });
 });
 
@@ -158,6 +165,8 @@ describe("GORM FK field naming", () => {
       @table
       model GameEvent {
         @key id: uuid;
+        @map("world_id")
+        worldId: uuid;
         @foreignKey("world_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         world: World;
@@ -166,7 +175,7 @@ describe("GORM FK field naming", () => {
       "game_event.go",
     );
 
-    // FK field named WorldID (relation name "world" → "WorldID")
+    // FK field named WorldID (explicit property name "worldId" → "WorldID")
     expect(output).toContain("WorldID uuid.UUID");
     expect(output).toContain("column:world_id");
   });

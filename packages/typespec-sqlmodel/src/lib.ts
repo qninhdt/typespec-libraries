@@ -47,6 +47,12 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`@format("${"format"}") on property "${"propName"}" has no Python/Pydantic equivalent and will be ignored.`,
       },
     },
+    "foreign-key-target-not-table": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@foreignKey on "${"propName"}": the property type must be a model decorated with @table, but "${"typeName"}" is not.`,
+      },
+    },
   },
   emitter: {
     options: EmitterOptionsSchema,

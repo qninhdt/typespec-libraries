@@ -12,7 +12,6 @@ import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import type { Model, Program } from "@typespec/compiler";
 import {
-  getColumnName,
   getCompositeIndexes,
   getCompositeUniques,
   getDoc,
@@ -24,7 +23,7 @@ import {
 } from "@qninhdt/typespec-orm";
 import { GO_TYPE_MAP, buildCompositeMap } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
-import { generateAutoFkFieldLine, generateRelationFieldLine } from "./GormRelationField.jsx";
+import { generateRelationFieldLine } from "./GormRelationField.jsx";
 
 export interface GormModelFileProps {
   readonly program: Program;
@@ -85,25 +84,8 @@ export function GormModelFile(props: GormModelFileProps): Children {
     fieldLines.push(generateIgnoredFieldLine(program, prop, imports, goType));
   }
 
-  // Collect all key column names
-  const keyColumnNames = new Set<string>();
-  for (const { prop } of regularProps) {
-    if (isKey(program, prop)) {
-      keyColumnNames.add(getColumnName(program, prop));
-    }
-  }
-
-  // Relation FK + navigation fields
+  // Relation navigation fields
   for (const { prop, resolved } of relations) {
-    // Only generate FK field for many-to-one/one-to-one (the FK column is on THIS model)
-    // For one-to-many, the FK is on the target model, not here
-    // Skip if FK column is already a key field (identifying relationship)
-    if (
-      (resolved.kind === "many-to-one" || resolved.kind === "one-to-one") &&
-      !keyColumnNames.has(resolved.fkColumnName)
-    ) {
-      fieldLines.push(generateAutoFkFieldLine(program, prop, resolved, imports, compositeMap));
-    }
     relationFieldLines.push(generateRelationFieldLine(program, prop, resolved));
   }
 
