@@ -431,3 +431,7 @@ The validator runs at compile time and reports the following diagnostics:
 ## License
 
 [MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
+
+---
+
+_Made by @qninhdt and @claude-opus-4-6_

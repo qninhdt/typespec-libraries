@@ -141,3 +141,7 @@ The emitter generates a single `{filename}.dbml` file (default: `schema.dbml`) c
 ## License
 
 [MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
+
+---
+
+_Made by @qninhdt and @claude-opus-4-6_

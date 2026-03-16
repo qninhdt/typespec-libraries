@@ -1,14 +1,11 @@
 /**
- * DbmlRelationField - Generate DBML reference definitions.
+ * DbmlRelationField - DBML reference generation.
  */
 
 import type { ModelProperty, Program } from "@typespec/compiler";
 import type { ResolvedRelation } from "@qninhdt/typespec-orm";
 import { camelToSnake } from "@qninhdt/typespec-orm";
 
-/**
- * Generate a DBML reference line.
- */
 export function generateRelationField(
   program: Program,
   prop: ModelProperty,

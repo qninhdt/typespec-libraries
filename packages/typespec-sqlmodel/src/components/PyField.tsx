@@ -462,7 +462,7 @@ function generateEnumField(
   program: Program,
   prop: ModelProperty,
   pyFieldName: string,
-  columnName: string,
+  _columnName: string,
   enumInfo: { enumType: Enum; members: EnumMemberInfo[] },
   saImports: Set<string>,
   sqlmodelImports: Set<string>,

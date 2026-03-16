@@ -82,6 +82,37 @@ export function escapeFormTagValue(value: string): string {
 }
 
 /**
+ * Escape characters in doc comments for safe inclusion in Go tags.
+ */
+export function escapeComment(doc: string): string {
+  return doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'");
+}
+
+/**
+ * Build a doc comment line from documentation text.
+ */
+export function buildDocComment(doc: string | undefined): string {
+  return doc ? `\t// ${doc}\n` : "";
+}
+
+/**
+ * Build Go import block from a set of import paths.
+ */
+export function buildImportBlock(imports: Set<string>): string {
+  const sorted = [...imports].sort();
+  if (sorted.length === 0) return "";
+  const stdImports = sorted.filter((i) => !i.includes("."));
+  const extImports = sorted.filter((i) => i.includes("."));
+  const parts: string[] = [];
+  parts.push("import (");
+  for (const imp of stdImports) parts.push(`\t"${imp}"`);
+  if (stdImports.length > 0 && extImports.length > 0) parts.push("");
+  for (const imp of extImports) parts.push(`\t"${imp}"`);
+  parts.push(")");
+  return parts.join("\n") + "\n";
+}
+
+/**
  * Build a lookup from column name → composite index/unique tags for that field.
  * Uses composite<> type syntax: composite<field1, field2>
  * Note: Uses snake_case keys to match database column names.

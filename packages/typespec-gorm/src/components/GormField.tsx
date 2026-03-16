@@ -31,7 +31,12 @@ import {
   deduplicateParts,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
-import { GO_TYPE_MAP, type CompositeFieldTag } from "./GormConstants.js";
+import {
+  GO_TYPE_MAP,
+  type CompositeFieldTag,
+  escapeComment,
+  buildDocComment,
+} from "./GormConstants.js";
 import { buildValidateTag } from "./GormValidateTag.js";
 
 /**
@@ -51,7 +56,7 @@ export function generateFieldLine(
   if (isSoft) {
     imports.add("gorm.io/gorm");
     const doc = getDoc(program, prop);
-    const docComment = doc ? `\t// ${doc}\n` : "";
+    const docComment = buildDocComment(doc);
     const tagParts = [`column:${columnName}`, "index"];
 
     // Add composite tags if this field is part of a composite constraint
@@ -63,7 +68,7 @@ export function generateFieldLine(
     }
 
     if (doc) {
-      tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
+      tagParts.push(`comment:${escapeComment(doc)}`);
     }
     return `${docComment}\t${fieldName} gorm.DeletedAt \`gorm:"${tagParts.join(";")}" json:"${prop.name}"\`\n`;
   }
@@ -82,7 +87,7 @@ export function generateFieldLine(
     const finalGoType = wrapOptional(goType, isOpt);
     const validateTag = buildValidateTag(program, prop);
     const jsonOmit = isOpt ? ",omitempty" : "";
-    const docComment = doc ? `\t// ${doc}\n` : "";
+    const docComment = buildDocComment(doc);
     const structTag = validateTag
       ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
       : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
@@ -102,7 +107,7 @@ export function generateFieldLine(
   const finalGoType = wrapOptional(goType, isOpt);
   const validateTag = buildValidateTag(program, prop);
   const jsonOmit = isOpt ? ",omitempty" : "";
-  const docComment = doc ? `\t// ${doc}\n` : "";
+  const docComment = buildDocComment(doc);
   const structTag = validateTag
     ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
     : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
@@ -123,7 +128,7 @@ export function generateIgnoredFieldLine(
   const finalGoType = wrapOptional(goType, prop.optional);
   const jsonOmit = prop.optional ? ",omitempty" : "";
   const doc = getDoc(program, prop);
-  const docComment = doc ? `\t// ${doc}\n` : "";
+  const docComment = buildDocComment(doc);
 
   return `${docComment}\t${fieldName} ${finalGoType} \`gorm:"-" json:"${prop.name}${jsonOmit}"\`\n`;
 }
@@ -192,7 +197,7 @@ function resolveGoType(
   appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
 
   const doc = getDoc(program, prop);
-  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
+  if (doc) tagParts.push(`comment:${escapeComment(doc)}`);
 
   const fk = getForeignKey(program, prop);
   if (fk) {
@@ -239,7 +244,7 @@ function resolveEnumGoType(
   appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
 
   const doc = getDoc(program, prop);
-  if (doc) tagParts.push(`comment:${doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'")}`);
+  if (doc) tagParts.push(`comment:${escapeComment(doc)}`);
 
   return {
     goType,

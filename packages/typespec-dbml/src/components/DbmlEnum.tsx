@@ -1,12 +1,9 @@
 /**
- * DbmlEnum - Generate DBML enum definitions.
+ * DbmlEnum - DBML enum generation.
  */
 
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 
-/**
- * Generate a DBML enum definition.
- */
 export function generateEnumDefinition(enumName: string, members: EnumMemberInfo[]): string {
   let code = `Enum ${enumName} {\n`;
 

@@ -399,3 +399,7 @@ class CreateInvitationForm(BaseModel):
 ## License
 
 [MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
+
+---
+
+_Made by @qninhdt and @claude-opus-4-6_

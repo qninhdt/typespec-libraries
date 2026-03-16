@@ -32,22 +32,23 @@ export function DbmlFile(props: DbmlFileProps): Children {
   // Generate references from relations
   const refs = generateRelationFields(program, relations, tableName);
 
-  // Build file content
-  let code = "// Database Schema\n\n";
+  // Build file content using array for better performance
+  const codeParts: string[] = ["// Database Schema", ""];
 
   // Add enum definitions
   for (const [enumName, members] of enumTypes) {
-    code += generateEnumDefinition(enumName, members);
-    code += "\n\n";
+    codeParts.push(generateEnumDefinition(enumName, members), "");
   }
 
   // Add table definition
-  code += tableDef + "\n\n";
+  codeParts.push(tableDef, "");
 
   // Add references
   for (const ref of refs) {
-    code += ref + "\n";
+    codeParts.push(ref);
   }
+
+  const code = codeParts.join("\n");
 
   const fileName = `${tableName}.dbml`;
 

@@ -21,7 +21,7 @@ import {
   camelToSnake,
   resolveDbType,
 } from "@qninhdt/typespec-orm";
-import { GO_TYPE_MAP, buildCompositeMap } from "./GormConstants.js";
+import { GO_TYPE_MAP, buildCompositeMap, buildImportBlock } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
 import { generateRelationFieldLine } from "./GormRelationField.jsx";
 
@@ -171,18 +171,4 @@ export function GormModelFile(props: GormModelFileProps): Children {
       {content}
     </SourceFile>
   );
-}
-
-function buildImportBlock(imports: Set<string>): string {
-  const sorted = [...imports].sort();
-  if (sorted.length === 0) return "";
-  const stdImports = sorted.filter((i) => !i.includes("."));
-  const extImports = sorted.filter((i) => i.includes("."));
-  const parts: string[] = [];
-  parts.push("import (");
-  for (const imp of stdImports) parts.push(`\t"${imp}"`);
-  if (stdImports.length > 0 && extImports.length > 0) parts.push("");
-  for (const imp of extImports) parts.push(`\t"${imp}"`);
-  parts.push(")");
-  return parts.join("\n") + "\n";
 }

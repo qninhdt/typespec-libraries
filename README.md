@@ -568,3 +568,7 @@ It opens a "Version Packages" PR via Changesets; merging that PR publishes to np
 ## License
 
 [MIT](LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
+
+---
+
+_Made by @qninhdt and @claude-opus-4-6_
