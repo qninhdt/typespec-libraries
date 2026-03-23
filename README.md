@@ -15,13 +15,14 @@ Built on [TypeSpec](https://typespec.io) - Microsoft's API specification languag
 | [`@qninhdt/typespec-gorm`](packages/typespec-gorm)         | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-gorm)](https://www.npmjs.com/package/@qninhdt/typespec-gorm)         | Emitter - generates Go GORM structs         |
 | [`@qninhdt/typespec-sqlmodel`](packages/typespec-sqlmodel) | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-sqlmodel)](https://www.npmjs.com/package/@qninhdt/typespec-sqlmodel) | Emitter - generates Python SQLModel classes |
 | [`@qninhdt/typespec-dbml`](packages/typespec-dbml)         | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-dbml)](https://www.npmjs.com/package/@qninhdt/typespec-dbml)         | Emitter - generates DBML schema files       |
+| [`@qninhdt/typespec-zod`](packages/typespec-zod)           | [![npm](https://img.shields.io/npm/v/@qninhdt/typespec-zod)](https://www.npmjs.com/package/@qninhdt/typespec-zod)           | Emitter - generates Zod validation schemas  |
 
 ---
 
 ## Quick Start
 
 ```bash
-pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmodel @qninhdt/typespec-dbml
+pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmodel @qninhdt/typespec-dbml @qninhdt/typespec-zod
 ```
 
 **`tspconfig.yaml`:**
@@ -77,7 +78,7 @@ model Post {
   @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
   @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
 
-  @foreignKey("users", "id") @onDelete("CASCADE")
+  @foreignKey("author_id") @onDelete("CASCADE")
   author: User;
 
   // ─── Composite Indexes & Unique Constraints ─────────────────

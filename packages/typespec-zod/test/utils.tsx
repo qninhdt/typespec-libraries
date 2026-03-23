@@ -15,6 +15,7 @@ import {
   createTestWrapper,
 } from "@typespec/compiler/testing";
 import { TypeSpecOrmTestLibrary } from "@qninhdt/typespec-orm/testing";
+import { TypeSpecZodTestLibrary } from "../src/testing/index.js";
 import { collectDataModels } from "@qninhdt/typespec-orm";
 import { newTopologicalTypeCollector } from "../src/utils.jsx";
 import { ZodModelFile } from "../src/components/ZodModelFile.jsx";
@@ -36,28 +37,8 @@ export async function createTestRunner() {
 }
 
 export async function createEmitterTestRunner(emitterOptions?: Record<string, unknown>) {
-  const { resolvePath } = await import("@typespec/compiler");
-
   const host = await coreCreateTestHost({
-    libraries: [
-      TypeSpecOrmTestLibrary,
-      {
-        name: "@qninhdt/typespec-zod",
-        packageRoot: "/home/qninh/projects/typespec-libraries/packages/typespec-zod",
-        files: [
-          {
-            realDir: "",
-            pattern: "package.json",
-            virtualPath: "./node_modules/@qninhdt/typespec-zod",
-          },
-          {
-            realDir: "dist/src",
-            pattern: "**/*.js",
-            virtualPath: resolvePath("./node_modules/@qninhdt/typespec-zod", "dist/src"),
-          },
-        ],
-      },
-    ],
+    libraries: [TypeSpecOrmTestLibrary, TypeSpecZodTestLibrary],
   });
 
   return createTestWrapper(host, {

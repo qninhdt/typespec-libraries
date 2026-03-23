@@ -1,6 +1,6 @@
 {
   "name": "@qninhdt/typespec-sqlmodel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "TypeSpec emitter that generates Python SQLModel classes from schemas decorated with @qninhdt/typespec-orm.",
   "type": "module",
   "main": "dist/src/index.js",
