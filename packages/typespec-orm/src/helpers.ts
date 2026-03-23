@@ -216,66 +216,39 @@ function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
   return prop.type.kind === "ModelProperty" ? (prop.type as ModelProperty) : undefined;
 }
 
-export function getMaxValueExclusive(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return (
-    tsGetMaxValueExclusive(program, prop) ??
-    (src ? tsGetMaxValueExclusive(program, src) : undefined)
-  );
+/**
+ * Create a getter that reads a TypeSpec intrinsic value from the property,
+ * falling back to the lookup-source property when the direct read is undefined.
+ * Eliminates the repeated `const src = lookupSourceProp(prop); return … ?? …`
+ * boilerplate across all validation-getter wrappers.
+ */
+function withLookupFallback<T>(
+  getter: (program: Program, target: ModelProperty) => T | undefined,
+): (program: Program, prop: ModelProperty) => T | undefined {
+  return (program, prop) => {
+    const direct = getter(program, prop);
+    if (direct !== undefined) return direct;
+    const src = lookupSourceProp(prop);
+    return src ? getter(program, src) : undefined;
+  };
 }
 
-export function getMinValueExclusive(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return (
-    tsGetMinValueExclusive(program, prop) ??
-    (src ? tsGetMinValueExclusive(program, src) : undefined)
-  );
-}
-
-export function getMaxItems(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxItems(program, prop) ?? (src ? tsGetMaxItems(program, src) : undefined);
-}
-
-export function getMinItems(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinItems(program, prop) ?? (src ? tsGetMinItems(program, src) : undefined);
-}
-
-export function getMaxLength(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxLength(program, prop) ?? (src ? tsGetMaxLength(program, src) : undefined);
-}
-
-export function getMinLength(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinLength(program, prop) ?? (src ? tsGetMinLength(program, src) : undefined);
-}
-
-export function getMinValue(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinValue(program, prop) ?? (src ? tsGetMinValue(program, src) : undefined);
-}
-
-export function getMaxValue(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxValue(program, prop) ?? (src ? tsGetMaxValue(program, src) : undefined);
-}
-
-export function getPattern(program: Program, prop: ModelProperty): string | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetPattern(program, prop) ?? (src ? tsGetPattern(program, src) : undefined);
-}
+export const getMaxValueExclusive = withLookupFallback(tsGetMaxValueExclusive);
+export const getMinValueExclusive = withLookupFallback(tsGetMinValueExclusive);
+export const getMaxItems = withLookupFallback(tsGetMaxItems);
+export const getMinItems = withLookupFallback(tsGetMinItems);
+export const getMaxLength = withLookupFallback(tsGetMaxLength);
+export const getMinLength = withLookupFallback(tsGetMinLength);
+export const getMinValue = withLookupFallback(tsGetMinValue);
+export const getMaxValue = withLookupFallback(tsGetMaxValue);
+export const getPattern = withLookupFallback(tsGetPattern);
 
 /**
  * Returns the TypeSpec @format value, e.g. "email", "uri", "date-time".
  * Used to emit format-specific validators in target languages.
  * Falls back to the source property for lookup types.
  */
-export function getFormat(program: Program, prop: ModelProperty): string | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetFormat(program, prop) ?? (src ? tsGetFormat(program, src) : undefined);
-}
+export const getFormat = withLookupFallback(tsGetFormat);
 
 export function getForeignKey(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(ForeignKeyKey).get(prop) as string | undefined;
@@ -581,8 +554,12 @@ export function camelToPascal(name: string): string {
 /** Derive table name from model name: PascalCase → snake_case plural */
 export function deriveTableName(modelName: string): string {
   const snake = camelToSnake(modelName);
-  if (snake.endsWith("s")) return snake;
-  if (snake.endsWith("y")) return snake.slice(0, -1) + "ies";
+  if (snake.endsWith("s") || snake.endsWith("x") || snake.endsWith("z")) return snake + "es";
+  if (snake.endsWith("sh") || snake.endsWith("ch")) return snake + "es";
+  // Only convert trailing -y to -ies when preceded by a consonant
+  if (snake.endsWith("y") && snake.length > 1 && !/[aeiou]/.test(snake[snake.length - 2])) {
+    return snake.slice(0, -1) + "ies";
+  }
   return snake + "s";
 }
 

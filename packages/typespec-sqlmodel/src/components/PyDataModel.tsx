@@ -29,6 +29,7 @@ import {
   getPythonTypeMap,
   generateEnumClass,
   buildPythonImportBlock,
+  resolveFormatPyType,
 } from "./PyConstants.js";
 
 export interface PyDataFileProps {
@@ -103,26 +104,25 @@ function generatePydanticField(
     for (const imp of mapping.imports) stdImports.add(imp);
   }
 
-  // Format-based type overrides
+  // Format-based type overrides using shared helper
   const format = getFormat(program, prop);
-  if (format === "email") {
-    pydanticImports.add("EmailStr");
-    pyType = "EmailStr";
-  } else if (format === "url" || format === "uri") {
-    pydanticImports.add("AnyUrl");
-    pyType = "AnyUrl";
-  } else if (format !== undefined && format !== null && format !== "") {
-    reportDiagnostic(program, {
-      code: "unknown-format",
-      target: prop,
-      format: { format, propName: prop.name },
-    });
+  if (format) {
+    const formatType = resolveFormatPyType(format);
+    if (formatType) {
+      pydanticImports.add(formatType);
+      pyType = formatType;
+    } else if (format !== "") {
+      reportDiagnostic(program, {
+        code: "unknown-format",
+        target: prop,
+        format: { format, propName: prop.name },
+      });
+    }
   }
 
   const isOpt = prop.optional;
   if (isOpt) {
-    stdImports.add("typing.Optional");
-    pyType = `Optional[${pyType}]`;
+    pyType = `${pyType} | None`;
   }
 
   const fieldArgs: string[] = [isOpt ? "None" : "..."];

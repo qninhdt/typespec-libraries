@@ -15,14 +15,19 @@ import {
   getCompositeFields,
   getDoc,
   classifyProperties,
+  collectCompositeTypeFields,
   isKey,
-  isUnique,
   camelToPascal,
   camelToSnake,
   resolveDbType,
   generatedHeader,
 } from "@qninhdt/typespec-orm";
-import { GO_TYPE_MAP, buildCompositeMap, buildImportBlock } from "./GormConstants.js";
+import {
+  GO_TYPE_MAP,
+  buildCompositeMap,
+  buildImportBlock,
+  buildGoEnumBlock,
+} from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
 import { generateRelationFieldLine } from "./GormRelationField.jsx";
 
@@ -42,31 +47,8 @@ export function GormModelFile(props: GormModelFileProps): Children {
 
   const imports = new Set<string>();
 
-  // Collect composite type fields from properties (composite<col1, col2>)
-  const compositeTypeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
-      // Use snake_case for column names in the generated name
-      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
-      const snakeColumns = columns.map((c) => camelToSnake(c));
-      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
-      compositeTypeFields.push({
-        name: generatedName,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
-
-  // Build composite map from composite type fields
+  // Collect composite type fields and build composite map
+  const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
   const compositeMap = buildCompositeMap(compositeTypeFields);
 
   // Classify properties
@@ -117,20 +99,7 @@ export function GormModelFile(props: GormModelFileProps): Children {
   }
 
   // Build enum block
-  const enumLines: string[] = [];
-  for (const [enumName, members] of enumTypes) {
-    const goTypeName = camelToPascal(enumName);
-    enumLines.push(`// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`);
-    enumLines.push(`type ${goTypeName} string`);
-    enumLines.push("");
-    enumLines.push("const (");
-    for (const m of members) {
-      const constName = `${goTypeName}${camelToPascal(m.name)}`;
-      enumLines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
-    }
-    enumLines.push(")");
-    enumLines.push("");
-  }
+  const enumLines = buildGoEnumBlock(enumTypes);
 
   // Build import block
   const importBlock = buildImportBlock(imports);

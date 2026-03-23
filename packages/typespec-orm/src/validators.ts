@@ -6,7 +6,7 @@
  */
 
 import type { Model, ModelProperty, Program } from "@typespec/compiler";
-import { reportDiagnostic, MapKey, TableKey } from "./lib.js";
+import { reportDiagnostic, MapKey } from "./lib.js";
 import {
   isTable,
   getColumnName,
@@ -26,7 +26,7 @@ import {
   getCompositeFields,
   resolveDbType,
   camelToSnake,
-  deriveTableName,
+  collectTableModels,
 } from "./helpers.js";
 
 // ─── Type‐check Sets (module‐level to avoid per‐call allocation) ─────────────
@@ -54,16 +54,7 @@ const DATETIME_TYPES = new Set(["utcDateTime", "offsetDateTime"]);
 // ─── Public entry point ──────────────────────────────────────────────────────
 
 export function $onValidate(program: Program): void {
-  const tableModels: { model: Model; tableName: string }[] = [];
-
-  // Collect all @table models
-  for (const [type, name] of program.stateMap(TableKey)) {
-    if (type.kind === "Model") {
-      const model = type as Model;
-      const tableName = (name as string) || deriveTableName(model.name);
-      tableModels.push({ model, tableName });
-    }
-  }
+  const tableModels = collectTableModels(program);
 
   // 1. Duplicate table names
   validateDuplicateTableNames(program, tableModels);

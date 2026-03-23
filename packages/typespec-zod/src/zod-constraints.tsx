@@ -169,12 +169,8 @@ function getDecoratorSources(
   }
 
   if (!$.scalar.is(type)) {
-    // Non-scalar type (Model, Union, etc.) - just return member and type as-is
-    const result: (Scalar | ModelProperty)[] = member ? [member] : [];
-    if ($.modelProperty.is(type)) {
-      result.push(type as ModelProperty);
-    }
-    return result;
+    // Non-scalar, non-ModelProperty type (Model, Union, etc.) - just return member if present
+    return member ? [member] : [];
   }
 
   const sources: (Scalar | ModelProperty)[] = [...(member ? [member] : []), type];

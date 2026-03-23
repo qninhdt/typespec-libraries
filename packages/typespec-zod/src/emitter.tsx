@@ -8,6 +8,7 @@ import { Output } from "@typespec/emitter-framework";
 import { collectDataModels } from "@qninhdt/typespec-orm";
 import { zod } from "./external-packages/zod.js";
 import { ZodModelFile } from "./components/ZodModelFile.js";
+import { toPascalCase } from "./utils.js";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ZodEmitterOptions } from "./lib.js";
@@ -139,8 +140,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   // Add type aliases to each file
   for (const { model } of dataModels) {
     const name = model.name!;
-    const pascalName =
-      name.charAt(0).toUpperCase() + name.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+    const pascalName = toPascalCase(name);
     const schemaName = pascalName + "Schema";
     const typeName = pascalName;
 

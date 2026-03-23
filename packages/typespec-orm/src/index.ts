@@ -150,10 +150,17 @@ export type {
 } from "./helpers.js";
 
 // ─── Shared emitter utilities ────────────────────────────────────────────────
-export { NUMERIC_TYPES, deduplicateParts, classifyProperties } from "./emitter-utils.js";
+export {
+  NUMERIC_TYPES,
+  deduplicateParts,
+  classifyProperties,
+  collectCompositeTypeFields,
+  buildCompositeUniqueColumns,
+} from "./emitter-utils.js";
 
 export type {
   ClassifiedProperty,
   ClassifiedRelation,
   ClassifiedProperties,
+  CompositeTypeField,
 } from "./emitter-utils.js";

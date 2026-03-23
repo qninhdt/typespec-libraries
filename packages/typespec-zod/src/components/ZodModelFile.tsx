@@ -7,19 +7,13 @@ import { SourceFile } from "@alloy-js/typescript";
 import { Model, Program } from "@typespec/compiler";
 import { generatedHeader } from "@qninhdt/typespec-orm";
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
+import { toPascalCase } from "../utils.js";
 
 export interface ZodModelFileProps {
   program: Program;
   model: Model;
   label: string;
   modelsFolder?: boolean;
-}
-
-/**
- * Converts a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
 }
 
 /**

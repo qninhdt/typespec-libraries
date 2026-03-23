@@ -7,7 +7,15 @@
 
 import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
 import type { EnumMemberInfo, ResolvedRelation } from "./helpers.js";
-import { getPropertyEnum, isIgnored, resolveRelation } from "./helpers.js";
+import {
+  getCompositeFields,
+  getPropertyEnum,
+  isIgnored,
+  isKey,
+  isUnique,
+  camelToSnake,
+  resolveRelation,
+} from "./helpers.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -41,6 +49,70 @@ export function deduplicateParts(parts: string[]): string[] {
     if (!seen.has(part)) {
       seen.add(part);
       result.push(part);
+    }
+  }
+  return result;
+}
+
+// ─── Composite field collection ──────────────────────────────────────────────
+
+/** Metadata for a composite index/unique/primary constraint. */
+export interface CompositeTypeField {
+  /** Generated constraint name (e.g. "users_name_email_idx") */
+  name: string;
+  /** Column names (camelCase, from TypeSpec properties) */
+  columns: string[];
+  /** Whether this is a unique constraint */
+  isUnique: boolean;
+  /** Whether this is a primary key constraint */
+  isPrimary: boolean;
+}
+
+/**
+ * Collect composite type fields from a model's properties.
+ *
+ * Scans for `composite<col1, col2, ...>` typed properties and generates
+ * constraint names in the format `[tableName]_[col1]_[col2]_..._[suffix]`
+ * where suffix is "pk", "unique", or "idx".
+ *
+ * Previously duplicated across GORM and SQLModel emitters.
+ */
+export function collectCompositeTypeFields(
+  program: Program,
+  model: Model,
+  tableName: string,
+): CompositeTypeField[] {
+  const result: CompositeTypeField[] = [];
+  for (const [, prop] of model.properties) {
+    const columns = getCompositeFields(program, prop);
+    if (columns) {
+      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
+      const snakeColumns = columns.map((c) => camelToSnake(c));
+      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
+      result.push({
+        name: generatedName,
+        columns,
+        isUnique: isUnique(program, prop),
+        isPrimary: isKey(program, prop),
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Build a set of column names that are part of composite unique constraints.
+ * Used to skip standalone unique=True on fields already covered by __table_args__.
+ */
+export function buildCompositeUniqueColumns(
+  compositeTypeFields: CompositeTypeField[],
+): Set<string> {
+  const result = new Set<string>();
+  for (const ct of compositeTypeFields) {
+    if (ct.isUnique) {
+      for (const col of ct.columns) {
+        result.add(camelToSnake(col));
+      }
     }
   }
   return result;

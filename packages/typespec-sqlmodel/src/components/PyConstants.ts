@@ -1,9 +1,8 @@
 /**
  * Constants, type maps, and utility functions for SQLModel components.
  */
-import { generatedHeader } from "@qninhdt/typespec-orm";
-import { camelToSnake } from "@qninhdt/typespec-orm";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
+import { generatedHeader, camelToSnake } from "@qninhdt/typespec-orm";
 
 export const FILE_HEADER = `# ${generatedHeader}
 # Source: https://github.com/qninhdt/typespec-libraries
@@ -290,4 +289,15 @@ export function buildPythonImportBlock(
   code += `from ${importSource} import ${importList.join(", ")}\n`;
 
   return code;
+}
+
+/**
+ * Resolve a @format value to its Pydantic type override.
+ * Returns the Pydantic type name (e.g. "EmailStr", "AnyUrl") or undefined if unknown.
+ * Used by both SQLModel field generation and Pydantic data model generation.
+ */
+export function resolveFormatPyType(format: string): string | undefined {
+  if (format === "email") return "EmailStr";
+  if (format === "url" || format === "uri") return "AnyUrl";
+  return undefined;
 }

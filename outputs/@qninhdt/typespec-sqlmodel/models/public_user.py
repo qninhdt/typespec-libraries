@@ -2,7 +2,6 @@
 # Source: https://github.com/qninhdt/typespec-libraries
 
 from uuid import UUID
-from typing import Optional
 
 from pydantic import AnyUrl, BaseModel, EmailStr, Field
 
@@ -25,7 +24,7 @@ class PublicUser(BaseModel):
         description="Display name shown in the UI - max 100 characters",
     )
     # Optional avatar image URL - must be a valid URL, max 512 characters
-    avatar_url: Optional[AnyUrl] = Field(
+    avatar_url: AnyUrl | None = Field(
         None,
         max_length=512,
         description="Optional avatar image URL - must be a valid URL, max 512 characters",

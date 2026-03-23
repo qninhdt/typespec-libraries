@@ -3,6 +3,9 @@
  * Pure data -no JSX needed.
  */
 
+import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
+import { camelToPascal, camelToSnake } from "@qninhdt/typespec-orm";
+
 /** Maps canonical DB type names → Go types, GORM column types, and required imports */
 export const GO_TYPE_MAP: Record<string, { goType: string; gormType: string; imports?: string[] }> =
   {
@@ -133,9 +136,7 @@ export function buildCompositeMap(
     }
 
     for (let i = 0; i < ct.columns.length; i++) {
-      // Convert camelCase to snake_case for the key (e.g., "ownerId" -> "owner_id")
-      const camelCol = ct.columns[i];
-      const snakeCol = camelCol.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+      const snakeCol = camelToSnake(ct.columns[i]);
       const tags = map.get(snakeCol) ?? [];
       tags.push({ kind, name: ct.name, priority: i + 1 });
       map.set(snakeCol, tags);
@@ -143,4 +144,26 @@ export function buildCompositeMap(
   }
 
   return map;
+}
+
+/**
+ * Generate Go enum type + const block lines for a set of enum types.
+ * Shared between GormStruct and GormDataStruct to avoid duplication.
+ */
+export function buildGoEnumBlock(enumTypes: Map<string, EnumMemberInfo[]>): string[] {
+  const lines: string[] = [];
+  for (const [enumName, members] of enumTypes) {
+    const goTypeName = camelToPascal(enumName);
+    lines.push(`// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`);
+    lines.push(`type ${goTypeName} string`);
+    lines.push("");
+    lines.push("const (");
+    for (const m of members) {
+      const constName = `${goTypeName}${camelToPascal(m.name)}`;
+      lines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
+    }
+    lines.push(")");
+    lines.push("");
+  }
+  return lines;
 }

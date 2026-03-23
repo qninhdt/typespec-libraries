@@ -4,11 +4,10 @@
 
 import { render, writeOutput, SourceFile, SourceDirectory } from "@alloy-js/core";
 import type { EmitContext } from "@typespec/compiler";
-import { collectTableModels } from "@qninhdt/typespec-orm";
+import { collectTableModels, classifyProperties } from "@qninhdt/typespec-orm";
 import { DbmlTable } from "./components/DbmlTable.jsx";
-import { generateEnumDefinitions } from "./components/DbmlEnum.jsx";
+import { generateEnumDefinition } from "./components/DbmlEnum.jsx";
 import { generateRelationFields } from "./components/DbmlRelationField.jsx";
-import { classifyProperties } from "@qninhdt/typespec-orm";
 import type { DbmlEmitterOptions } from "./lib.js";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 
@@ -24,11 +23,17 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
   // Build the DBML content using array for better performance
   const codeParts: string[] = ["// Database Schema", ""];
 
+  // Classify properties once per table and cache results
+  const classifiedByTable = tables.map(({ model, tableName }) => ({
+    model,
+    tableName,
+    classified: classifyProperties(program, model),
+  }));
+
   // Collect all enums used across all tables
   const allEnums = new Map<string, EnumMemberInfo[]>();
-  for (const { model } of tables) {
-    const { enumTypes } = classifyProperties(program, model);
-    for (const [name, members] of enumTypes) {
+  for (const { classified } of classifiedByTable) {
+    for (const [name, members] of classified.enumTypes) {
       if (!allEnums.has(name)) {
         allEnums.set(name, members);
       }
@@ -37,20 +42,19 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
 
   // Add enum definitions
   for (const [enumName, members] of allEnums) {
-    codeParts.push(generateEnumDefinitions(new Map([[enumName, members]]))[0], "");
+    codeParts.push(generateEnumDefinition(enumName, members), "");
   }
 
   // Add table definitions and collect all references (deduplicated)
   const allRefs = new Set<string>();
-  for (const { model, tableName } of tables) {
+  for (const { model, tableName, classified } of classifiedByTable) {
     const tableDef = DbmlTable({ program, model, tableName });
     codeParts.push(tableDef, "");
 
     // Collect references - only many-to-one (FK is on this table)
-    const { relations } = classifyProperties(program, model);
     const refs = generateRelationFields(
       program,
-      relations.filter((r) => r.resolved.kind === "many-to-one"),
+      classified.relations.filter((r) => r.resolved.kind === "many-to-one"),
       tableName,
     );
     for (const ref of refs) {

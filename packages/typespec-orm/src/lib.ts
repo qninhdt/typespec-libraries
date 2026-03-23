@@ -185,7 +185,6 @@ export const { reportDiagnostic } = $lib;
 // Typed symbol keys for program.stateMap() / program.stateSet() access.
 
 export const TableKey = $lib.stateKeys.table;
-export const IdKey = $lib.stateKeys.id;
 export const MapKey = $lib.stateKeys.map;
 export const IndexKey = $lib.stateKeys.index;
 export const UniqueKey = $lib.stateKeys.unique;

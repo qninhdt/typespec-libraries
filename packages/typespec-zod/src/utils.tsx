@@ -13,6 +13,14 @@ import { zod } from "./external-packages/zod.js";
 export const refkeySym = Symbol.for("typespec-zod.refkey");
 
 /**
+ * Converts a string to PascalCase.
+ * e.g. "foo-bar_baz" → "FooBarBaz"
+ */
+export function toPascalCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+}
+
+/**
  * Returns true if the given type is a declaration or an instantiation of a
  * declaration.
  */

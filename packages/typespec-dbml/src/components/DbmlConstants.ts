@@ -76,34 +76,11 @@ export function formatColumnSettings(settings: ColumnSettings): string {
   if (settings.notNull) parts.push("not null");
   if (settings.unique) parts.push("unique");
   if (settings.default) parts.push(`default: '${settings.default}'`);
-  if (settings.note)
-    parts.push(
-      `note: '${settings.note.replace(/'/g, "").replace(/"/g, "").replace(/`/g, "").replace(/\n/g, " ")}'`,
-    );
+  if (settings.note) {
+    // Sanitize: strip quotes/backticks and collapse newlines to spaces
+    const sanitized = settings.note.replace(/['"`]/g, "").replace(/\n/g, " ");
+    parts.push(`note: '${sanitized}'`);
+  }
 
   return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
-}
-
-/**
- * Format index definition.
- */
-export function formatIndexDefinition(
-  name: string,
-  columns: string[],
-  options: { unique?: boolean; pk?: boolean } = {},
-): string {
-  const parts: string[] = [];
-
-  if (options.pk) {
-    parts.push("pk");
-  } else if (options.unique) {
-    parts.push("unique");
-  }
-
-  if (columns.length === 1) {
-    return parts.length > 0 ? `${columns[0]} [${parts.join(", ")}]` : columns[0];
-  }
-
-  const cols = `(${columns.join(", ")})`;
-  return parts.length > 0 ? `${cols} [${parts.join(", ")}]` : cols;
 }

@@ -79,21 +79,22 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
 
   // Handle auto timestamps
   if (isAutoCreateTime(program, prop) || isAutoUpdateTime(program, prop)) {
-    // Add default for timestamps
     settings.default = "now()";
-    settings.notNull = true;
   }
 
-  // Soft delete is nullable
-  if (!isSoftDelete(program, prop)) {
-    settings.notNull = true;
-  }
-
-  // Check if optional (nullable)
+  // Determine nullability:
+  // - optional properties are nullable
+  // - soft-delete columns are nullable (deleted_at starts as NULL)
+  // - everything else is NOT NULL by default
   if (prop.optional) {
     settings.notNull = false;
     delete settings.pk;
     delete settings.increment;
+  } else if (isSoftDelete(program, prop)) {
+    // soft-delete columns (e.g. deleted_at) start as NULL
+    settings.notNull = false;
+  } else {
+    settings.notNull = true;
   }
 
   // Add documentation as note

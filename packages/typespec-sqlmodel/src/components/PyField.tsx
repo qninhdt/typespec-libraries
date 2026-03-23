@@ -47,6 +47,7 @@ import {
   getPythonTypeMap,
   promoteFieldArgsToColumn,
   serializeColumnKwargs,
+  resolveFormatPyType,
 } from "./PyConstants.js";
 
 /**
@@ -71,9 +72,8 @@ export function generateField(
   const columnName = getColumnName(program, prop);
   const pyFieldName = columnName;
 
-  // Check for array type - handle both "Array" kind and Model with indexer (newer TypeSpec)
-  const isArray = isArrayType(prop.type) || (prop.type.kind === "Model" && !!prop.type.indexer);
-  if (isArray) {
+  // Check for array type
+  if (isArrayType(prop.type)) {
     return generateArrayField(
       program,
       prop,
@@ -134,20 +134,20 @@ export function generateField(
   const autoCreate = isAutoCreateTime(program, prop);
   const autoUpdate = isAutoUpdateTime(program, prop);
 
-  // Format-based type overrides
+  // Format-based type overrides using shared helper
   const format = getFormat(program, prop);
-  if (format === "email") {
-    stdImports.add("pydantic.EmailStr");
-    pyType = "EmailStr";
-  } else if (format === "url" || format === "uri") {
-    stdImports.add("pydantic.AnyUrl");
-    pyType = "AnyUrl";
-  } else if (format !== undefined && format !== null && format !== "") {
-    reportDiagnostic(program, {
-      code: "unknown-format",
-      target: prop,
-      format: { format, propName: prop.name },
-    });
+  if (format) {
+    const formatType = resolveFormatPyType(format);
+    if (formatType) {
+      stdImports.add(`pydantic.${formatType}`);
+      pyType = formatType;
+    } else if (format !== "") {
+      reportDiagnostic(program, {
+        code: "unknown-format",
+        target: prop,
+        format: { format, propName: prop.name },
+      });
+    }
   }
 
   if (isOptional || isSoft) {
@@ -378,10 +378,7 @@ function generateArrayField(
   needsColumn: { value: boolean },
 ): string {
   // Handle both "Array" kind and Model with indexer (newer TypeSpec)
-  let elementType = getArrayElementType(prop.type);
-  if (!elementType && prop.type.kind === "Model" && prop.type.indexer) {
-    elementType = prop.type.indexer.value;
-  }
+  const elementType = getArrayElementType(prop.type);
 
   const elementDbType = elementType ? resolveDbType(elementType) : undefined;
   const elementPyType = elementDbType ? getPythonTypeMap(elementDbType).pyType : "Any";

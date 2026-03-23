@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { camelToSnake, camelToPascal } from "@qninhdt/typespec-orm";
+import { camelToSnake, camelToPascal, deriveTableName } from "@qninhdt/typespec-orm";
 
 describe("camelToSnake", () => {
   it("converts simple camelCase", () => {
@@ -43,5 +43,39 @@ describe("camelToPascal", () => {
 
   it("converts simple camelCase", () => {
     expect(camelToPascal("userName")).toBe("UserName");
+  });
+});
+
+describe("deriveTableName", () => {
+  it("pluralizes simple name", () => {
+    expect(deriveTableName("User")).toBe("users");
+  });
+
+  it("pluralizes PascalCase name", () => {
+    expect(deriveTableName("StoryNode")).toBe("story_nodes");
+  });
+
+  it("pluralizes -y with consonant before it to -ies", () => {
+    expect(deriveTableName("Category")).toBe("categories");
+  });
+
+  it("pluralizes -y with vowel before it by adding -s", () => {
+    expect(deriveTableName("Day")).toBe("days");
+  });
+
+  it("pluralizes -s ending by adding -es", () => {
+    expect(deriveTableName("Address")).toBe("addresses");
+  });
+
+  it("pluralizes -x ending by adding -es", () => {
+    expect(deriveTableName("Box")).toBe("boxes");
+  });
+
+  it("pluralizes -sh ending by adding -es", () => {
+    expect(deriveTableName("Wish")).toBe("wishes");
+  });
+
+  it("pluralizes -ch ending by adding -es", () => {
+    expect(deriveTableName("Match")).toBe("matches");
   });
 });

@@ -12,8 +12,8 @@ import {
   getCompositeFields,
   getDoc,
   classifyProperties,
-  isKey,
-  isUnique,
+  collectCompositeTypeFields,
+  buildCompositeUniqueColumns,
   camelToSnake,
 } from "@qninhdt/typespec-orm";
 import {
@@ -62,66 +62,24 @@ export function PyModelFile(props: PyModelFileProps): Children {
   }
 
   // Relation navigation properties
-  // Generate relation fields only - NO auto FK generation (everything must be explicit)
   for (const { prop, resolved } of relations) {
-    // Add Relationship import only if there are relations
     if (!sqlmodelImports.has("Relationship")) {
       sqlmodelImports.add("Relationship");
     }
     const { field, targetModel } = generateRelationField(program, prop, resolved);
     relationDefs.push(field);
-    // Add to TYPE_CHECKING imports for cross-model relations
-    // Also add self-referential models to TYPE_CHECKING for proper forward reference
-    if (targetModel !== model.name) {
-      relationTargetModels.add(targetModel);
-      stdImports.add("TYPE_CHECKING");
-    } else {
-      // Self-referential: need TYPE_CHECKING for forward reference
-      relationTargetModels.add(targetModel);
-      stdImports.add("TYPE_CHECKING");
-    }
+    // Add to TYPE_CHECKING imports for cross-model relations (including self-referential)
+    relationTargetModels.add(targetModel);
+    stdImports.add("TYPE_CHECKING");
   }
 
-  // Collect composite type fields from properties (composite<col1, col2>)
-  // This needs to be done BEFORE generating regular fields so we can skip unique=True for composite fields
-  const compositeTypeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
-      // Use snake_case for column names in the generated name
-      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
-      const snakeColumns = columns.map((c) => camelToSnake(c));
-      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
-      compositeTypeFields.push({
-        name: generatedName,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
-
-  // Build a map of column names that are part of composite unique
-  const compositeUniqueColumns = new Set<string>();
-  for (const ct of compositeTypeFields) {
-    if (ct.isUnique) {
-      for (const col of ct.columns) {
-        compositeUniqueColumns.add(camelToSnake(col));
-      }
-    }
-  }
+  // Collect composite type fields using shared helper
+  const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
+  const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
 
   // Build a map of FK column name -> targetTable for use in field generation
-  // Note: fkColumnName from relation is the TypeSpec property name, need to convert to DB column name
   const fkInfoMap = new Map<string, string>();
   for (const { resolved } of relations) {
-    // Convert the FK column name to snake_case (database column name)
     const dbColumnName = camelToSnake(resolved.fkColumnName);
     fkInfoMap.set(dbColumnName, resolved.targetTable);
   }
@@ -130,10 +88,8 @@ export function PyModelFile(props: PyModelFileProps): Children {
   for (const { prop } of regularProps) {
     // Skip composite type fields - they are configuration only
     if (getCompositeFields(program, prop)) continue;
-    // Skip unique=True for fields that are part of composite unique
     const columnName = getColumnName(program, prop);
     const isPartOfCompositeUnique = compositeUniqueColumns.has(columnName);
-    // Check if this field is a FK (used by any relation) - get target table name
     const targetTable = fkInfoMap.get(columnName);
     fieldDefs.push(
       generateField(
@@ -205,12 +161,10 @@ export function PyModelFile(props: PyModelFileProps): Children {
       // Convert camelCase column names to snake_case for SQL
       const cols = ct.columns.map((c) => `"${camelToSnake(c)}"`).join(", ");
       if (ct.isPrimary || ct.isUnique) {
-        // Primary or unique constraint
         tableArgEntries.push(
           `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${camelToSnake(ct.name)}")`,
         );
       } else {
-        // Regular index
         tableArgEntries.push(
           `${FOUR_SPACES}${FOUR_SPACES}Index("${camelToSnake(ct.name)}", ${cols})`,
         );

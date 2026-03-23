@@ -296,20 +296,20 @@ function unionBaseType(type: Union) {
 }
 
 function intrinsicBaseType(type: Type) {
-  // Only the base z.null(), z.never(), etc.
-  if (type.kind === "Intrinsic") {
-    switch (type.name) {
-      case "null":
-        return zodMemberExpr(callPart("null"));
-      case "never":
-        return zodMemberExpr(callPart("never"));
-      case "unknown":
-        return zodMemberExpr(callPart("unknown"));
-      case "void":
-        return zodMemberExpr(callPart("void"));
-      default:
-        return zodMemberExpr(callPart("any"));
-    }
+  if (type.kind !== "Intrinsic") {
+    return zodMemberExpr(callPart("any"));
   }
-  return zodMemberExpr(callPart("any"));
+
+  switch (type.name) {
+    case "null":
+      return zodMemberExpr(callPart("null"));
+    case "never":
+      return zodMemberExpr(callPart("never"));
+    case "unknown":
+      return zodMemberExpr(callPart("unknown"));
+    case "void":
+      return zodMemberExpr(callPart("void"));
+    default:
+      return zodMemberExpr(callPart("any"));
+  }
 }
