@@ -49,7 +49,7 @@ const INTEGER_TYPES = new Set([
 ]);
 
 /** Types that accept @softDelete / @autoCreateTime / @autoUpdateTime */
-const DATETIME_TYPES = new Set(["utcDateTime"]);
+const DATETIME_TYPES = new Set(["utcDateTime", "offsetDateTime"]);
 
 // ─── Public entry point ──────────────────────────────────────────────────────
 

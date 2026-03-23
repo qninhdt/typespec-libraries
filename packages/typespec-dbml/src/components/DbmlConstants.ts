@@ -2,7 +2,7 @@
  * DBML type mappings and constants.
  */
 
-import type { Program, Type, Scalar } from "@typespec/compiler";
+import type { Program, Type } from "@typespec/compiler";
 import { resolveDbType } from "@qninhdt/typespec-orm";
 
 /**
@@ -45,7 +45,7 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
       return DBML_TYPE_MAP[dbType];
     }
     // For custom scalars, try using the name
-    const scalarName = (type as Scalar).name;
+    const scalarName = type.name;
     if (scalarName) {
       return DBML_TYPE_MAP[scalarName];
     }

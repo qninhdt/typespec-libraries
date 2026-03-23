@@ -1,6 +1,6 @@
 {
   "name": "@qninhdt/typespec-dbml",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "description": "TypeSpec emitter that generates DBML (Database Markup Language) from schemas decorated with @qninhdt/typespec-orm.",
   "type": "module",
   "main": "dist/src/index.js",

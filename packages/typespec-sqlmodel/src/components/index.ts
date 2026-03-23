@@ -1,7 +1,3 @@
-/**
- * Re-exports all SQLModel code generation components and functions.
- */
-
 export {
   FILE_HEADER,
   FOUR_SPACES,

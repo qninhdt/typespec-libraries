@@ -6,7 +6,10 @@ export {
   GO_TYPE_MAP,
   GO_FORMAT_VALIDATORS,
   buildCompositeMap,
+  buildImportBlock,
+  buildDocComment,
   escapeFormTagValue,
+  escapeComment,
 } from "./GormConstants.js";
 export type { CompositeFieldTag } from "./GormConstants.js";
 

@@ -21,8 +21,8 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
   // Collect all @table models
   const tables = collectTableModels(program);
 
-  // Build the DBML content
-  let code = "// Database Schema\n\n";
+  // Build the DBML content using array for better performance
+  const codeParts: string[] = ["// Database Schema", ""];
 
   // Collect all enums used across all tables
   const allEnums = new Map<string, EnumMemberInfo[]>();
@@ -37,15 +37,14 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
 
   // Add enum definitions
   for (const [enumName, members] of allEnums) {
-    code += generateEnumDefinitions(new Map([[enumName, members]]))[0];
-    code += "\n\n";
+    codeParts.push(generateEnumDefinitions(new Map([[enumName, members]]))[0], "");
   }
 
   // Add table definitions and collect all references (deduplicated)
   const allRefs = new Set<string>();
   for (const { model, tableName } of tables) {
     const tableDef = DbmlTable({ program, model, tableName });
-    code += tableDef + "\n\n";
+    codeParts.push(tableDef, "");
 
     // Collect references - only many-to-one (FK is on this table)
     const { relations } = classifyProperties(program, model);
@@ -61,8 +60,10 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
 
   // Add references at the end (deduplicated)
   for (const ref of allRefs) {
-    code += ref + "\n";
+    codeParts.push(ref);
   }
+
+  const code = codeParts.join("\n");
 
   // Write single file
   const tree = (

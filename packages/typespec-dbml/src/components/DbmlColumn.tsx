@@ -1,5 +1,5 @@
 /**
- * DbmlColumn - Generate DBML column definitions.
+ * DbmlColumn - DBML column generation.
  */
 
 import type { ModelProperty, Program, Enum } from "@typespec/compiler";
@@ -18,9 +18,6 @@ import {
 } from "@qninhdt/typespec-orm";
 import { getDbmlType, formatColumnSettings, type ColumnSettings } from "./DbmlConstants.js";
 
-/**
- * Generate a DBML column definition line.
- */
 export function generateColumnLine(program: Program, prop: ModelProperty): string {
   // Skip ignored properties
   if (isIgnored(program, prop)) {

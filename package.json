@@ -1,6 +1,6 @@
 {
   "name": "typespec-libraries",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.31.0",
@@ -22,13 +22,15 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "compile-examples": "tsp compile examples/ --config tspconfig.yaml",
-    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm",
-    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel",
+    "compile-examples": "tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
+    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
+    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
+    "compile-examples:zod": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",
     "compile-examples:dbml": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-dbml",
-    "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel",
-    "format-examples:gorm": "gofmt -w outputs/go-gorm/",
-    "format-examples:sqlmodel": "ruff format outputs/python-sqlmodel/"
+    "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
+    "format-examples:gorm": "gofmt -w outputs/@qninhdt/typespec-gorm/",
+    "format-examples:sqlmodel": "ruff format outputs/@qninhdt/typespec-sqlmodel/",
+    "format-examples:zod": "prettier --write outputs/@qninhdt/typespec-zod/"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -44,6 +46,7 @@
     "@qninhdt/typespec-gorm": "workspace:*",
     "@qninhdt/typespec-orm": "workspace:*",
     "@qninhdt/typespec-sqlmodel": "workspace:*",
+    "@qninhdt/typespec-zod": "workspace:*",
     "@typespec/compiler": "latest"
   },
   "devDependencies": {

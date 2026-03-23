@@ -27,7 +27,6 @@ export interface DbmlTableProps {
 export function DbmlTable(props: DbmlTableProps): string {
   const { program, model, tableName } = props;
 
-  // Classify properties
   const { ignored, fields: regularProps } = classifyProperties(program, model);
 
   const lines: string[] = [];
@@ -69,7 +68,7 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Generate index definitions
+  // Generate index definitions for composite fields
   for (const ct of compositeFields) {
     const snakeColumns = ct.columns.map((c) => camelToSnake(c));
     if (ct.isPrimary) {
@@ -81,29 +80,17 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Add single-column indexes (skip composite type properties and enum properties)
+  // Add single-column indexes and unique constraints
   for (const { prop, enumInfo } of regularProps) {
-    // Skip if this property has composite type - it handles its own index
-    if (getCompositeFields(program, prop)) continue;
-    // Skip enum properties - they are added as columns, not as index references
-    if (enumInfo) continue;
+    // Skip composite type and enum properties
+    if (getCompositeFields(program, prop) || enumInfo) continue;
+
+    const colName = camelToSnake(getColumnName(program, prop));
 
     if (isIndex(program, prop) && !isUnique(program, prop)) {
-      const colName = getColumnName(program, prop);
-      indexes.push(`    ${camelToSnake(colName)}`);
-    }
-  }
-
-  // Add unique constraints (single column) - skip composite type and enum properties
-  for (const { prop, enumInfo } of regularProps) {
-    // Skip if this property has composite type - it handles its own index
-    if (getCompositeFields(program, prop)) continue;
-    // Skip enum properties
-    if (enumInfo) continue;
-
-    if (isUnique(program, prop) && !isKey(program, prop)) {
-      const colName = getColumnName(program, prop);
-      indexes.push(`    ${camelToSnake(colName)} [unique]`);
+      indexes.push(`    ${colName}`);
+    } else if (isUnique(program, prop) && !isKey(program, prop)) {
+      indexes.push(`    ${colName} [unique]`);
     }
   }
 

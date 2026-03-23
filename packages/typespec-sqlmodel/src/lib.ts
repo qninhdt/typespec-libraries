@@ -1,6 +1,10 @@
 import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface SqlModelEmitterOptions {
+  /** Whether to generate standalone Python package (default: false) */
+  standalone?: boolean;
+  /** Python package name for standalone package (required when standalone is true) */
+  "package-name"?: string;
   /** Python module name for generated files (default: "models") */
   "module-name"?: string;
 }
@@ -9,6 +13,8 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
   type: "object",
   additionalProperties: false,
   properties: {
+    standalone: { type: "boolean", nullable: true },
+    "package-name": { type: "string", nullable: true },
     "module-name": { type: "string", nullable: true },
   },
   required: [],
@@ -17,6 +23,12 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
 export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-sqlmodel",
   diagnostics: {
+    "standalone-requires-package-name": {
+      severity: "error",
+      messages: {
+        default: "standalone mode requires 'package-name' option",
+      },
+    },
     "unsupported-type": {
       severity: "warning",
       messages: {
