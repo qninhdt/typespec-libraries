@@ -84,6 +84,7 @@
     "@alloy-js/core": "latest",
     "@alloy-js/rollup-plugin": "latest",
     "@alloy-js/typescript": "latest",
+    "@qninhdt/typespec-orm": "workspace:*",
     "@typespec/compiler": "latest",
     "@typespec/emitter-framework": "latest",
     "@vitest/coverage-v8": "^3.2.4",
