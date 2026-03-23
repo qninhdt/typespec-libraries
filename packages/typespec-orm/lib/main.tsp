@@ -52,6 +52,12 @@ scalar composite<
 extern dec table(target: Model, name?: valueof string);
 
 /**
+ * Marks a model as a reusable table mixin. Mixins are validated and can be
+ * composed into tables, but are never emitted as standalone tables.
+ */
+extern dec tableMixin(target: Model);
+
+/**
  * Specifies the column name for a model property. By default, the column name is the same as the property name.
  */
 extern dec map(target: ModelProperty, columnName: valueof string);

@@ -28,6 +28,8 @@ emit:
 options:
   "@qninhdt/typespec-zod":
     output-dir: "./outputs/zod"
+    standalone: true
+    library-name: "@acme/schemas"
 ```
 
 ### Standalone mode
@@ -39,10 +41,10 @@ options:
   "@qninhdt/typespec-zod":
     output-dir: "./my-schemas"
     standalone: true
-    package-name: "my-schemas"
+    library-name: "my-schemas"
 ```
 
-This produces a `package.json`, `tsconfig.json`, and `src/models/` directory ready to publish.
+This produces a `package.json`, `tsconfig.json`, a namespace-first `src/` tree, and a root `index.ts` barrel ready to publish.
 
 ---
 
@@ -126,15 +128,16 @@ The emitter reads `@data` models and translates these decorators to Zod schema m
 
 ## Emitter Options
 
-| Option                       | Type      | Default         | Description                                     |
-| ---------------------------- | --------- | --------------- | ----------------------------------------------- |
-| `output-dir`                 | `string`  | `./outputs/zod` | Directory for generated `.ts` files             |
-| `standalone`                 | `boolean` | `false`         | Generate a complete npm package in output-dir   |
-| `package-name`               | `string`  | -               | Package name (required when `standalone: true`) |
-| `filename`                   | `string`  | `models`        | Filename prefix for generated schema files      |
-| `includeTemplateDeclaration` | `boolean` | `false`         | Include template type declarations              |
-| `useDiscriminatedUnions`     | `boolean` | `true`          | Use discriminated unions for union types        |
-| `emitDescriptions`           | `boolean` | `true`          | Include doc strings as Zod descriptions         |
+| Option                       | Type       | Default         | Description                                     |
+| ---------------------------- | ---------- | --------------- | ----------------------------------------------- |
+| `output-dir`                 | `string`   | `./outputs/zod` | Directory for generated `.ts` files             |
+| `standalone`                 | `boolean`  | `false`         | Generate a complete npm package in output-dir   |
+| `library-name`               | `string`   | -               | Package name (required when `standalone: true`) |
+| `include`                    | `string[]` | `[]`            | Namespace / model selectors to include          |
+| `exclude`                    | `string[]` | `[]`            | Namespace / model selectors to exclude          |
+| `includeTemplateDeclaration` | `boolean`  | `false`         | Include template type declarations              |
+| `useDiscriminatedUnions`     | `boolean`  | `true`          | Use discriminated unions for union types        |
+| `emitDescriptions`           | `boolean`  | `true`          | Include doc strings as Zod descriptions         |
 
 ---
 
@@ -142,7 +145,7 @@ The emitter reads `@data` models and translates these decorators to Zod schema m
 
 | Code                               | Severity | Condition                                 |
 | ---------------------------------- | -------- | ----------------------------------------- |
-| `standalone-requires-package-name` | error    | `standalone: true` without `package-name` |
+| `standalone-requires-library-name` | error    | `standalone: true` without `library-name` |
 
 ---
 

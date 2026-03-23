@@ -1,6 +1,7 @@
 import type { DecoratorContext, Model, ModelProperty, Scalar } from "@typespec/compiler";
 import {
   TableKey,
+  TableMixinKey,
   MapKey,
   IndexKey,
   UniqueKey,
@@ -24,6 +25,10 @@ import {
 
 export function $table(context: DecoratorContext, target: Model, name?: string): void {
   context.program.stateMap(TableKey).set(target, name ?? "");
+}
+
+export function $tableMixin(context: DecoratorContext, target: Model): void {
+  context.program.stateMap(TableMixinKey).set(target, true);
 }
 
 // ─── @map ────────────────────────────────────────────────────────────────────

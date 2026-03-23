@@ -18,7 +18,7 @@ export function generateRelationField(
   program: Program,
   prop: ModelProperty,
   rel: ResolvedRelation,
-): { field: string; targetModel: string } {
+): { field: string; targetModel: Model } {
   const pyFieldName = camelToSnake(prop.name);
   const targetModelName = rel.targetModel.name;
   const pyRefType = targetModelName;
@@ -58,7 +58,7 @@ export function generateRelationField(
     // Use string quotes for forward reference in type annotation
     return {
       field: `${docComment}${FOUR_SPACES}${pyFieldName}: "${pyType}" = Relationship(${relArgs.join(", ")})\n`,
-      targetModel: targetModelName,
+      targetModel: rel.targetModel,
     };
   }
 
@@ -77,5 +77,5 @@ export function generateRelationField(
   }
 
   const field = `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Relationship(${relArgs.join(", ")})\n`;
-  return { field, targetModel: targetModelName };
+  return { field, targetModel: rel.targetModel };
 }

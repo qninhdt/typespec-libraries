@@ -98,19 +98,31 @@ export function buildDocComment(doc: string | undefined): string {
   return doc ? `\t// ${doc}\n` : "";
 }
 
+export interface GoPackageImport {
+  alias: string;
+  path: string;
+}
+
 /**
  * Build Go import block from a set of import paths.
  */
-export function buildImportBlock(imports: Set<string>): string {
+export function buildImportBlock(
+  imports: Set<string>,
+  packageImports: GoPackageImport[] = [],
+): string {
   const sorted = [...imports].sort();
-  if (sorted.length === 0) return "";
+  if (sorted.length === 0 && packageImports.length === 0) return "";
   const stdImports = sorted.filter((i) => !i.includes("."));
   const extImports = sorted.filter((i) => i.includes("."));
   const parts: string[] = [];
   parts.push("import (");
   for (const imp of stdImports) parts.push(`\t"${imp}"`);
-  if (stdImports.length > 0 && extImports.length > 0) parts.push("");
+  if (stdImports.length > 0 && (extImports.length > 0 || packageImports.length > 0)) parts.push("");
   for (const imp of extImports) parts.push(`\t"${imp}"`);
+  if (extImports.length > 0 && packageImports.length > 0) parts.push("");
+  for (const imp of packageImports.sort((a, b) => a.alias.localeCompare(b.alias))) {
+    parts.push(`\t${imp.alias} "${imp.path}"`);
+  }
   parts.push(")");
   return parts.join("\n") + "\n";
 }

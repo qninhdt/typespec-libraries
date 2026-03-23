@@ -31,15 +31,26 @@ pnpm add -D @qninhdt/typespec-orm @qninhdt/typespec-gorm @qninhdt/typespec-sqlmo
 emit:
   - "@qninhdt/typespec-gorm"
   - "@qninhdt/typespec-sqlmodel"
+  - "@qninhdt/typespec-zod"
   - "@qninhdt/typespec-dbml"
 options:
   "@qninhdt/typespec-gorm":
-    package-name: "models"
+    output-dir: "./outputs/gorm"
+    library-name: "github.com/acme/demo"
   "@qninhdt/typespec-sqlmodel":
-    module-name: "models"
+    output-dir: "./outputs/sqlmodel"
+    standalone: true
+    library-name: "demo"
+  "@qninhdt/typespec-zod":
+    output-dir: "./outputs/zod"
+    standalone: true
+    library-name: "@acme/demo"
   "@qninhdt/typespec-dbml":
+    output-dir: "./outputs/dbml"
     filename: "schema"
 ```
+
+All ORM-managed declarations emitted in phase 1 must live inside a non-empty namespace. Namespace segments determine output folders and package boundaries.
 
 ---
 
@@ -179,6 +190,20 @@ class Post(SQLModel, table=True):
 ```
 
 ---
+
+## Support Matrix
+
+| Feature                          | ORM | GORM | SQLModel | DBML    | Zod |
+| -------------------------------- | --- | ---- | -------- | ------- | --- |
+| `@table`                         | yes | yes  | yes      | yes     | n/a |
+| `@data`                          | yes | yes  | yes      | n/a     | yes |
+| Namespace-based folders          | yes | yes  | yes      | partial | yes |
+| Config include/exclude filtering | yes | yes  | yes      | yes     | yes |
+| Dependency filter diagnostics    | yes | yes  | yes      | yes     | yes |
+| `@tableMixin`                    | yes | yes  | yes      | yes     | n/a |
+| Standalone packaging             | n/a | yes  | yes      | n/a     | yes |
+
+Generated output is namespace-first in phase 1: namespaces determine folders and package boundaries, and root-level ORM models are rejected.
 
 ## Relations
 

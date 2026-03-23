@@ -7,6 +7,7 @@
 
 import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import { reportDiagnostic, MapKey } from "./lib.js";
+import { normalizeOrmGraph } from "./normalization.js";
 import {
   isTable,
   getColumnName,
@@ -66,6 +67,9 @@ export function $onValidate(program: Program): void {
 
   // 3. @onDelete/@onUpdate on non-relation scalar props
   validateCascadeOnScalar(program, tableModels);
+
+  // 4. Namespace, mixin, and dependency-shape validations shared with emitters
+  normalizeOrmGraph(program);
 }
 
 // ─── Duplicate table name check ──────────────────────────────────────────────

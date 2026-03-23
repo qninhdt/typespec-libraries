@@ -11,7 +11,7 @@ import {
 } from "@typespec/compiler/testing";
 import { TypeSpecOrmTestLibrary } from "@qninhdt/typespec-orm/testing";
 import { TypeSpecSqlModelTestLibrary } from "../src/testing/index.js";
-import { collectTableModels, collectDataModels, camelToSnake } from "@qninhdt/typespec-orm";
+import { camelToSnake, normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
 import { PyModelFile } from "../src/components/PyModel.jsx";
 import { PyDataFile } from "../src/components/PyDataModel.jsx";
 import { generateInit } from "../src/components/PyConstants.js";
@@ -26,14 +26,16 @@ export async function createTestHost() {
 export async function createTestRunner() {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
   });
 }
 
 export async function createEmitterTestRunner(emitterOptions?: Record<string, unknown>) {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
     compilerOptions: {
       emit: ["@qninhdt/typespec-sqlmodel"],
       options: {
@@ -88,32 +90,45 @@ export async function emitPyFile(
   ).toHaveLength(0);
 
   const program = runner.program;
-  const tables = collectTableModels(program);
-  const dataModels = collectDataModels(program);
+  const graph = normalizeOrmGraph(program);
+  const selection = selectModelsForEmitter(program, graph, {
+    kinds: ["table", "data"],
+  });
+  const tables = selection.models.filter((model) => model.kind === "table");
+  const dataModels = selection.models.filter((model) => model.kind === "data");
+  const namespaceGroups = [...selection.byNamespace.values()];
 
   const allModelNames: string[] = [];
   const moduleFiles: string[] = [];
-  for (const { model } of tables) {
-    allModelNames.push(model.name);
-    moduleFiles.push(camelToSnake(model.name));
+  for (const model of tables) {
+    allModelNames.push(model.model.name);
+    moduleFiles.push(camelToSnake(model.model.name));
   }
-  for (const { model } of dataModels) {
-    allModelNames.push(model.name);
-    moduleFiles.push(camelToSnake(model.name));
+  for (const model of dataModels) {
+    allModelNames.push(model.model.name);
+    moduleFiles.push(camelToSnake(model.model.name));
   }
   const initContent = generateInit(allModelNames, moduleFiles, moduleName);
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.map(({ model, tableName }) => (
-        <PyModelFile program={program} model={model} tableName={tableName} />
+      {namespaceGroups.map((models) => (
+        <SourceDirectory path={models[0].namespaceDir}>
+          {models
+            .filter((model) => model.kind === "table")
+            .map((model) => (
+              <PyModelFile program={program} normalizedModel={model} modelLookup={graph.byModel} />
+            ))}
+          {models
+            .filter((model) => model.kind === "data")
+            .map((model) => (
+              <PyDataFile program={program} model={model.model} label={model.label ?? model.name} />
+            ))}
+          <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
+            {initContent}
+          </SourceFile>
+        </SourceDirectory>
       ))}
-      {dataModels.map(({ model, label }) => (
-        <PyDataFile program={program} model={model} label={label} />
-      ))}
-      <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
-        {initContent}
-      </SourceFile>
     </SourceDirectory>
   );
 

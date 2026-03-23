@@ -206,9 +206,11 @@ export function getZodOptions(program: any): ZodEmitterOptions {
 }
 
 export const defaultZodOptions: ZodEmitterOptions = {
+  "output-dir": undefined,
   standalone: false,
-  "package-name": undefined,
-  filename: "models",
+  "library-name": undefined,
+  include: undefined,
+  exclude: undefined,
   includeTemplateDeclaration: false,
   useDiscriminatedUnions: true,
   emitDescriptions: true,

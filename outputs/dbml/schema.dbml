@@ -1,0 +1,242 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Accounts
+
+Enum SubscriptionPlan {
+  free
+  basic
+  premium
+  enterprise
+}
+
+Enum UserRole {
+  player
+  moderator
+  admin
+}
+
+Table subscriptions {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  plan SubscriptionPlan [note: 'Selected plan tier.']
+  monthly_price decimal(10, 2) [not null, note: 'Monthly price stored as NUMERIC(10,2) to avoid floating-point drift.']
+  start_date timestamp [not null, note: 'Start date of the billing period.']
+  end_date timestamp [note: 'Optional end date - null means the subscription is open-ended.']
+  is_active boolean [not null, note: 'Fast boolean used by feature gates and entitlement checks.']
+  user_id uuid [not null]
+
+  indexes {
+    (user_id, is_active)
+  }
+}
+
+Table users {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  email varchar(320) [not null, note: 'Email address used for login and invitations. Other namespaces reference this via lookup types.']
+  password_hash varchar(255) [not null, note: 'Hashed password - never expose or store plain text credentials.']
+  display_name varchar(100) [not null, note: 'Display name shown throughout the UI.']
+  avatar_url varchar(512) [note: 'Public avatar URL rendered in lists and profile cards.']
+  preferred_locale varchar(16) [note: 'Optional locale preference for formatting and localization.']
+  credits integer [not null, note: 'Entitlement credits or consumable balance.']
+  role UserRole [note: 'Role used by moderation features and internal tooling.']
+  is_active boolean [not null, note: 'Whether the account is currently active.']
+  // Example of a computed UI field excluded from persistence.
+
+  indexes {
+    (email, deleted_at) [unique]
+    email [unique]
+  }
+}
+
+// Namespace: Demo.GamePlatform.Audit
+
+Table audit_logs {
+  id bigserial [pk, increment, not null, note: 'Auto-incrementing surrogate key for stable ordering.']
+  entity_type varchar(100) [not null, note: 'Logical type of the changed entity, e.g. World or StoryNode.']
+  entity_id uuid [not null, note: 'Primary key of the changed entity.']
+  action varchar(50) [not null, note: 'Action performed: create, update, or delete.']
+  diff jsonb [note: 'Optional JSON snapshot or diff.']
+  actor_id uuid [note: 'Nullable so audit history survives account deletion.']
+  created_at timestamp [not null, default: 'now()']
+
+  indexes {
+    (entity_type, entity_id)
+    (actor_id, created_at)
+    entity_type
+  }
+}
+
+// Namespace: Demo.GamePlatform.Collaboration.Invites
+
+Enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
+Table world_invitations {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  invitee_email varchar(320) [not null, note: 'Email of the invitee - inherits validators from Accounts.User.email.']
+  redeem_code varchar(64) [not null, note: 'Unique redeem code sent through email or copied in the UI.']
+  status InvitationStatus [note: 'Current lifecycle state for the invitation.']
+  message text [note: 'Optional personal note from the inviter.']
+  expires_at timestamp [note: 'When the invitation expires, if at all.']
+  accepted_at timestamp [note: 'When the invitation was accepted by the recipient.']
+  inviter_id uuid [not null]
+  world_id uuid [not null]
+
+  indexes {
+    (inviter_id, status)
+    redeem_code [unique]
+  }
+}
+
+// Namespace: Demo.GamePlatform.Content.Characters
+
+Table npcs {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  name varchar(200) [not null, note: 'Name of the NPC - indexed for lookup.']
+  description text [not null, note: 'Narrative description used in AI generation.']
+  traits jsonb [note: 'Optional structured traits used during prompt assembly.']
+
+  indexes {
+    (world_id, name)
+    world_id
+    name
+  }
+}
+
+// Namespace: Demo.GamePlatform.Content.Events
+
+Table game_events {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  name varchar(200) [not null, note: 'Name of the event - indexed for lookup.']
+  description text [not null, note: 'Narrative description used in AI generation.']
+  conditions jsonb [note: 'Predicate expression evaluated at runtime.']
+  effects jsonb [note: 'Mutations applied when the event fires.']
+
+  indexes {
+    world_id
+    name
+  }
+}
+
+// Namespace: Demo.GamePlatform.Content.Places
+
+Table locations {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  name varchar(200) [not null, note: 'Name of the location - indexed for lookup.']
+  description text [not null, note: 'Narrative description used in AI generation.']
+  coordinates jsonb [note: 'Bounding box or point stored as GeoJSON.']
+
+  indexes {
+    world_id
+    name
+  }
+}
+
+// Namespace: Demo.GamePlatform.Content.Stories
+
+Table story_nodes {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  depth integer [not null, note: 'Depth of this node in the story tree - root is 0.']
+  pool jsonb [not null, note: 'Content pool inherited from all ancestors.']
+  new_content jsonb [not null, note: 'Content introduced by this specific node.']
+  child_ids jsonb [not null, note: 'IDs of lazily-expanded child nodes.']
+  parent_id uuid
+
+  indexes {
+    (world_id, depth)
+    world_id
+    depth
+  }
+}
+
+// Namespace: Demo.GamePlatform.Content.Taxonomy
+
+Table tags {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  name varchar(100) [not null, note: 'Tag name - unique within a world.']
+  category varchar(50) [not null, note: 'Category used to group related tags.']
+
+  indexes {
+    (world_id, name) [unique]
+    world_id
+    category
+  }
+}
+
+// Namespace: Demo.GamePlatform.Worlds
+
+Enum WorldVisibility {
+  private
+  unlisted
+  public
+}
+
+Enum SafetyRating {
+  general
+  teen
+  mature
+}
+
+Table worlds {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  name varchar(200) [not null, note: 'Display name of the world. Referenced by forms and collaboration models through lookup types.']
+  prompt text [not null, note: 'System prompt used to guide AI generation within the world.']
+  visibility WorldVisibility [note: 'Who can discover and join this world.']
+  safety_rating SafetyRating [note: 'Content safety classification for moderation and parental controls.']
+  settings jsonb [note: 'Optional JSON settings payload for custom generation behavior.']
+  owner_id uuid [not null]
+
+  indexes {
+    (owner_id, created_at)
+    (visibility, deleted_at)
+    name
+    owner_id
+  }
+}
+
+Ref: subscriptions.user_id > users.id
+Ref: audit_logs.actor_id > users.id
+Ref: world_invitations.inviter_id > users.id
+Ref: world_invitations.world_id > worlds.id
+Ref: npcs.world_id > worlds.id
+Ref: game_events.world_id > worlds.id
+Ref: locations.world_id > worlds.id
+Ref: story_nodes.world_id > worlds.id
+Ref: story_nodes.parent_id > story_nodes.id
+Ref: tags.world_id > worlds.id
+Ref: worlds.owner_id > users.id

@@ -8,6 +8,7 @@ import type {
   EnumMember,
   Model,
   ModelProperty,
+  Namespace,
   Program,
   Scalar,
   Type,
@@ -28,6 +29,7 @@ import {
 } from "@typespec/compiler";
 import {
   TableKey,
+  TableMixinKey,
   MapKey,
   IndexKey,
   UniqueKey,
@@ -53,10 +55,47 @@ export function isTable(program: Program, model: Model): boolean {
   return program.stateMap(TableKey).has(model);
 }
 
+export function isTableMixin(program: Program, model: Model): boolean {
+  return program.stateMap(TableMixinKey).has(model);
+}
+
 export function getTableName(program: Program, model: Model): string {
   const stored = program.stateMap(TableKey).get(model) as string | undefined;
   if (stored) return stored;
   return deriveTableName(model.name);
+}
+
+export function getNamespaceSegments(
+  namespace: Namespace | undefined,
+  globalNamespace?: Namespace,
+): string[] {
+  const segments: string[] = [];
+  let current = namespace;
+  while (current) {
+    if (globalNamespace && current === globalNamespace) break;
+    if (current.name !== "") {
+      segments.push(current.name);
+    }
+    current = current.namespace;
+  }
+  return segments.reverse();
+}
+
+export function getNamespaceFullName(
+  namespace: Namespace | undefined,
+  globalNamespace?: Namespace,
+): string | undefined {
+  const segments = getNamespaceSegments(namespace, globalNamespace);
+  return segments.length > 0 ? segments.join(".") : undefined;
+}
+
+export function getTypeFullName(
+  program: Program,
+  type: { name?: string; namespace?: Namespace },
+): string {
+  if (!type.name) return "";
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  return namespace ? `${namespace}.${type.name}` : type.name;
 }
 
 // ─── Property helpers ────────────────────────────────────────────────────────
@@ -765,4 +804,15 @@ export function collectTableModels(program: Program): TableModel[] {
   }
   tables.sort((a, b) => a.tableName.localeCompare(b.tableName));
   return tables;
+}
+
+export function collectTableMixins(program: Program): Model[] {
+  const mixins: Model[] = [];
+  for (const [type] of program.stateMap(TableMixinKey)) {
+    if (type.kind === "Model") {
+      mixins.push(type as Model);
+    }
+  }
+  mixins.sort((a, b) => getTypeFullName(program, a).localeCompare(getTypeFullName(program, b)));
+  return mixins;
 }

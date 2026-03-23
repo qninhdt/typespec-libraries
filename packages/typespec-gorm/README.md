@@ -28,8 +28,11 @@ emit:
 options:
   "@qninhdt/typespec-gorm":
     output-dir: "./outputs/gorm"
-    package-name: "models" # Go package name (default: "models")
+    standalone: true
+    library-name: "github.com/acme/demo"
 ```
+
+Namespaces now determine folders and Go package boundaries. Root-level ORM models are rejected.
 
 ---
 
@@ -365,10 +368,13 @@ type CreateInvitationForm struct {
 
 ## Emitter Options
 
-| Option         | Type     | Default          | Description                         |
-| -------------- | -------- | ---------------- | ----------------------------------- |
-| `output-dir`   | `string` | `./outputs/gorm` | Directory for generated `.go` files |
-| `package-name` | `string` | `"models"`       | Go package declaration in each file |
+| Option         | Type       | Default          | Description                                           |
+| -------------- | ---------- | ---------------- | ----------------------------------------------------- |
+| `output-dir`   | `string`   | `./outputs/gorm` | Directory for generated `.go` files                   |
+| `standalone`   | `boolean`  | `false`          | Generate a self-contained Go module                   |
+| `library-name` | `string`   | -                | Go module path used for standalone output and imports |
+| `include`      | `string[]` | `[]`             | Namespace / model selectors to include                |
+| `exclude`      | `string[]` | `[]`             | Namespace / model selectors to exclude                |
 
 ---
 

@@ -38,6 +38,10 @@ export const DBML_TYPE_MAP: Record<string, string> = {
  * Get DBML type for a TypeSpec type.
  */
 export function getDbmlType(program: Program, type: Type): string | undefined {
+  if (type.kind === "ModelProperty") {
+    return getDbmlType(program, type.type);
+  }
+
   // Handle scalar types
   if (type.kind === "Scalar") {
     const dbType = resolveDbType(type);

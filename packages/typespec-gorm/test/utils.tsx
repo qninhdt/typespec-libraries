@@ -10,7 +10,7 @@ import {
 } from "@typespec/compiler/testing";
 import { TypeSpecOrmTestLibrary } from "@qninhdt/typespec-orm/testing";
 import { TypeSpecGormTestLibrary } from "../src/testing/index.js";
-import { collectTableModels, collectDataModels } from "@qninhdt/typespec-orm";
+import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
 import { GormModelFile } from "../src/components/GormStruct.jsx";
 import { GormDataFile } from "../src/components/GormDataStruct.jsx";
 import { expect } from "vitest";
@@ -24,14 +24,16 @@ export async function createTestHost() {
 export async function createTestRunner() {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
   });
 }
 
 export async function createEmitterTestRunner(emitterOptions?: Record<string, unknown>) {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
     compilerOptions: {
       emit: ["@qninhdt/typespec-gorm"],
       options: {
@@ -65,7 +67,7 @@ function findOutputFile(dir: OutputDirectory, fileName: string): ContentOutputFi
 export async function emitGoFile(
   code: string,
   fileName: string,
-  packageName = "models",
+  packageName = "test",
 ): Promise<string> {
   const runner = await createTestRunner();
   await runner.compile(code);
@@ -77,21 +79,37 @@ export async function emitGoFile(
   ).toHaveLength(0);
 
   const program = runner.program;
-  const tables = collectTableModels(program);
-  const dataModels = collectDataModels(program);
+  const graph = normalizeOrmGraph(program);
+  const selection = selectModelsForEmitter(program, graph, {
+    kinds: ["table", "data"],
+  });
+  const namespaceGroups = [...selection.byNamespace.values()];
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.map(({ model, tableName }) => (
-        <GormModelFile
-          program={program}
-          model={model}
-          tableName={tableName}
-          packageName={packageName}
-        />
-      ))}
-      {dataModels.map(({ model, label }) => (
-        <GormDataFile program={program} model={model} label={label} packageName={packageName} />
+      {namespaceGroups.map((models) => (
+        <SourceDirectory path={models[0].namespaceDir}>
+          {models
+            .filter((model) => model.kind === "table")
+            .map((model) => (
+              <GormModelFile
+                program={program}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                libraryName="github.com/test/library"
+              />
+            ))}
+          {models
+            .filter((model) => model.kind === "data")
+            .map((model) => (
+              <GormDataFile
+                program={program}
+                model={model.model}
+                label={model.label ?? model.name}
+                packageName={packageName}
+              />
+            ))}
+        </SourceDirectory>
       ))}
     </SourceDirectory>
   );

@@ -13,7 +13,7 @@ export interface ZodModelFileProps {
   program: Program;
   model: Model;
   label: string;
-  modelsFolder?: boolean;
+  path?: string;
 }
 
 /**
@@ -26,13 +26,13 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
   const name = props.model.name!;
   const pascalName = toPascalCase(name);
   const schemaName = pascalName + "Schema";
-
-  const filePath = props.modelsFolder ? `../models/${name}.ts` : `${name}.ts`;
+  const filePath = props.path ?? `${name}.ts`;
 
   return (
     <SourceFile path={filePath}>
       {`// ${generatedHeader}\n`}
       <ZodSchemaDeclaration type={props.model} name={schemaName} export />
+      {`\nexport type ${pascalName} = z.infer<typeof ${schemaName}>;\n`}
     </SourceFile>
   );
 }

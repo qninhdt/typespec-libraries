@@ -29,6 +29,42 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Column "${"columnName"}" is produced by both "${"prop1"}" and "${"prop2"}". Use @map to distinguish them.`,
       },
     },
+    "namespace-required": {
+      severity: "error",
+      messages: {
+        default: paramMessage`${"kind"} "${"typeName"}" must be declared inside a namespace.`,
+      },
+    },
+    "mixin-cycle": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@tableMixin "${"typeName"}" forms a cycle through "${"chain"}".`,
+      },
+    },
+    "mixin-field-conflict": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Field "${"fieldName"}" from "${"incomingSource"}" conflicts with "${"existingSource"}" while composing "${"typeName"}".`,
+      },
+    },
+    "filtered-dependency": {
+      severity: "error",
+      messages: {
+        default: paramMessage`${"typeName"}" depends on filtered-out ${"dependencyKind"} "${"dependencyName"}".`,
+      },
+    },
+    "unsupported-relation-shape": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Property "${"propName"}" on "${"typeName"}" uses relation-like model type "${"targetName"}" without a supported relation shape.`,
+      },
+    },
+    "unsupported-persistence-type": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Type "${"typeName"}" on property "${"propName"}" is not supported by this emitter.`,
+      },
+    },
     "composite-column-not-found": {
       severity: "error",
       messages: {
@@ -140,9 +176,22 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Column "${"columnName"}" is listed multiple times in @${"decorator"}("${"constraintName"}").`,
       },
     },
+    "filter-selector-conflict": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Selector "${"selector"}" appears in both include and exclude. Exclude wins.`,
+      },
+    },
+    "filter-selector-redundant": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Selector "${"selector"}" is redundant because "${"coveredBy"}" already covers it.`,
+      },
+    },
   },
   state: {
     table: { description: "Maps Model → table name" },
+    tableMixin: { description: "Marks Model as reusable table mixin" },
     id: { description: "Marks ModelProperty as primary key" },
     map: { description: "Maps ModelProperty → column name" },
     index: { description: "Maps ModelProperty → index name" },
@@ -185,6 +234,7 @@ export const { reportDiagnostic } = $lib;
 // Typed symbol keys for program.stateMap() / program.stateSet() access.
 
 export const TableKey = $lib.stateKeys.table;
+export const TableMixinKey = $lib.stateKeys.tableMixin;
 export const MapKey = $lib.stateKeys.map;
 export const IndexKey = $lib.stateKeys.index;
 export const UniqueKey = $lib.stateKeys.unique;

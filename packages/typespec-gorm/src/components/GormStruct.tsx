@@ -21,31 +21,36 @@ import {
   camelToSnake,
   resolveDbType,
   generatedHeader,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import {
   GO_TYPE_MAP,
   buildCompositeMap,
   buildImportBlock,
   buildGoEnumBlock,
+  type GoPackageImport,
 } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
 import { generateRelationFieldLine } from "./GormRelationField.jsx";
 
 export interface GormModelFileProps {
   readonly program: Program;
-  readonly model: Model;
-  readonly tableName: string;
-  readonly packageName: string;
+  readonly normalizedModel: NormalizedOrmModel;
+  readonly modelLookup: Map<Model, NormalizedOrmModel>;
+  readonly libraryName?: string;
 }
 
 /**
  * JSX component: renders a complete Go source file for a GORM model.
  */
 export function GormModelFile(props: GormModelFileProps): Children {
-  const { program, model, tableName, packageName } = props;
+  const { program, normalizedModel, modelLookup, libraryName } = props;
+  const { model, packageName } = normalizedModel;
+  const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".go";
 
   const imports = new Set<string>();
+  const packageImports = new Map<string, GoPackageImport>();
 
   // Collect composite type fields and build composite map
   const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
@@ -95,14 +100,24 @@ export function GormModelFile(props: GormModelFileProps): Children {
 
   // Relation navigation fields
   for (const { prop, resolved } of relations) {
-    relationFieldLines.push(generateRelationFieldLine(program, prop, resolved));
+    let targetType = resolved.targetModel.name;
+    const targetInfo = modelLookup.get(resolved.targetModel);
+    if (targetInfo && targetInfo.namespace !== normalizedModel.namespace) {
+      const alias = targetInfo.namespacePath.join("_");
+      packageImports.set(alias, {
+        alias,
+        path: libraryName ? `${libraryName}/${targetInfo.namespaceDir}` : targetInfo.namespaceDir,
+      });
+      targetType = `${alias}.${resolved.targetModel.name}`;
+    }
+    relationFieldLines.push(generateRelationFieldLine(program, prop, resolved, targetType));
   }
 
   // Build enum block
   const enumLines = buildGoEnumBlock(enumTypes);
 
   // Build import block
-  const importBlock = buildImportBlock(imports);
+  const importBlock = buildImportBlock(imports, [...packageImports.values()]);
 
   // Assembly
   const structName = model.name;

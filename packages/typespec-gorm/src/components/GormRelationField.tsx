@@ -25,6 +25,7 @@ export function generateRelationFieldLine(
   program: Program,
   prop: ModelProperty,
   rel: ResolvedRelation,
+  targetType: string,
 ): string {
   const fieldName = camelToPascal(prop.name);
   const doc = getDoc(program, prop);
@@ -32,8 +33,6 @@ export function generateRelationFieldLine(
 
   // Determine Go type based on relation kind
   const isMany = rel.kind === "one-to-many" || rel.kind === "many-to-many";
-  const targetType = rel.targetModel.name;
-
   let goType: string;
   if (isMany) {
     goType = `[]${targetType}`;

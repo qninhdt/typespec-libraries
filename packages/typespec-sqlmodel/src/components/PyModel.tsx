@@ -15,6 +15,7 @@ import {
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
   camelToSnake,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import {
   FILE_HEADER,
@@ -27,15 +28,17 @@ import { generateRelationField } from "./PyRelationField.jsx";
 
 export interface PyModelFileProps {
   readonly program: Program;
-  readonly model: Model;
-  readonly tableName: string;
+  readonly normalizedModel: NormalizedOrmModel;
+  readonly modelLookup: Map<Model, NormalizedOrmModel>;
 }
 
 /**
  * JSX component: renders a complete Python source file for a SQLModel class.
  */
 export function PyModelFile(props: PyModelFileProps): Children {
-  const { program, model, tableName } = props;
+  const { program, normalizedModel, modelLookup } = props;
+  const { model } = normalizedModel;
+  const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".py";
 
   const stdImports = new Set<string>();
@@ -54,7 +57,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
 
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
-  const relationTargetModels = new Set<string>();
+  const relationTargetModels = new Set<Model>();
 
   // Ignored fields → ClassVar
   for (const { prop, enumInfo } of ignored) {
@@ -135,8 +138,12 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // TYPE_CHECKING block for relation imports (avoids circular dependency)
   if (relationTargetModels.size > 0) {
     code += "\nif TYPE_CHECKING:\n";
-    for (const targetModel of [...relationTargetModels].sort()) {
-      code += `    from .${camelToSnake(targetModel)} import ${targetModel}\n`;
+    for (const targetModel of [...relationTargetModels].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const targetInfo = modelLookup.get(targetModel);
+      if (!targetInfo) continue;
+      code += `    from ${toPythonRelativeImport(normalizedModel.namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
     }
   }
 
@@ -193,4 +200,23 @@ export function PyModelFile(props: PyModelFileProps): Children {
       {code}
     </SourceFile>
   );
+}
+
+function toPythonRelativeImport(
+  fromSegments: string[],
+  toSegments: string[],
+  moduleName: string,
+): string {
+  let common = 0;
+  while (
+    common < fromSegments.length &&
+    common < toSegments.length &&
+    fromSegments[common] === toSegments[common]
+  ) {
+    common++;
+  }
+
+  const up = fromSegments.length - common;
+  const down = toSegments.slice(common);
+  return `${".".repeat(up + 1)}${[...down, moduleName].join(".")}`;
 }

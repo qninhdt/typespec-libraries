@@ -1,49 +1,45 @@
 /**
- * Main Zod emitter - generates Zod schemas from TypeSpec types.
+ * Main Zod emitter - generates namespace-grouped Zod schemas from TypeSpec data models.
  */
 
 import { render, writeOutput, SourceDirectory, SourceFile } from "@alloy-js/core";
 import type { EmitContext } from "@typespec/compiler";
 import { Output } from "@typespec/emitter-framework";
-import { collectDataModels } from "@qninhdt/typespec-orm";
+import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
 import { zod } from "./external-packages/zod.js";
 import { ZodModelFile } from "./components/ZodModelFile.js";
-import { toPascalCase } from "./utils.js";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
-import type { ZodEmitterOptions } from "./lib.js";
+import { reportDiagnostic, type ZodEmitterOptions } from "./lib.js";
 
 export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
-  const outputDir = context.emitterOutputDir;
   const options = context.options;
+  const outputDir = options["output-dir"] ?? context.emitterOutputDir;
   const isStandalone = options.standalone ?? false;
-  const packageName = options["package-name"];
+  const libraryName = options["library-name"];
 
-  // Validate standalone options
-  if (isStandalone && !packageName) {
-    context.program.reportDiagnostics([
-      {
-        code: "standalone-requires-package-name",
-        severity: "error",
-        message: "standalone mode requires 'package-name' option",
-        target: context.program.getGlobalNamespaceType(),
-      },
-    ]);
+  if (isStandalone && !libraryName) {
+    reportDiagnostic(context.program, {
+      code: "standalone-requires-library-name",
+      target: context.program.getGlobalNamespaceType(),
+    });
     return;
   }
 
-  // Collect data models (models decorated with @data)
-  const dataModels = collectDataModels(context.program);
+  const graph = normalizeOrmGraph(context.program);
+  const selection = selectModelsForEmitter(context.program, graph, {
+    include: options.include,
+    exclude: options.exclude,
+    kinds: ["data"],
+  });
 
-  if (dataModels.length === 0) {
+  if (selection.models.length === 0) {
     return;
   }
 
-  // Determine output structure based on standalone mode
-  const modelsPath = isStandalone ? "src/models" : ".";
-  const modelDir = join(outputDir, modelsPath);
+  const namespaceGroups = [...selection.byNamespace.values()].sort((a, b) =>
+    a[0].namespace.localeCompare(b[0].namespace),
+  );
+  const basePath = isStandalone ? "src" : ".";
 
-  // Build JSX component tree with each model in a separate file
   const tree = (
     <Output program={context.program} externals={[zod]}>
       <SourceDirectory path=".">
@@ -52,7 +48,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
             <SourceFile path="package.json" filetype="json" printWidth={9999}>
               {JSON.stringify(
                 {
-                  name: packageName,
+                  name: libraryName,
                   version: "0.0.0",
                   private: true,
                   type: "module",
@@ -101,72 +97,31 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                 2,
               )}
             </SourceFile>
-            <SourceFile path=".npmrc" filetype="text" printWidth={9999}>
-              ignore-scripts=true
-            </SourceFile>
-            <SourceDirectory path="src">
-              <SourceDirectory path="models">
-                {dataModels.map(({ model, label }) => (
-                  <ZodModelFile
-                    program={context.program}
-                    model={model}
-                    label={label}
-                    modelsFolder={true}
-                  />
-                ))}
-              </SourceDirectory>
-              <SourceFile path="index.ts" filetype="typescript" printWidth={9999}>
-                {dataModels
-                  .map(({ model }) => {
-                    const name = model.name!;
-                    return `export * from "./models/${name}.js";`;
-                  })
-                  .join("\n")}
-              </SourceFile>
-            </SourceDirectory>
           </>
         )}
-        {!isStandalone &&
-          dataModels.map(({ model, label }) => (
-            <ZodModelFile program={context.program} model={model} label={label} />
+        <SourceDirectory path={basePath}>
+          {namespaceGroups.map((models) => (
+            <SourceDirectory path={models[0].namespaceDir}>
+              {models.map((model) => (
+                <ZodModelFile
+                  program={context.program}
+                  model={model.model}
+                  label={model.label ?? model.name}
+                  path={`${model.model.name}.ts`}
+                />
+              ))}
+            </SourceDirectory>
           ))}
+          <SourceFile path="index.ts" filetype="typescript" printWidth={9999}>
+            {selection.models
+              .map((model) => `export * from "./${model.namespaceDir}/${model.model.name}.js";`)
+              .join("\n")}
+          </SourceFile>
+        </SourceDirectory>
       </SourceDirectory>
     </Output>
   );
 
   const output = render(tree);
   await writeOutput(output, outputDir);
-
-  // Add type aliases to each file
-  for (const { model } of dataModels) {
-    const name = model.name!;
-    const pascalName = toPascalCase(name);
-    const schemaName = pascalName + "Schema";
-    const typeName = pascalName;
-
-    const filePath = join(modelDir, `${name}.ts`);
-    if (!existsSync(filePath)) continue;
-
-    let fileContent = readFileSync(filePath, "utf-8");
-
-    // Append type alias at the end of the file
-    fileContent =
-      fileContent.trim() + `\nexport type ${typeName} = z.infer<typeof ${schemaName}>;\n`;
-
-    writeFileSync(filePath, fileContent);
-  }
-
-  // Create package.json for non-standalone mode
-  if (!isStandalone) {
-    const packageJson = {
-      name: "ts-zod",
-      version: "0.0.0",
-      type: "module",
-      dependencies: {
-        zod: "^3.23.0",
-      },
-    };
-
-    writeFileSync(join(outputDir, "package.json"), JSON.stringify(packageJson, null, 2) + "\n");
-  }
 }

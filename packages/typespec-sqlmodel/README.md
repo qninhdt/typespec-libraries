@@ -28,8 +28,11 @@ emit:
 options:
   "@qninhdt/typespec-sqlmodel":
     output-dir: "./outputs/sqlmodel"
-    module-name: "models" # Python file / module name (default: "models")
+    standalone: true
+    library-name: "demo"
 ```
+
+Namespaces now determine Python package folders, and the emitter creates `__init__.py` files for emitted packages.
 
 ---
 
@@ -378,10 +381,13 @@ class CreateInvitationForm(BaseModel):
 
 ## Emitter Options
 
-| Option        | Type     | Default              | Description                         |
-| ------------- | -------- | -------------------- | ----------------------------------- |
-| `output-dir`  | `string` | `./outputs/sqlmodel` | Directory for generated `.py` files |
-| `module-name` | `string` | `"models"`           | Python filename (without `.py`)     |
+| Option         | Type       | Default              | Description                                    |
+| -------------- | ---------- | -------------------- | ---------------------------------------------- |
+| `output-dir`   | `string`   | `./outputs/sqlmodel` | Directory for generated `.py` files            |
+| `standalone`   | `boolean`  | `false`              | Generate a self-contained Python package       |
+| `library-name` | `string`   | -                    | Python distribution name for standalone output |
+| `include`      | `string[]` | `[]`                 | Namespace / model selectors to include         |
+| `exclude`      | `string[]` | `[]`                 | Namespace / model selectors to exclude         |
 
 ---
 
