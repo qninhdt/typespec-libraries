@@ -26,7 +26,7 @@ describe("SQLModel one-to-many relationships", () => {
     );
 
     expect(output).toContain("# ─── Relationships ─────────────────────");
-    expect(output).toContain('posts: list["Post"]');
+    expect(output).toContain("posts: list[Post]");
     expect(output).toContain("Relationship(");
     expect(output).toContain("from sqlmodel import");
     expect(output).toContain("Relationship");
@@ -52,7 +52,7 @@ describe("SQLModel one-to-many relationships", () => {
       "user.py",
     );
 
-    expect(output).toContain('cascade="all, delete-orphan"');
+    expect(output).toContain('"cascade": "all, delete-orphan"');
   });
 
   it("FK field has foreign_key reference to target table's PK", async () => {
@@ -141,7 +141,7 @@ describe("SQLModel many-to-one relationships", () => {
     expect(output).toContain("author_id: UUID");
 
     // Navigation relationship
-    expect(output).toContain('author: "User" | None');
+    expect(output).toContain("author: User | None");
     expect(output).toContain("Relationship(");
   });
 });
