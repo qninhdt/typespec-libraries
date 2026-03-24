@@ -56,27 +56,8 @@ export function generateFieldLine(
 ): string {
   const fieldName = camelToPascal(prop.name);
   const columnName = getColumnName(program, prop);
-  const isSoft = isSoftDelete(program, prop);
-
-  // Soft delete gets special GORM type
-  if (isSoft) {
-    imports.add("gorm.io/gorm");
-    const doc = getDoc(program, prop);
-    const docComment = buildDocComment(doc);
-    const tagParts = [`column:${columnName}`, "index"];
-
-    // Add composite tags if this field is part of a composite constraint
-    const compositeTags = compositeMap.get(columnName);
-    if (compositeTags) {
-      for (const ct of compositeTags) {
-        tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
-      }
-    }
-
-    if (doc) {
-      tagParts.push(`comment:${escapeComment(doc)}`);
-    }
-    return `${docComment}\t${fieldName} gorm.DeletedAt \`gorm:"${tagParts.join(";")}" json:"${prop.name}"\`\n`;
+  if (isSoftDelete(program, prop)) {
+    return generateSoftDeleteFieldLine(program, prop, fieldName, columnName, compositeMap, imports);
   }
 
   if (isArrayType(prop.type)) {
@@ -90,12 +71,8 @@ export function generateFieldLine(
     for (const imp of requiredImports) imports.add(imp);
 
     const finalGoType = wrapOptional(goType, prop.optional);
-    const validateTag = buildValidateTag(program, prop);
-    const jsonOmit = prop.optional ? ",omitempty" : "";
     const docComment = buildDocComment(doc);
-    const structTag = validateTag
-      ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
-      : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
+    const structTag = buildStructTag(program, prop, gormTag);
 
     return `${docComment}\t${fieldName} ${finalGoType} \`${structTag}\`\n`;
   }
@@ -112,12 +89,8 @@ export function generateFieldLine(
     );
     const isOpt = prop.optional;
     const finalGoType = wrapOptional(goType, isOpt);
-    const validateTag = buildValidateTag(program, prop);
-    const jsonOmit = isOpt ? ",omitempty" : "";
     const docComment = buildDocComment(doc);
-    const structTag = validateTag
-      ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
-      : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
+    const structTag = buildStructTag(program, prop, gormTag);
     return `${docComment}\t${fieldName} ${finalGoType} \`${structTag}\`\n`;
   }
 
@@ -132,12 +105,8 @@ export function generateFieldLine(
 
   const isOpt = prop.optional;
   const finalGoType = wrapOptional(goType, isOpt);
-  const validateTag = buildValidateTag(program, prop);
-  const jsonOmit = isOpt ? ",omitempty" : "";
   const docComment = buildDocComment(doc);
-  const structTag = validateTag
-    ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
-    : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
+  const structTag = buildStructTag(program, prop, gormTag);
 
   return `${docComment}\t${fieldName} ${finalGoType} \`${structTag}\`\n`;
 }
@@ -171,6 +140,48 @@ interface GoTypeResult {
   gormTag: string;
   requiredImports: string[];
   doc: string | undefined;
+}
+
+function generateSoftDeleteFieldLine(
+  program: Program,
+  prop: ModelProperty,
+  fieldName: string,
+  columnName: string,
+  compositeMap: Map<string, CompositeFieldTag[]>,
+  imports: Set<string>,
+): string {
+  imports.add("gorm.io/gorm");
+  const doc = getDoc(program, prop);
+  const tagParts = [`column:${columnName}`, "index"];
+  appendCompositeTags(tagParts, compositeMap.get(columnName));
+
+  if (doc) {
+    tagParts.push(`comment:${escapeComment(doc)}`);
+  }
+
+  return `${buildDocComment(doc)}\t${fieldName} gorm.DeletedAt \`gorm:"${tagParts.join(";")}" json:"${prop.name}"\`\n`;
+}
+
+function buildStructTag(program: Program, prop: ModelProperty, gormTag: string): string {
+  const validateTag = buildValidateTag(program, prop);
+  const jsonOmit = prop.optional ? ",omitempty" : "";
+  const jsonTag = `json:"${prop.name}${jsonOmit}"`;
+  return validateTag
+    ? `gorm:"${gormTag}" validate:"${validateTag}" ${jsonTag}`
+    : `gorm:"${gormTag}" ${jsonTag}`;
+}
+
+function appendCompositeTags(
+  tagParts: string[],
+  compositeTags: CompositeFieldTag[] | undefined,
+): void {
+  if (!compositeTags) {
+    return;
+  }
+
+  for (const ct of compositeTags) {
+    tagParts.push(`${ct.kind}:${ct.name},priority:${ct.priority}`);
+  }
 }
 
 function resolveGoType(
@@ -228,11 +239,7 @@ function resolveGoType(
 
   const fk = getForeignKey(program, prop);
   if (fk) {
-    const compositeTags = compositeMap.get(columnName);
-    if (
-      !isIndex(program, prop) &&
-      !compositeTags?.some((ct) => ct.kind === "index" || ct.kind === "primaryIndex")
-    ) {
+    if (needsForeignKeyIndex(program, prop, compositeMap.get(columnName))) {
       tagParts.push("index");
     }
     const onDel = getOnDelete(program, prop);
@@ -251,6 +258,18 @@ function resolveGoType(
     requiredImports,
     doc,
   };
+}
+
+function needsForeignKeyIndex(
+  program: Program,
+  prop: ModelProperty,
+  compositeTags: CompositeFieldTag[] | undefined,
+): boolean {
+  if (isIndex(program, prop)) {
+    return false;
+  }
+
+  return !compositeTags?.some((ct) => ct.kind === "index" || ct.kind === "primaryIndex");
 }
 
 function resolveArrayGoType(

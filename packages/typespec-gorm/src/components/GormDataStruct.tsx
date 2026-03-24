@@ -117,10 +117,7 @@ function generateDataFieldLine(
 
   const title = getTitle(program, prop);
   const placeholder = getPlaceholder(program, prop);
-  const labelTag =
-    title || placeholder
-      ? ` form:"${prop.name}${title ? `,title=${escapeFormTagValue(title)}` : ""}${placeholder ? `,placeholder=${escapeFormTagValue(placeholder)}` : ""}"`
-      : "";
+  const labelTag = buildFormTag(prop.name, title, placeholder);
 
   const structTags = validateTag
     ? `validate:"${validateTag}" json:"${prop.name}${jsonOmit}"${labelTag}`
@@ -128,4 +125,24 @@ function generateDataFieldLine(
 
   const docComment = buildDocComment(doc);
   return `${docComment}\t${fieldName} ${finalGoType} \`${structTags}\`\n`;
+}
+
+function buildFormTag(
+  propName: string,
+  title: string | undefined,
+  placeholder: string | undefined,
+): string {
+  if (!title && !placeholder) {
+    return "";
+  }
+
+  const formParts = [propName];
+  if (title) {
+    formParts.push(`title=${escapeFormTagValue(title)}`);
+  }
+  if (placeholder) {
+    formParts.push(`placeholder=${escapeFormTagValue(placeholder)}`);
+  }
+
+  return ` form:"${formParts.join(",")}"`;
 }

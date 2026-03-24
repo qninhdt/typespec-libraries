@@ -140,19 +140,21 @@ function generatePydanticField(
   if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
 
   const titleVal = getTitle(program, prop);
-  if (titleVal) fieldArgs.push(`title="${titleVal.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+  if (titleVal) fieldArgs.push(`title="${escapePythonString(titleVal)}"`);
 
   const doc = getDoc(program, prop);
-  if (doc) fieldArgs.push(`description="${doc.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+  if (doc) fieldArgs.push(`description="${escapePythonString(doc)}"`);
 
   const placeholder = getPlaceholder(program, prop);
   if (placeholder)
-    fieldArgs.push(
-      `json_schema_extra={"placeholder": "${placeholder.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}`,
-    );
+    fieldArgs.push(`json_schema_extra={"placeholder": "${escapePythonString(placeholder)}"}`);
 
   pydanticImports.add("Field");
 
   const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
   return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+}
+
+function escapePythonString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }

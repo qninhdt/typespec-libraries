@@ -73,46 +73,23 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const relationTargetModels = new Set<Model>();
   const tableArgEntries: string[] = [];
 
-  // Ignored fields → ClassVar
-  for (const { prop, enumInfo } of ignored) {
-    fieldDefs.push(generateIgnoredField(program, prop, stdImports, enumInfo));
-  }
-
-  // Relation navigation properties
-  for (const { prop, resolved } of relations) {
-    if (!sqlmodelImports.has("Relationship")) {
-      sqlmodelImports.add("Relationship");
-    }
-    const secondary =
-      resolved.kind === "many-to-many" ? manyToManySecondaryByProp?.get(prop) : undefined;
-    const { field, targetModel } = generateRelationField(program, prop, resolved, secondary);
-    relationDefs.push(field);
-    // Add to TYPE_CHECKING imports for cross-model relations (including self-referential)
-    relationTargetModels.add(targetModel);
-    stdImports.add("TYPE_CHECKING");
-  }
+  addIgnoredFields(program, ignored, fieldDefs, stdImports);
+  addRelationFields(
+    program,
+    relations,
+    relationDefs,
+    relationTargetModels,
+    stdImports,
+    sqlmodelImports,
+    manyToManySecondaryByProp,
+  );
 
   // Collect composite type fields using shared helper
   const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
 
   // Build a map of FK column name -> target table/column metadata for use in field generation
-  const fkInfoMap = new Map<string, ResolvedForeignKeyFieldInfo>();
-  for (const { resolved } of relations) {
-    if (resolved.kind === "many-to-many") {
-      continue;
-    }
-    if (resolved.localProperty.model !== model) {
-      continue;
-    }
-    const dbColumnName = camelToSnake(resolved.fkColumnName);
-    fkInfoMap.set(dbColumnName, {
-      targetTable: resolved.targetTable,
-      targetColumn: resolved.fkTargetColumn,
-      onDelete: resolved.onDelete,
-      onUpdate: resolved.onUpdate,
-    });
-  }
+  const fkInfoMap = buildForeignKeyInfoMap(model, relations);
 
   // Regular DB-mapped fields
   for (const { prop } of regularProps) {
@@ -176,26 +153,10 @@ export function PyModelFile(props: PyModelFileProps): Children {
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
 
-  if (runtimeImports && runtimeImports.size > 0) {
-    code += "\n";
-    for (const [moduleName, names] of [...runtimeImports.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0]),
-    )) {
-      code += `from ${moduleName} import ${[...names].sort().join(", ")}\n`;
-    }
-  }
+  code += buildRuntimeImportBlock(runtimeImports);
 
   // TYPE_CHECKING block for relation imports (avoids circular dependency)
-  if (relationTargetModels.size > 0) {
-    code += "\nif TYPE_CHECKING:\n";
-    for (const targetModel of [...relationTargetModels].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const targetInfo = modelLookup.get(targetModel);
-      if (!targetInfo) continue;
-      code += `    from ${toPythonRelativeImport(normalizedModel.namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
-    }
-  }
+  code += buildTypeCheckingBlock(relationTargetModels, modelLookup, normalizedModel.namespacePath);
 
   code += "\n\n";
 
@@ -249,6 +210,92 @@ export function PyModelFile(props: PyModelFileProps): Children {
       {code}
     </SourceFile>
   );
+}
+
+function addIgnoredFields(
+  program: Program,
+  ignored: ReturnType<typeof classifyProperties>["ignored"],
+  fieldDefs: string[],
+  stdImports: Set<string>,
+): void {
+  for (const { prop, enumInfo } of ignored) {
+    fieldDefs.push(generateIgnoredField(program, prop, stdImports, enumInfo));
+  }
+}
+
+function addRelationFields(
+  program: Program,
+  relations: ReturnType<typeof classifyProperties>["relations"],
+  relationDefs: string[],
+  relationTargetModels: Set<Model>,
+  stdImports: Set<string>,
+  sqlmodelImports: Set<string>,
+  manyToManySecondaryByProp: Map<ModelProperty, string> | undefined,
+): void {
+  for (const { prop, resolved } of relations) {
+    sqlmodelImports.add("Relationship");
+    const secondary =
+      resolved.kind === "many-to-many" ? manyToManySecondaryByProp?.get(prop) : undefined;
+    const { field, targetModel } = generateRelationField(program, prop, resolved, secondary);
+    relationDefs.push(field);
+    relationTargetModels.add(targetModel);
+    stdImports.add("TYPE_CHECKING");
+  }
+}
+
+function buildForeignKeyInfoMap(
+  model: Model,
+  relations: ReturnType<typeof classifyProperties>["relations"],
+): Map<string, ResolvedForeignKeyFieldInfo> {
+  const fkInfoMap = new Map<string, ResolvedForeignKeyFieldInfo>();
+  for (const { resolved } of relations) {
+    if (resolved.kind === "many-to-many" || resolved.localProperty.model !== model) {
+      continue;
+    }
+
+    fkInfoMap.set(camelToSnake(resolved.fkColumnName), {
+      targetTable: resolved.targetTable,
+      targetColumn: resolved.fkTargetColumn,
+      onDelete: resolved.onDelete,
+      onUpdate: resolved.onUpdate,
+    });
+  }
+
+  return fkInfoMap;
+}
+
+function buildRuntimeImportBlock(runtimeImports?: Map<string, Set<string>>): string {
+  if (!runtimeImports || runtimeImports.size === 0) {
+    return "";
+  }
+
+  let code = "\n";
+  for (const [moduleName, names] of [...runtimeImports.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    code += `from ${moduleName} import ${[...names].sort((a, b) => a.localeCompare(b)).join(", ")}\n`;
+  }
+  return code;
+}
+
+function buildTypeCheckingBlock(
+  relationTargetModels: Set<Model>,
+  modelLookup: Map<Model, NormalizedOrmModel>,
+  namespacePath: string[],
+): string {
+  if (relationTargetModels.size === 0) {
+    return "";
+  }
+
+  let code = "\nif TYPE_CHECKING:\n";
+  for (const targetModel of [...relationTargetModels].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    const targetInfo = modelLookup.get(targetModel);
+    if (!targetInfo) continue;
+    code += `    from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
+  }
+  return code;
 }
 
 function toPythonRelativeImport(

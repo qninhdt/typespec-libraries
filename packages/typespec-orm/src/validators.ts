@@ -204,74 +204,11 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
 
   // @ignore conflicts
   if (isIgnored(program, prop)) {
-    const conflicts: string[] = [];
-    if (isKey(program, prop)) conflicts.push("key");
-    if (isIndex(program, prop)) conflicts.push("index");
-    if (isUnique(program, prop)) conflicts.push("unique");
-    if (isAutoIncrement(program, prop)) conflicts.push("autoIncrement");
-    if (isSoftDelete(program, prop)) conflicts.push("softDelete");
-    if (isAutoCreateTime(program, prop)) conflicts.push("autoCreateTime");
-    if (isAutoUpdateTime(program, prop)) conflicts.push("autoUpdateTime");
-    if (getForeignKey(program, prop)) conflicts.push("foreignKey");
-
-    for (const conflicting of conflicts) {
-      reportDiagnostic(program, {
-        code: "ignore-conflicts",
-        target: prop,
-        format: { propName: prop.name, conflicting },
-      });
-    }
+    reportIgnoreConflicts(program, prop);
     return; // No further checks needed for ignored props
   }
 
-  // @precision on non-numeric
-  if (getPrecision(program, prop)) {
-    if (!dbType || !PRECISION_TYPES.has(dbType)) {
-      reportDiagnostic(program, {
-        code: "precision-on-non-numeric",
-        target: prop,
-        format: { propName: prop.name, actualType: typeName },
-      });
-    }
-  }
-
-  // @autoIncrement on non-integer
-  if (isAutoIncrement(program, prop)) {
-    if (!dbType || !INTEGER_TYPES.has(dbType)) {
-      reportDiagnostic(program, {
-        code: "auto-increment-on-non-integer",
-        target: prop,
-        format: { propName: prop.name, actualType: typeName },
-      });
-    }
-  }
-
-  // @softDelete on non-datetime
-  if (isSoftDelete(program, prop)) {
-    if (!dbType || !DATETIME_TYPES.has(dbType)) {
-      reportDiagnostic(program, {
-        code: "soft-delete-on-non-datetime",
-        target: prop,
-        format: { propName: prop.name, actualType: typeName },
-      });
-    }
-  }
-
-  // @autoCreateTime / @autoUpdateTime on non-datetime
-  for (const [check, decorator] of [
-    [isAutoCreateTime, "autoCreateTime"],
-    [isAutoUpdateTime, "autoUpdateTime"],
-  ] as const) {
-    if (check(program, prop)) {
-      if (!dbType || !DATETIME_TYPES.has(dbType)) {
-        reportDiagnostic(program, {
-          code: "auto-time-on-non-datetime",
-          target: prop,
-          format: { propName: prop.name, actualType: typeName, decorator },
-        });
-      }
-    }
-  }
+  validateTypedDecorators(program, prop, dbType, typeName);
 
   // @unique on @key (redundant)
   if (isKey(program, prop) && isUnique(program, prop)) {
@@ -302,6 +239,93 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
       format: { propName: prop.name, columnName: colName },
     });
   }
+}
+
+function reportIgnoreConflicts(program: Program, prop: ModelProperty): void {
+  const conflictChecks = [
+    ["key", isKey(program, prop)],
+    ["index", isIndex(program, prop)],
+    ["unique", isUnique(program, prop)],
+    ["autoIncrement", isAutoIncrement(program, prop)],
+    ["softDelete", isSoftDelete(program, prop)],
+    ["autoCreateTime", isAutoCreateTime(program, prop)],
+    ["autoUpdateTime", isAutoUpdateTime(program, prop)],
+    ["foreignKey", !!getForeignKey(program, prop)],
+  ] as const;
+
+  for (const [conflicting, enabled] of conflictChecks) {
+    if (!enabled) {
+      continue;
+    }
+
+    reportDiagnostic(program, {
+      code: "ignore-conflicts",
+      target: prop,
+      format: { propName: prop.name, conflicting },
+    });
+  }
+}
+
+function validateTypedDecorators(
+  program: Program,
+  prop: ModelProperty,
+  dbType: string | undefined,
+  typeName: string,
+): void {
+  reportInvalidDecoratorType(dbType, getPrecision(program, prop), {
+    allowedTypes: PRECISION_TYPES,
+    report: () =>
+      reportDiagnostic(program, {
+        code: "precision-on-non-numeric",
+        target: prop,
+        format: { propName: prop.name, actualType: typeName },
+      }),
+  });
+  reportInvalidDecoratorType(dbType, isAutoIncrement(program, prop), {
+    allowedTypes: INTEGER_TYPES,
+    report: () =>
+      reportDiagnostic(program, {
+        code: "auto-increment-on-non-integer",
+        target: prop,
+        format: { propName: prop.name, actualType: typeName },
+      }),
+  });
+  reportInvalidDecoratorType(dbType, isSoftDelete(program, prop), {
+    allowedTypes: DATETIME_TYPES,
+    report: () =>
+      reportDiagnostic(program, {
+        code: "soft-delete-on-non-datetime",
+        target: prop,
+        format: { propName: prop.name, actualType: typeName },
+      }),
+  });
+
+  for (const [enabled, decorator] of [
+    [isAutoCreateTime(program, prop), "autoCreateTime"],
+    [isAutoUpdateTime(program, prop), "autoUpdateTime"],
+  ] as const) {
+    if (!enabled || (dbType && DATETIME_TYPES.has(dbType))) {
+      continue;
+    }
+
+    reportDiagnostic(program, {
+      code: "auto-time-on-non-datetime",
+      target: prop,
+      format: { propName: prop.name, actualType: typeName, decorator },
+    });
+  }
+}
+
+function reportInvalidDecoratorType(
+  dbType: string | undefined,
+  enabled: unknown,
+  options: { allowedTypes: Set<string>; report: () => void },
+): void {
+  if (!enabled || (dbType && options.allowedTypes.has(dbType))) {
+    return;
+  }
+
+  options.report();
 }
 
 // ─── Cascade on non-relation check ───────────────────────────────────────────

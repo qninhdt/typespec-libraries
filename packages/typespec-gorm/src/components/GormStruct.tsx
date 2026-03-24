@@ -70,22 +70,13 @@ export function GormModelFile(props: GormModelFileProps): Children {
   const fieldLines: string[] = [];
   const relationFieldLines: string[] = [];
 
-  // First: Key fields - always at the top
-  for (const { prop } of regularProps) {
-    if (isKey(program, prop)) {
-      // Skip composite type fields - they are configuration only
-      if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
-    }
-  }
-
-  // Second: Regular fields (excluding keys which are already output)
-  for (const { prop } of regularProps) {
-    if (!isKey(program, prop)) {
-      // Skip composite type fields - they are configuration only
-      if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
-    }
+  const orderedProps = [
+    ...regularProps.filter(({ prop }) => isKey(program, prop)),
+    ...regularProps.filter(({ prop }) => !isKey(program, prop)),
+  ];
+  for (const { prop } of orderedProps) {
+    if (getCompositeFields(program, prop)) continue;
+    fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
   }
 
   // Ignored fields → gorm:"-"

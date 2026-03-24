@@ -68,17 +68,7 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Generate index definitions for composite fields
-  for (const ct of compositeFields) {
-    const snakeColumns = ct.columns.map((c) => camelToSnake(c));
-    if (ct.isPrimary) {
-      indexes.push(`    (${snakeColumns.join(", ")}) [pk]`);
-    } else if (ct.isUnique) {
-      indexes.push(`    (${snakeColumns.join(", ")}) [unique]`);
-    } else {
-      indexes.push(`    (${snakeColumns.join(", ")})`);
-    }
-  }
+  indexes.push(...compositeFields.map(buildCompositeIndexLine));
 
   // Add single-column indexes and unique constraints
   for (const { prop } of regularProps) {
@@ -94,24 +84,21 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Build table definition
-  let table = `Table ${tableName} {\n`;
-
-  // Add columns
-  for (const line of lines) {
-    table += line + "\n";
-  }
-
-  // Add indexes block if there are indexes
+  const tableLines = [`Table ${tableName} {`, ...lines];
   if (indexes.length > 0) {
-    table += "\n  indexes {\n";
-    for (const idx of indexes) {
-      table += idx + "\n";
-    }
-    table += "  }\n";
+    tableLines.push("", "  indexes {", ...indexes, "  }");
   }
+  tableLines.push("}");
 
-  table += "}";
+  return tableLines.join("\n");
+}
 
-  return table;
+function buildCompositeIndexLine(ct: {
+  columns: string[];
+  isUnique: boolean;
+  isPrimary: boolean;
+}): string {
+  const snakeColumns = ct.columns.map((column) => camelToSnake(column));
+  const suffix = ct.isPrimary ? " [pk]" : ct.isUnique ? " [unique]" : "";
+  return `    (${snakeColumns.join(", ")})${suffix}`;
 }

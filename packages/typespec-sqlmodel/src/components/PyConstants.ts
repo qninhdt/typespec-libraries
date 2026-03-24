@@ -335,6 +335,6 @@ export function buildPythonImportBlock(
  */
 export function resolveFormatPyType(format: string): string | undefined {
   if (format === "email") return "EmailStr";
-  if (format === "url" || format === "uri") return "AnyUrl";
+  if (["url", "uri"].includes(format)) return "AnyUrl";
   return undefined;
 }

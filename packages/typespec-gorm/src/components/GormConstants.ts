@@ -81,14 +81,14 @@ export interface CompositeFieldTag {
  * Escape characters that are unsafe inside a Go struct tag value.
  */
 export function escapeFormTagValue(value: string): string {
-  return value.replace(/`/g, "'").replace(/,/g, " ");
+  return value.replaceAll("`", "'").replaceAll(",", " ");
 }
 
 /**
  * Escape characters in doc comments for safe inclusion in Go tags.
  */
 export function escapeComment(doc: string): string {
-  return doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'");
+  return doc.replaceAll(";", ",").replaceAll('"', "'").replaceAll("`", "'");
 }
 
 /**

@@ -24,14 +24,7 @@ export function generateRelationFieldLine(
 
   // Determine Go type based on relation kind
   const isMany = rel.kind === "one-to-many" || rel.kind === "many-to-many";
-  let goType: string;
-  if (isMany) {
-    goType = `[]${targetType}`;
-  } else if (prop.optional) {
-    goType = `*${targetType}`;
-  } else {
-    goType = targetType;
-  }
+  const goType = isMany ? `[]${targetType}` : prop.optional ? `*${targetType}` : targetType;
 
   // Build GORM tag parts
   const tagParts: string[] = [];

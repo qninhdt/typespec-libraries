@@ -52,45 +52,11 @@ export function buildValidateTag(program: Program, prop: ModelProperty): string 
     parts.push("required");
   }
 
-  // Length constraints
-  const maxLen = getMaxLength(program, prop);
-  if (maxLen !== undefined) {
-    parts.push(`max=${maxLen}`);
-  }
-  const minLen = getMinLength(program, prop);
-  if (minLen !== undefined) {
-    parts.push(`min=${minLen}`);
-  }
+  appendLengthValidators(parts, program, prop);
+  appendValueValidators(parts, program, prop);
 
-  // Value constraints (inclusive)
-  const maxVal = getMaxValue(program, prop);
-  const minVal = getMinValue(program, prop);
-  const maxValExclusive = getMaxValueExclusive(program, prop);
-  const minValExclusive = getMinValueExclusive(program, prop);
-
-  // Exclusive bounds override inclusive ones if both are specified
-  if (maxValExclusive !== undefined) {
-    parts.push(`lt=${maxValExclusive}`);
-  } else if (maxVal !== undefined) {
-    parts.push(`lte=${maxVal}`);
-  }
-
-  if (minValExclusive !== undefined) {
-    parts.push(`gt=${minValExclusive}`);
-  } else if (minVal !== undefined) {
-    parts.push(`gte=${minVal}`);
-  }
-
-  // Array item constraints (min/max items)
   if (isArrayType(prop.type)) {
-    const minItems = getMinItems(program, prop);
-    const maxItems = getMaxItems(program, prop);
-    if (minItems !== undefined) {
-      parts.push(`min=${minItems}`);
-    }
-    if (maxItems !== undefined) {
-      parts.push(`max=${maxItems}`);
-    }
+    appendArrayValidators(parts, program, prop);
   }
 
   // Pattern (regex)
@@ -116,4 +82,47 @@ export function buildValidateTag(program: Program, prop: ModelProperty): string 
   }
 
   return parts.length > 0 ? parts.join(",") : "";
+}
+
+function appendLengthValidators(parts: string[], program: Program, prop: ModelProperty): void {
+  const maxLen = getMaxLength(program, prop);
+  if (maxLen !== undefined) {
+    parts.push(`max=${maxLen}`);
+  }
+
+  const minLen = getMinLength(program, prop);
+  if (minLen !== undefined) {
+    parts.push(`min=${minLen}`);
+  }
+}
+
+function appendValueValidators(parts: string[], program: Program, prop: ModelProperty): void {
+  const maxVal = getMaxValue(program, prop);
+  const minVal = getMinValue(program, prop);
+  const maxValExclusive = getMaxValueExclusive(program, prop);
+  const minValExclusive = getMinValueExclusive(program, prop);
+
+  if (maxValExclusive !== undefined) {
+    parts.push(`lt=${maxValExclusive}`);
+  } else if (maxVal !== undefined) {
+    parts.push(`lte=${maxVal}`);
+  }
+
+  if (minValExclusive !== undefined) {
+    parts.push(`gt=${minValExclusive}`);
+  } else if (minVal !== undefined) {
+    parts.push(`gte=${minVal}`);
+  }
+}
+
+function appendArrayValidators(parts: string[], program: Program, prop: ModelProperty): void {
+  const minItems = getMinItems(program, prop);
+  if (minItems !== undefined) {
+    parts.push(`min=${minItems}`);
+  }
+
+  const maxItems = getMaxItems(program, prop);
+  if (maxItems !== undefined) {
+    parts.push(`max=${maxItems}`);
+  }
 }

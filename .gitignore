@@ -34,3 +34,6 @@ packages/**/@qninhdt/
 
 # Ruff cache
 .ruff_cache/
+
+# Environment variables
+.env

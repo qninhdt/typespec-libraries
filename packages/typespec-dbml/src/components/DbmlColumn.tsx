@@ -59,22 +59,7 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
     settings.increment = true;
   }
 
-  // Handle string length
-  let typeStr = dbmlType;
-  if (dbmlType === "varchar") {
-    const maxLength = getMaxLength(program, prop) ?? 255;
-    typeStr = `varchar(${maxLength})`;
-  }
-
-  // Handle decimal precision
-  if (dbmlType === "decimal") {
-    const precision = getPrecision(program, prop);
-    if (precision) {
-      typeStr = `decimal(${precision.precision}, ${precision.scale ?? 0})`;
-    } else {
-      typeStr = "decimal";
-    }
-  }
+  const typeStr = resolveColumnType(program, prop, dbmlType);
 
   // Handle auto timestamps
   if (isAutoCreateTime(program, prop) || isAutoUpdateTime(program, prop)) {
@@ -103,6 +88,22 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   const settingsStr = formatColumnSettings(settings);
 
   return `  ${columnName} ${typeStr}${settingsStr}`;
+}
+
+function resolveColumnType(program: Program, prop: ModelProperty, dbmlType: string): string {
+  if (dbmlType === "varchar") {
+    const maxLength = getMaxLength(program, prop) ?? 255;
+    return `varchar(${maxLength})`;
+  }
+
+  if (dbmlType === "decimal") {
+    const precision = getPrecision(program, prop);
+    if (precision) {
+      return `decimal(${precision.precision}, ${precision.scale ?? 0})`;
+    }
+  }
+
+  return dbmlType;
 }
 
 function joinNotes(...parts: Array<string | undefined>): string | undefined {

@@ -515,7 +515,7 @@ export function getDoc(program: Program, target: Model | ModelProperty): string 
   }
   if (!raw) return undefined;
   // Collapse multi-line @doc / /** */ values to a single line
-  return raw.replace(/\r?\n[\t \*]*/g, " ").trim();
+  return raw.replaceAll(/\r?\n[\t \*]*/g, " ").trim();
 }
 
 // ─── Enum helpers ────────────────────────────────────────────────────────────
@@ -757,16 +757,19 @@ export function resolvePropertyReference(
   model: Model,
   reference: string,
 ): ModelProperty | undefined {
-  let columnMatch: ModelProperty | undefined;
   for (const prop of walkPropertiesInherited(model)) {
     if (prop.name === reference) {
       return prop;
     }
-    if (!columnMatch && getColumnName(program, prop) === reference) {
-      columnMatch = prop;
+  }
+
+  for (const prop of walkPropertiesInherited(model)) {
+    if (getColumnName(program, prop) === reference) {
+      return prop;
     }
   }
-  return columnMatch;
+
+  return undefined;
 }
 
 function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
@@ -819,10 +822,7 @@ export function isRelationLocalKeyUnique(program: Program, prop: ModelProperty):
 }
 
 function isModelReferenceTo(type: Type, expected: Model): boolean {
-  if (type.kind === "Model") {
-    return type === expected;
-  }
-  return false;
+  return type.kind === "Model" ? type === expected : false;
 }
 
 function findInverseMappedBy(
@@ -871,12 +871,9 @@ function resolveOwnedRelationReference(
 ): ResolvedForeignKeyReference | undefined {
   const fk = getForeignKeyConfig(program, relationProp);
   if (!fk) return undefined;
-
-  const localProperty = resolvePropertyReference(program, parentModel, fk.field);
-  const targetProperty = resolvePropertyReference(program, targetModel, fk.target ?? "id");
-  if (!localProperty || !targetProperty) {
-    return undefined;
-  }
+  const resolved = resolveRelationProperties(program, parentModel, targetModel, fk);
+  if (!resolved) return undefined;
+  const { localProperty, targetProperty } = resolved;
 
   return {
     targetModel,
@@ -887,6 +884,25 @@ function resolveOwnedRelationReference(
     targetColumnName: getColumnName(program, targetProperty),
     fkDbType: resolveDbType(targetProperty.type),
   };
+}
+
+function resolveRelationProperties(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  fk: ForeignKeyConfig,
+): { localProperty: ModelProperty; targetProperty: ModelProperty } | undefined {
+  const localProperty = resolvePropertyReference(program, parentModel, fk.field);
+  if (!localProperty) {
+    return undefined;
+  }
+
+  const targetProperty = resolvePropertyReference(program, targetModel, fk.target ?? "id");
+  if (!targetProperty) {
+    return undefined;
+  }
+
+  return { localProperty, targetProperty };
 }
 
 function findInverseManyToMany(

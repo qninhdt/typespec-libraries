@@ -87,7 +87,7 @@ export function formatColumnSettings(settings: ColumnSettings): string {
   if (settings.default) parts.push(`default: '${settings.default}'`);
   if (settings.note) {
     // Sanitize: strip quotes/backticks and collapse newlines to spaces
-    const sanitized = settings.note.replace(/['"`]/g, "").replace(/\n/g, " ");
+    const sanitized = settings.note.replaceAll(/['"`]/g, "").replaceAll("\n", " ");
     parts.push(`note: '${sanitized}'`);
   }
 
