@@ -1,6 +1,6 @@
 {
   "name": "typespec-libraries",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.31.0",
@@ -22,15 +22,17 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "compile-examples": "tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
-    "compile-examples:gorm": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
-    "compile-examples:sqlmodel": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
-    "compile-examples:zod": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",
-    "compile-examples:dbml": "tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-dbml",
+    "clean:examples": "rm -rf outputs/gorm outputs/sqlmodel outputs/zod outputs/dbml",
+    "compile-examples": "pnpm run clean:examples && tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
+    "verify-generated": "pnpm run compile-examples && git diff --exit-code -- outputs",
+    "compile-examples:gorm": "rm -rf outputs/gorm && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
+    "compile-examples:sqlmodel": "rm -rf outputs/sqlmodel && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
+    "compile-examples:zod": "rm -rf outputs/zod && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",
+    "compile-examples:dbml": "rm -rf outputs/dbml && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-dbml",
     "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
-    "format-examples:gorm": "gofmt -w outputs/@qninhdt/typespec-gorm/",
-    "format-examples:sqlmodel": "ruff format outputs/@qninhdt/typespec-sqlmodel/",
-    "format-examples:zod": "prettier --write outputs/@qninhdt/typespec-zod/"
+    "format-examples:gorm": "gofmt -w outputs/gorm/",
+    "format-examples:sqlmodel": "ruff format outputs/sqlmodel/",
+    "format-examples:zod": "prettier --write outputs/zod/"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -57,6 +59,7 @@
     "lint-staged": "^16.3.3",
     "prettier": "^3.8.1",
     "typescript": "~5.7.0",
-    "typescript-eslint": "^8.57.0"
+    "typescript-eslint": "^8.57.0",
+    "zod": "^3.25.76"
   }
 }

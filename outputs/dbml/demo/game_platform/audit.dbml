@@ -1,0 +1,24 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Audit
+
+Table audit_logs {
+  id bigserial [pk, increment, not null, note: 'Auto-incrementing surrogate key for stable ordering.']
+  entity_type varchar(100) [not null, note: 'Logical type of the changed entity, e.g. World or StoryNode.']
+  entity_id uuid [not null, note: 'Primary key of the changed entity.']
+  action varchar(50) [not null, note: 'Action performed: create, update, or delete.']
+  diff jsonb [note: 'Optional JSON snapshot or diff.']
+  actor_id uuid [note: 'Nullable so audit history survives account deletion.']
+  world_slug varchar(80) [note: 'Optional world slug snapshot for human-friendly correlation in logs. Demonstrates a relation that targets a non-id unique column.']
+  created_at timestamp [not null, default: 'now()']
+
+  indexes {
+    (entity_type, entity_id)
+    (actor_id, created_at)
+    entity_type
+  }
+}
+
+
+Ref: audit_logs.actor_id > users.id [delete: SET NULL, update: CASCADE]
+Ref: audit_logs.world_slug > worlds.slug [delete: SET NULL, update: CASCADE]

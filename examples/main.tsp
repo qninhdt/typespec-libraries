@@ -1,11 +1,56 @@
 /**
- * TypeSpec ORM - Example Schema
+ * Namespace-first example schema for @qninhdt/typespec-orm.
  *
- * Demonstrates the full feature set of @qninhdt/typespec-orm decorators.
- * Run `pnpm run compile-examples` to generate GORM (Go) and SQLModel (Python) output.
+ * This example is intentionally split across many files so the source tree
+ * mirrors the namespace tree.
+ *
+ * Namespaces demonstrated:
+ * - Demo.GamePlatform.Shared
+ * - Demo.GamePlatform.Accounts
+ * - Demo.GamePlatform.Worlds
+ * - Demo.GamePlatform.Content.Stories
+ * - Demo.GamePlatform.Content.Characters
+ * - Demo.GamePlatform.Content.Places
+ * - Demo.GamePlatform.Content.Events
+ * - Demo.GamePlatform.Content.Taxonomy
+ * - Demo.GamePlatform.Collaboration.Invites
+ * - Demo.GamePlatform.Forms.Public.Accounts
+ * - Demo.GamePlatform.Forms.Collaboration
+ * - Demo.GamePlatform.Forms.Worlds
+ * - Demo.GamePlatform.Audit
+ *
+ * Phase 2 features demonstrated:
+ * - `AuditLog.worldContext` references `World.slug` via `@foreignKey("worldSlug", "slug")`
+ * - `StoryNode.tags` exercises explicit collection persistence in GORM / SQLModel
+ *
+ * Phase 3 features demonstrated:
+ * - `User.credits` and `Subscription.monthlyPrice` carry named `@check(...)` constraints
+ * - `User.badges` and `Badge.users` use `@manyToMany("user_badges")`
+ * - `CreateInvitationForm` and `CreateWorldForm` export rich Zod metadata
+ * - SQLModel package roots expose `metadata = SQLModel.metadata` for Alembic
+ * - DBML can be emitted as namespace-split files
+ *
+ * Useful selector experiments:
+ * - include: ["Demo.GamePlatform.Forms"]
+ * - include: ["Demo.GamePlatform.Content"]
+ * - include: ["Demo.GamePlatform.Content.Stories", "Demo.GamePlatform.Worlds"]
+ * - exclude: ["Demo.GamePlatform.Audit"]
  */
-import "./models/timestamped.tsp";
-import "./models/user.tsp";
-import "./models/world.tsp";
-import "./models/story.tsp";
-import "./models/derived.tsp";
+import "./demo/game-platform/shared/mixins.tsp";
+import "./demo/game-platform/accounts/enums.tsp";
+import "./demo/game-platform/accounts/badge.tsp";
+import "./demo/game-platform/accounts/user.tsp";
+import "./demo/game-platform/accounts/subscription.tsp";
+import "./demo/game-platform/worlds/enums.tsp";
+import "./demo/game-platform/worlds/world.tsp";
+import "./demo/game-platform/content/stories/story-node.tsp";
+import "./demo/game-platform/content/characters/npc.tsp";
+import "./demo/game-platform/content/places/location.tsp";
+import "./demo/game-platform/content/events/game-event.tsp";
+import "./demo/game-platform/content/taxonomy/tag.tsp";
+import "./demo/game-platform/collaboration/invites/invitation.tsp";
+import "./demo/game-platform/forms/public/accounts/user-profile.tsp";
+import "./demo/game-platform/forms/public/accounts/public-user.tsp";
+import "./demo/game-platform/forms/collaboration/create-invitation-form.tsp";
+import "./demo/game-platform/forms/worlds/create-world-form.tsp";
+import "./demo/game-platform/audit/audit-log.tsp";

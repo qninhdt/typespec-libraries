@@ -24,6 +24,7 @@ import {
   escapeFormTagValue,
   buildImportBlock,
   buildDocComment,
+  buildGoEnumBlock,
 } from "./GormConstants.js";
 import { buildValidateTag } from "./GormValidateTag.js";
 
@@ -56,21 +57,8 @@ export function GormDataFile(props: GormDataFileProps): Children {
   const structName = model.name;
   const modelDoc = getDoc(program, model);
 
-  // Build enum block
-  const enumLines: string[] = [];
-  for (const [enumName, members] of enumTypes) {
-    const goTypeName = camelToPascal(enumName);
-    enumLines.push(`// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`);
-    enumLines.push(`type ${goTypeName} string`);
-    enumLines.push("");
-    enumLines.push("const (");
-    for (const m of members) {
-      const constName = `${goTypeName}${camelToPascal(m.name)}`;
-      enumLines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
-    }
-    enumLines.push(")");
-    enumLines.push("");
-  }
+  // Build enum block using shared helper
+  const enumLines = buildGoEnumBlock(enumTypes);
 
   // Build import block
   const importBlock = buildImportBlock(imports);
@@ -129,10 +117,7 @@ function generateDataFieldLine(
 
   const title = getTitle(program, prop);
   const placeholder = getPlaceholder(program, prop);
-  const labelTag =
-    title || placeholder
-      ? ` form:"${prop.name}${title ? `,title=${escapeFormTagValue(title)}` : ""}${placeholder ? `,placeholder=${escapeFormTagValue(placeholder)}` : ""}"`
-      : "";
+  const labelTag = buildFormTag(prop.name, title, placeholder);
 
   const structTags = validateTag
     ? `validate:"${validateTag}" json:"${prop.name}${jsonOmit}"${labelTag}`
@@ -140,4 +125,24 @@ function generateDataFieldLine(
 
   const docComment = buildDocComment(doc);
   return `${docComment}\t${fieldName} ${finalGoType} \`${structTags}\`\n`;
+}
+
+function buildFormTag(
+  propName: string,
+  title: string | undefined,
+  placeholder: string | undefined,
+): string {
+  if (!title && !placeholder) {
+    return "";
+  }
+
+  const formParts = [propName];
+  if (title) {
+    formParts.push(`title=${escapeFormTagValue(title)}`);
+  }
+  if (placeholder) {
+    formParts.push(`placeholder=${escapeFormTagValue(placeholder)}`);
+  }
+
+  return ` form:"${formParts.join(",")}"`;
 }

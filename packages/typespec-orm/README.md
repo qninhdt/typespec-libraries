@@ -1,437 +1,433 @@
 # @qninhdt/typespec-orm
 
-[![npm version](https://img.shields.io/npm/v/@qninhdt/typespec-orm)](https://www.npmjs.com/package/@qninhdt/typespec-orm)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+Shared TypeSpec ORM library used by all emitters in this repository.
 
-The **decorator library** for the `@qninhdt` TypeSpec ORM ecosystem.  
-Annotate your TypeSpec models with table mappings, indexes, foreign-key constraints, column metadata, and form field hints.  
-Emitters (`typespec-gorm`, `typespec-sqlmodel`) read these decorators to generate code.
+This package is where the schema contract actually lives. It defines decorators, validation behavior, relation resolution, namespace normalization, selector filtering, and the normalized ORM graph consumed by the emitters.
 
----
+## What This Package Owns
+
+`@qninhdt/typespec-orm` is responsible for:
+
+- declaring the public decorators used in TypeSpec
+- validating ORM-managed declarations
+- resolving relation ownership and foreign keys
+- expanding `@tableMixin`
+- building the normalized namespace-aware model graph
+- applying shared `include` / `exclude` selection logic
+- surfacing shared diagnostics before emitters write files
+
+It does not emit code by itself.
 
 ## Installation
 
-```bash
-pnpm add @qninhdt/typespec-orm
-# or
-npm install @qninhdt/typespec-orm
+```sh
+pnpm add -D @typespec/compiler @qninhdt/typespec-orm
 ```
 
----
-
-## Example
+## Importing The Library
 
 ```typescript
 import "@qninhdt/typespec-orm";
+
 using Qninhdt.Orm;
-
-enum Role {
-  admin:  "admin",
-  editor: "editor",
-  viewer: "viewer",
-}
-
-/** Platform user account */
-@table("users")
-model User {
-  @key id: uuid;
-
-  @unique @maxLength(100)
-  @format("email") @map("email_address")
-  email: string;
-
-  @maxLength(50) username: string;
-
-  @index
-  role: Role;
-
-  @precision(12, 4) @map("credit_balance")
-  creditBalance: decimal;
-
-  isActive: boolean;
-
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-  @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
-  @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
-
-  // ─── Composite Indexes & Unique Constraints ─────────────────
-  // Use composite<> type instead of @compositeIndex/@compositeKey decorators
-  emailRole: composite<"email", "role">;
-}
 ```
 
----
+## Core Concepts
 
-## Composite Indexes & Unique Constraints (`composite<>`)
+### Namespaces are required
 
-Use the `composite<>` type to define multi-column indexes and unique constraints. This replaces the old `@compositeIndex` and `@compositeKey` decorators.
+`@table`, `@data`, and `@tableMixin` must be declared inside a namespace. Required referenced declarations must also be namespaced.
 
-### Basic Usage
+This matters because the shared ORM graph treats namespaces as the source of truth for:
+
+- output paths
+- package structure
+- import calculation
+- selector filtering
+- dependency validation
+
+### `@tableMixin`
+
+`@tableMixin` exists for reusable persisted field groups.
+
+Mixins:
+
+- are validated
+- can inherit from other mixins
+- can be composed into tables
+- are never emitted as standalone tables
+
+Field collisions between mixins or between a mixin and a child model are errors.
+
+### Shared normalization
+
+Emitters do not re-discover tables independently anymore. They consume the normalized graph produced by the ORM core, which includes:
+
+- kind: table, data, or mixin
+- namespace and namespace path
+- namespace-derived output directory
+- dependencies on models, mixins, enums, and scalars
+- selected models after filtering
+
+## Normalized Graph Contract
+
+The normalized graph is the contract between this package and the emitters. Each normalized model includes:
+
+- its ORM kind: `table`, `data`, or `mixin`
+- full dotted declaration name
+- namespace segments and a snake_case namespace path
+- namespace-derived output directory and leaf package name
+- resolved mixin sources
+- hard and soft dependencies on models, mixins, enums, and scalars
+
+That shared graph is what makes the emitters behave consistently. GORM, SQLModel, Zod, and DBML no longer perform their own disconnected model discovery passes.
+
+## Namespace Normalization Rules
+
+Namespace handling is intentionally deterministic:
+
+- namespace segments are preserved for selection and diagnostics
+- output paths convert each segment with `camelToSnake`
+- package or module leaf names come from the final normalized namespace segment
+- root-level declarations are rejected instead of being assigned an implicit folder
+
+Example:
 
 ```typescript
-@table
-model Post {
-  @key id: uuid;
-  authorId: uuid;
-  status: string;
-
-  // Multi-column index
-  authorStatus: composite<"authorId", "status">;
-}
+namespace Demo.GamePlatform.Content.Stories;
 ```
 
-### Unique Constraints
-
-Add `@unique` decorator to create a unique constraint instead of a regular index:
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-  email: string;
-  deletedAt?: utcDateTime;
-
-  // Unique composite constraint on (email, deletedAt)
-  @unique
-  emailDeletedAt: composite<"email", "deletedAt">;
-}
-```
-
-### Primary Key Constraints
-
-Use `@key` to create a composite primary key:
-
-```typescript
-@table
-model Membership {
-  // Composite primary key
-  @key
-  userRole: composite<"user_id", "role_id">;
-
-  userId: uuid;
-  roleId: uuid;
-}
-```
-
----
-
-## Derived Models - PickProperties, OmitProperties & Lookup Types
-
-TypeSpec's built-in template types let you derive new models from existing `@table` models without duplicating field definitions. Validators and decorators are inherited automatically.
-
-### PickProperties - select specific fields
-
-```typescript
-/** Lightweight profile view - only identity + display columns. */
-@data
-model UserProfile is PickProperties<User, "id" | "email" | "username">;
-```
-
-### OmitProperties - exclude fields
-
-```typescript
-/** Public-facing user record with sensitive columns stripped. */
-@data
-model PublicUser is OmitProperties<User, "passwordHash" | "deletedAt" | "updatedAt">;
-```
-
-### Lookup types - reference a field from another model
-
-Use `Model.property` as a field type to create a **lookup type**. The field inherits the source property's type and all validators (`@maxLength`, `@format`, `@minValue`, `@doc`, etc.).
-
-```typescript
-@table("invitations")
-model Invitation {
-  @key id: uuid;
-
-  /** Inherits @maxLength(320) and @format("email") from User.email */
-  inviteeEmail: User.email;
-
-  /** Inherits @maxLength(200) from World.name */
-  worldName: World.name;
-
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-}
-```
-
----
-
-## Form / Data Models (`@data`)
-
-Use `@data` to define a **form payload or DTO** that emitters render as a typed struct / class with no database schema.
-
-```typescript
-@data("Create Invitation Form")
-model CreateInvitationForm {
-  /** Lookup type - inherits @maxLength(320) and @format("email") from User.email */
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: User.email;
-
-  @title("Personal Message")
-  @placeholder("Write a short note to your invitee…")
-  @maxLength(1000)
-  message?: text;
-}
-
-// @@inputType targets Scalar - use ::type to obtain the scalar:
-//   Direct field:    @@inputType(CreateInvitationForm.message::type, "textarea")
-//   Lookup field:    message::type resolves to `text` scalar - works ✓
-@@inputType(CreateInvitationForm.message::type, "textarea");
-
-// For lookup-typed fields, go through the source property's custom scalar:
-@@inputType(World.prompt::type, "textarea");  // World.prompt: text (custom scalar)
-```
-
----
-
-## Relations
-
-All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`. The system will NOT auto-generate relations.
-
-### Many-to-One (belongs-to)
-
-Use `@foreignKey("column_name")` on the Model reference property:
-
-```typescript
-@table
-model Post {
-  @key id: uuid;
-  title: string;
-
-  // FK column will be "author_id" in the database
-  @foreignKey("author_id")
-  @onDelete("CASCADE")
-  author: User;
-}
-```
-
-### One-to-Many (has-many)
-
-Use `@mappedBy("property_name")` on the array property. The inverse side must have `@foreignKey`:
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  // Points to the "author" property on Post
-  @mappedBy("author")
-  posts: Post[];
-}
-
-@table
-model Post {
-  @key id: uuid;
-  title: string;
-
-  @foreignKey("author_id")
-  author: User;
-}
-```
-
-### One-to-One
-
-Use `owner_id` as **both primary key and foreign key** (identifying relationship):
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  // Inverse side - points back to Passport
-  @mappedBy("owner")
-  passport?: Passport;
-}
-
-@table
-model Passport {
-  // owner_id is both PK and FK
-  @key ownerId: uuid;
-
-  passportNumber: string;
-
-  @foreignKey("owner_id")
-  owner: User;
-}
-```
-
-### Self-Referencing
-
-```typescript
-@table
-model Category {
-  @key id: uuid;
-  name: string;
-
-  // Category has many subcategories
-  @mappedBy("parent")
-  children?: Category[];
-
-  // Parent category reference
-  @foreignKey("parent_id")
-  parent?: Category;
-}
-```
-
-### Cascade Options
-
-Use `@onDelete` and `@onUpdate` for cascade behavior:
-
-```typescript
-@table
-model Post {
-  @key id: uuid;
-
-  @foreignKey("author_id")
-  @onDelete("CASCADE")   // Delete posts when author is deleted
-  @onUpdate("CASCADE")   // Update author_id when author's id changes
-  author: User;
-}
-```
-
-Valid actions: `CASCADE`, `SET NULL`, `SET DEFAULT`, `RESTRICT`, `NO ACTION`
-
-### Many-to-Many
-
-A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
-
-```typescript
-// User and Role have a many-to-many relationship via UserRole
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  // Points to "user" property on UserRole
-  @mappedBy("user")
-  userRoles: UserRole[];
-}
-
-@table
-model Role {
-  @key id: uuid;
-  name: string;
-
-  // Points to "role" property on UserRole
-  @mappedBy("role")
-  roleUsers: UserRole[];
-}
-
-// Junction table - defines the relationship
-@table
-model UserRole {
-  @key id: uuid;
-
-  @foreignKey("user_id")
-  user: User;
-
-  @foreignKey("role_id")
-  role: Role;
-}
-```
-
----
+normalizes to:
+
+- namespace: `Demo.GamePlatform.Content.Stories`
+- namespace path: `["demo", "game_platform", "content", "stories"]`
+- namespace directory: `demo/game_platform/content/stories`
+- package leaf: `stories`
 
 ## Decorator Reference
 
-### Model-level decorators
+### Model decorators
 
-| Decorator       | Arguments        | Description                         |
-| --------------- | ---------------- | ----------------------------------- |
-| `@table(name?)` | `name?: string`  | Maps model to a database table      |
-| `@data(label?)` | `label?: string` | Marks model as a non-DB data / form |
+- `@table(name?)`
+  Marks a model as a persisted table. If `name` is omitted, the table name is derived from the model name.
 
-### Property-level decorators
+- `@tableMixin`
+  Marks a model as a reusable ORM mixin.
 
-| Decorator             | Arguments          | Description                                               |
-| --------------------- | ------------------ | --------------------------------------------------------- |
-| `@key`                | -                  | Marks the property as the primary key (TypeSpec built-in) |
-| `@index(name?)`       | `name?: string`    | Creates a single-column index                             |
-| `@unique`             | -                  | Adds a unique constraint                                  |
-| `@map(column)`        | `column: string`   | Overrides the column name                                 |
-| `@autoIncrement`      | -                  | Marks as auto-increment (serial / bigserial)              |
-| `@autoCreateTime`     | -                  | Set timestamp on INSERT                                   |
-| `@autoUpdateTime`     | -                  | Set timestamp on UPDATE                                   |
-| `@softDelete`         | -                  | Enable soft-delete via a nullable timestamp               |
-| `@foreignKey(column)` | `column: string`   | Declares FK column name for this relation                 |
-| `@mappedBy(property)` | `property: string` | Declares inverse property for collection-side             |
-| `@onDelete(action)`   | `action: string`   | FK delete rule (`CASCADE`, `SET NULL`, etc.)              |
-| `@onUpdate(action)`   | `action: string`   | FK update rule                                            |
-| `@precision(p, s?)`   | `p, s: integer`    | Sets NUMERIC precision and scale                          |
-| `@ignore`             | -                  | Exclude from DB schema (virtual / computed field)         |
-| `@title(text)`        | `text: string`     | Human-readable field label for form / DTO models          |
-| `@placeholder(text)`  | `text: string`     | Placeholder hint shown before user types                  |
+- `@data(label?)`
+  Marks a model as a non-table data shape for forms and DTOs.
 
-### Composite type
+### Column and persistence decorators
 
-| Type                  | Arguments                 | Description                                  |
-| --------------------- | ------------------------- | -------------------------------------------- |
-| `composite<col, ...>` | `column names as strings` | Defines multi-column index/unique constraint |
+- `@map(columnName)`
+  Overrides the emitted column name.
 
-Use `composite<"col1", "col2", ...>` as a property type. Add `@unique` to create a unique constraint, or `@key` for a composite primary key.
+- `@index(name?)`
+  Adds a non-unique index.
 
-### Scalar-level decorator (augment syntax)
+- `@unique`
+  Adds a unique constraint for the field.
 
-| Decorator                       | Arguments                          | Description                                           |
-| ------------------------------- | ---------------------------------- | ----------------------------------------------------- |
-| `@@inputType(scalar, htmlType)` | `scalar: Scalar, htmlType: string` | HTML input type hint for a scalar (e.g. `"textarea"`) |
+- `@check(name, expression)`
+  Adds a named database check constraint anchored to the property.
 
-> **Note:** `@@inputType` targets a `Scalar`. Use `Field::type` to obtain the scalar from a direct field (`message::type → text`). For lookup-typed fields, go through the source property: `World.prompt::type → text` (only works when the source property's type is a custom scalar, not a built-in like `string`).
+- `@precision(precision, scale?)`
+  Adds numeric precision metadata.
 
----
+- `@autoIncrement`
+  Marks an integer field as auto-incrementing.
 
-## Built-in Scalar Types
+- `@softDelete`
+  Marks a datetime field as the soft-delete column.
+
+- `@autoCreateTime`
+  Marks a datetime field as create timestamp metadata.
+
+- `@autoUpdateTime`
+  Marks a datetime field as update timestamp metadata.
+
+- `@ignore`
+  Removes a property from persistence emitters.
+
+### Relation decorators
+
+- `@foreignKey(localField, referencedField?)`
+  Declares the owning side of a relation using a local field and an optional referenced target field.
+
+- `@mappedBy(inverseProperty)`
+  Declares the inverse side of a relation.
+
+- `@manyToMany(joinTableName)`
+  Declares many-to-many shorthand on an array relation.
+
+- `@onDelete(action)`
+  Declares FK delete behavior.
+
+- `@onUpdate(action)`
+  Declares FK update behavior.
+
+### Form metadata decorators
+
+- `@title(text)`
+- `@placeholder(text)`
+- `@@inputType(scalar, htmlType)`
+
+`@@inputType` targets a scalar. When applied to a field, use `Field::type` or the source scalar for lookup-typed fields:
 
 ```typescript
-// Available without importing anything extra:
-scalar uuid      // maps to uuid / uuid.UUID / UUID
-scalar text      // maps to text (unbounded string)
-scalar decimal   // maps to numeric, use @precision to set precision
-scalar serial    // maps to serial (auto-increment int32)
-scalar bigserial // maps to bigserial (auto-increment int64)
-scalar jsonb     // maps to jsonb (PostgreSQL JSON binary column)
+@@inputType(CreateWorldForm.summary::type, "textarea");
+@@inputType(Demo.Worlds.World.prompt::type, "textarea");
 ```
 
-Standard TypeSpec scalars (`string`, `int32`, `boolean`, `utcDateTime`, …) are also supported - see the [type mapping table](../../README.md#type-mapping-reference).
+## Basic Example
 
----
+```typescript
+import "@qninhdt/typespec-orm";
+
+using Qninhdt.Orm;
+
+namespace Demo.Shared;
+
+@tableMixin
+model Timestamped {
+  @key id: uuid;
+  @autoCreateTime createdAt: utcDateTime;
+  @autoUpdateTime updatedAt?: utcDateTime;
+}
+
+namespace Demo.Accounts;
+
+@table
+model User is Demo.Shared.Timestamped {
+  @unique
+  @maxLength(320)
+  @format("email")
+  email: string;
+
+  @check("users_credits_non_negative", "credits >= 0")
+  credits: int32 = 0;
+
+  @manyToMany("user_badges")
+  badges?: Badge[];
+}
+
+@table
+model Badge is Demo.Shared.Timestamped {
+  @unique code: string;
+
+  @manyToMany("user_badges")
+  users?: User[];
+}
+
+namespace Demo.Worlds;
+
+@table
+model World is Demo.Shared.Timestamped {
+  ownerId: uuid;
+  slug: string;
+
+  @foreignKey("ownerId")
+  owner: Demo.Accounts.User;
+}
+
+namespace Demo.Forms;
+
+@data("Create Invitation Form")
+model CreateInvitationForm {
+  @title("Invitee Email")
+  @placeholder("friend@example.com")
+  inviteeEmail: Demo.Accounts.User.email;
+}
+```
+
+## Relation Semantics
+
+### Owned relations
+
+Owned relations are declared on the navigation property:
+
+```typescript
+authorId: uuid;
+
+@foreignKey("authorId")
+author: User;
+```
+
+The optional second argument targets a non-`id` field:
+
+```typescript
+organizationCode: string;
+
+@foreignKey("organizationCode", "code")
+organization: Organization;
+```
+
+### Inverse relations
+
+```typescript
+@mappedBy("author")
+posts: Post[];
+```
+
+### Many-to-many shorthand
+
+```typescript
+@table
+model User {
+  @key id: uuid;
+
+  @manyToMany("user_badges")
+  badges?: Badge[];
+}
+
+@table
+model Badge {
+  @key id: uuid;
+
+  @manyToMany("user_badges")
+  users?: User[];
+}
+```
+
+Rules:
+
+- the property must be an array of `@table` models
+- both sides must declare `@manyToMany`
+- both sides must use the same join table name
+- shorthand conflicts with an explicit table of the same name
+- shorthand is for simple joins only; payload-column join tables should be modeled explicitly
+
+## Lookup Types And Property Reuse
+
+This package supports source-property reuse patterns such as:
+
+```typescript
+@data
+model PublicUser {
+  email: Demo.GamePlatform.Accounts.User.email;
+}
+```
+
+That lets `@data` models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
+
+Use lookup types when you want:
+
+- one source of truth for field-level constraints
+- consistent frontend and backend validation
+- shared field descriptions across namespaces
+
+Avoid lookup types when the derived model needs materially different semantics; define a dedicated property instead.
+
+## Shared Selector Model
+
+Emitters using this core support:
+
+```yaml
+include:
+  - "Demo.Worlds"
+  - "Demo.Forms"
+exclude:
+  - "Demo.Audit"
+```
+
+Selectors can match:
+
+- a namespace subtree
+- a concrete declaration
+
+There is no wildcard syntax. Selectors are matched by dotted-name prefix semantics.
+
+Examples:
+
+| Selector                               | Matches                                                            |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `Demo.GamePlatform.Forms`              | the entire forms subtree                                           |
+| `Demo.GamePlatform.Accounts.User`      | the `User` declaration specifically                                |
+| `Demo.GamePlatform.Content`            | all content namespaces below it                                    |
+| `Demo.GamePlatform.Audit` in `exclude` | removes the audit subtree even if `Demo.GamePlatform` was included |
+
+Behavior:
+
+- `exclude` wins over `include`
+- redundant selectors warn
+- selecting a model while excluding a required dependency fails
+
+## Modeling Checklist
+
+Before handing a schema to an emitter, it helps to check these rules:
+
+- every emitted or referenced ORM-managed declaration has a namespace
+- shared persisted fragments use `@tableMixin`
+- ownership is explicit on foreign-key relations
+- many-to-many shorthand is used only for simple join tables
+- selector filters still include every required dependency
+- names are stable enough for namespace-derived package paths
 
 ## Diagnostics
 
-The validator runs at compile time and reports the following diagnostics:
+Important diagnostics surfaced by the core include:
 
-| Code                            | Severity | Description                                                     |
-| ------------------------------- | -------- | --------------------------------------------------------------- |
-| `multiple-keys`                 | error    | Model has more than one `@key` property                         |
-| `multiple-soft-deletes`         | error    | Model has more than one `@softDelete` property                  |
-| `duplicate-table-name`          | error    | Two `@table` models map to the same table name                  |
-| `duplicate-column-name`         | error    | Two properties produce the same column name                     |
-| `composite-column-not-found`    | error    | Column in `composite<>` type does not exist                     |
-| `composite-column-conflict`     | error    | Same column used in multiple composite fields                   |
-| `duplicate-column-in-composite` | error    | A column appears more than once in the same `composite<>` type  |
-| `empty-composite-columns`       | error    | `composite<>` type has no columns                               |
-| `precision-on-non-numeric`      | error    | `@precision` applied to a non-numeric type                      |
-| `auto-increment-on-non-integer` | error    | `@autoIncrement` applied to a non-integer type                  |
-| `soft-delete-on-non-datetime`   | error    | `@softDelete` requires a datetime type                          |
-| `auto-time-on-non-datetime`     | error    | `@autoCreateTime`/`@autoUpdateTime` requires a datetime type    |
-| `ignore-conflicts`              | error    | `@ignore` combined with a DB decorator (`@key`, `@index`, etc.) |
-| `missing-key`                   | warning  | `@table` model has no `@key` property                           |
-| `redundant-unique-on-key`       | warning  | `@unique` on a primary-key property is redundant                |
-| `redundant-index-on-unique`     | warning  | `@index` on a `@unique` property is redundant                   |
-| `redundant-map`                 | warning  | `@map` value matches the auto-derived column name               |
-| `cascade-without-relation`      | warning  | `@onDelete`/`@onUpdate` on a non-relation property              |
-| `invalid-foreign-key`           | warning  | `@foreignKey` reference could not be validated                  |
-| `missing-back-reference`        | warning  | One-to-many relation missing `@mappedBy` on the inverse side    |
+- `namespace-required`
+- `duplicate-table-name`
+- `duplicate-column-name`
+- `mixin-cycle`
+- `mixin-field-conflict`
+- `filtered-dependency`
+- `unsupported-relation-shape`
+- `foreign-key-local-missing`
+- `foreign-key-target-missing`
+- `foreign-key-type-mismatch`
+- `one-to-one-missing-unique`
+- `many-to-many-not-array`
+- `many-to-many-target-not-table`
+- `many-to-many-missing-inverse`
+- `many-to-many-conflicting-table`
+- `many-to-many-conflicting-explicit-table`
+- `duplicate-constraint-name`
+
+## Troubleshooting Common Diagnostics
+
+### `namespace-required`
+
+The model, mixin, or required dependency lives in the global namespace. Move it under a namespace and recompile.
+
+### `filtered-dependency`
+
+Your emitter selection rules included a model but excluded one of its dependencies. Either widen the include set or stop excluding the dependency.
+
+### `mixin-cycle`
+
+Two or more mixins inherit from each other in a loop. Break the cycle by extracting the shared fields into a separate base mixin.
+
+### `mixin-field-conflict`
+
+Two mixins, or a mixin plus a child model, define the same field name. Phase 1+ intentionally treats this as an error instead of allowing silent override behavior.
+
+### `foreign-key-type-mismatch`
+
+The local field type does not line up with the referenced target field type. Make both sides use compatible scalars.
+
+### `many-to-many-missing-inverse`
+
+Both sides of a shorthand many-to-many relation must opt in. Add the inverse relation with the same join-table name.
+
+## Guidance For Emitter Authors
+
+If you are adding or maintaining an emitter in this repo:
+
+- consume the normalized ORM graph instead of walking raw compiler state ad hoc
+- treat namespace-derived output paths as canonical
+- reuse shared selector behavior
+- rely on shared relation resolution where possible
+- do not silently downgrade unsupported persistence mappings
+
+## Limitations And Boundaries
+
+- root-level emitted models are unsupported
+- namespace-less dependencies are errors
+- many-to-many shorthand does not support payload columns
+- mixin field collisions are errors rather than override points
 
 ---
 
-## License
-
-[MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
-
----
-
-_Made by @qninhdt and @claude-opus-4-6_
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

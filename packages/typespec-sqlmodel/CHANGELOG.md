@@ -5,6 +5,25 @@ All notable changes to `@qninhdt/typespec-sqlmodel` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- Namespace-first Python package emission driven by the shared normalized ORM graph.
+- Support for `library-name`, `include`, `exclude`, collection strategies, referenced-column foreign keys, named checks, and `@manyToMany(...)` shorthand.
+- Generated `__associations__.py` for shorthand join tables and root `metadata = SQLModel.metadata` exports for Alembic-friendly integration.
+- `@tableMixin` expansion and namespace-aware package scaffolding with generated `__init__.py` files at each emitted package level.
+
+### Changed
+
+- Standalone package generation now uses `library-name` and namespace-derived package directories.
+- Non-standalone mode now emits code only, without manifest side effects.
+- Example outputs and CI verification now target the namespace-based SQLModel package tree.
+
+### Removed
+
+- Legacy `module-name` configuration and older flat-layout assumptions.
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

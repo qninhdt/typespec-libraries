@@ -52,6 +52,12 @@ scalar composite<
 extern dec table(target: Model, name?: valueof string);
 
 /**
+ * Marks a model as a reusable table mixin. Mixins are validated and can be
+ * composed into tables, but are never emitted as standalone tables.
+ */
+extern dec tableMixin(target: Model);
+
+/**
  * Specifies the column name for a model property. By default, the column name is the same as the property name.
  */
 extern dec map(target: ModelProperty, columnName: valueof string);
@@ -67,6 +73,12 @@ extern dec index(target: ModelProperty, name?: valueof string);
 extern dec unique(target: ModelProperty);
 
 /**
+ * Adds a named database check constraint anchored to a property.
+ * The expression is passed through to emitters.
+ */
+extern dec check(target: ModelProperty, name: valueof string, expression: valueof string);
+
+/**
  * Marks a property as an auto-incrementing primary key column. The column type is determined by the property's type (e.g. `int32` maps to `serial`, `int64` maps to `bigserial`).
  */
 extern dec autoIncrement(target: ModelProperty);
@@ -79,14 +91,27 @@ extern dec softDelete(target: ModelProperty);
 // ─── Relation Decorators ─────────────────────────────────────────────────────
 
 /**
- * Specifies a foreign key relationship to another model. The `target` parameter is the property that holds the related model, and the `field` parameter is the name of the **primary key column** on the related model that this foreign key references.
+ * Specifies a foreign key relationship to another model. The first parameter is
+ * the local FK field/column reference, and the optional second parameter is the
+ * referenced field/column on the target model. When omitted, the target
+ * reference defaults to `id`.
  */
-extern dec foreignKey(target: ModelProperty, field: valueof string);
+extern dec foreignKey(
+  target: ModelProperty,
+  field: valueof string,
+  referencedField?: valueof string
+);
 
 /**
  * Specifies the inverse side of a relationship defined with `@foreignKey`. The `target` parameter is the collection/navigation property on the owning model, and the `field` parameter is the name of the **local property** on the related model that carries the `@foreignKey` decorator (i.e. the property referencing this model).
  */
 extern dec mappedBy(target: ModelProperty, field: valueof string);
+
+/**
+ * Declares a many-to-many shorthand on an array relation. Emitters synthesize
+ * the join table from both sides when the inverse declaration matches.
+ */
+extern dec manyToMany(target: ModelProperty, tableName: valueof string);
 
 // ─── Timestamp auto-fill ─────────────────────────────────────────────────────
 

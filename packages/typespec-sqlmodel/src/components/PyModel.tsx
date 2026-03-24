@@ -6,15 +6,17 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import type { Model, Program } from "@typespec/compiler";
+import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import {
   getColumnName,
+  getCheck,
   getCompositeFields,
   getDoc,
   classifyProperties,
-  isKey,
-  isUnique,
+  collectCompositeTypeFields,
+  buildCompositeUniqueColumns,
   camelToSnake,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import {
   FILE_HEADER,
@@ -23,19 +25,64 @@ import {
   buildPythonImportBlock,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
+import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
 import { generateRelationField } from "./PyRelationField.jsx";
+import type { SqlModelEmitterOptions } from "../lib.js";
 
 export interface PyModelFileProps {
   readonly program: Program;
-  readonly model: Model;
-  readonly tableName: string;
+  readonly normalizedModel: NormalizedOrmModel;
+  readonly modelLookup: Map<Model, NormalizedOrmModel>;
+  readonly collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
+  readonly manyToManySecondaryByProp?: Map<ModelProperty, string>;
+  readonly runtimeImports?: Map<string, Set<string>>;
+}
+
+interface RegularFieldContext {
+  program: Program;
+  regularProps: ReturnType<typeof classifyProperties>["fields"];
+  compositeUniqueColumns: Set<string>;
+  fkInfoMap: Map<string, ResolvedForeignKeyFieldInfo>;
+  stdImports: Set<string>;
+  saImports: Set<string>;
+  sqlmodelImports: Set<string>;
+  needsField: { value: boolean };
+  needsColumn: { value: boolean };
+  fieldDefs: string[];
+  collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
+}
+
+interface PyModelRenderContext {
+  program: Program;
+  model: Model;
+  tableName: string;
+  enumTypes: ReturnType<typeof classifyProperties>["enumTypes"];
+  stdImports: Set<string>;
+  saImports: Set<string>;
+  sqlmodelImports: Set<string>;
+  runtimeImports?: Map<string, Set<string>>;
+  relationTargetModels: Set<Model>;
+  modelLookup: Map<Model, NormalizedOrmModel>;
+  namespacePath: string[];
+  tableArgEntries: string[];
+  fieldDefs: string[];
+  relationDefs: string[];
 }
 
 /**
  * JSX component: renders a complete Python source file for a SQLModel class.
  */
 export function PyModelFile(props: PyModelFileProps): Children {
-  const { program, model, tableName } = props;
+  const {
+    program,
+    normalizedModel,
+    modelLookup,
+    collectionStrategy,
+    manyToManySecondaryByProp,
+    runtimeImports,
+  } = props;
+  const { model } = normalizedModel;
+  const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".py";
 
   const stdImports = new Set<string>();
@@ -51,90 +98,81 @@ export function PyModelFile(props: PyModelFileProps): Children {
     relations,
     fields: regularProps,
   } = classifyProperties(program, model);
-
+  const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
+  const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
+  const fkInfoMap = buildForeignKeyInfoMap(model, relations);
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
-  const relationTargetModels = new Set<string>();
+  const relationTargetModels = new Set<Model>();
+  const tableArgEntries = buildTableArgEntries(program, model, compositeTypeFields, saImports);
 
-  // Ignored fields → ClassVar
-  for (const { prop, enumInfo } of ignored) {
-    fieldDefs.push(generateIgnoredField(program, prop, stdImports, enumInfo));
-  }
+  addIgnoredFields(program, ignored, fieldDefs, stdImports);
+  addRelationFields(
+    program,
+    relations,
+    relationDefs,
+    relationTargetModels,
+    stdImports,
+    sqlmodelImports,
+    manyToManySecondaryByProp,
+  );
+  addRegularFields({
+    program,
+    regularProps,
+    compositeUniqueColumns,
+    fkInfoMap,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    needsField,
+    needsColumn,
+    fieldDefs,
+    collectionStrategy,
+  });
+  addEnumImports(enumTypes, stdImports, saImports);
 
-  // Relation navigation properties
-  // Generate relation fields only - NO auto FK generation (everything must be explicit)
-  for (const { prop, resolved } of relations) {
-    // Add Relationship import only if there are relations
-    if (!sqlmodelImports.has("Relationship")) {
-      sqlmodelImports.add("Relationship");
-    }
-    const { field, targetModel } = generateRelationField(program, prop, resolved);
-    relationDefs.push(field);
-    // Add to TYPE_CHECKING imports for cross-model relations
-    // Also add self-referential models to TYPE_CHECKING for proper forward reference
-    if (targetModel !== model.name) {
-      relationTargetModels.add(targetModel);
-      stdImports.add("TYPE_CHECKING");
-    } else {
-      // Self-referential: need TYPE_CHECKING for forward reference
-      relationTargetModels.add(targetModel);
-      stdImports.add("TYPE_CHECKING");
-    }
-  }
+  const code = buildPyModelCode({
+    program,
+    model,
+    tableName,
+    enumTypes,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    runtimeImports,
+    relationTargetModels,
+    modelLookup,
+    namespacePath: normalizedModel.namespacePath,
+    tableArgEntries,
+    fieldDefs,
+    relationDefs,
+  });
 
-  // Collect composite type fields from properties (composite<col1, col2>)
-  // This needs to be done BEFORE generating regular fields so we can skip unique=True for composite fields
-  const compositeTypeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
-      // Use snake_case for column names in the generated name
-      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
-      const snakeColumns = columns.map((c) => camelToSnake(c));
-      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
-      compositeTypeFields.push({
-        name: generatedName,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
+  return (
+    <SourceFile path={fileName} filetype="py" printWidth={9999}>
+      {code}
+    </SourceFile>
+  );
+}
 
-  // Build a map of column names that are part of composite unique
-  const compositeUniqueColumns = new Set<string>();
-  for (const ct of compositeTypeFields) {
-    if (ct.isUnique) {
-      for (const col of ct.columns) {
-        compositeUniqueColumns.add(camelToSnake(col));
-      }
-    }
-  }
-
-  // Build a map of FK column name -> targetTable for use in field generation
-  // Note: fkColumnName from relation is the TypeSpec property name, need to convert to DB column name
-  const fkInfoMap = new Map<string, string>();
-  for (const { resolved } of relations) {
-    // Convert the FK column name to snake_case (database column name)
-    const dbColumnName = camelToSnake(resolved.fkColumnName);
-    fkInfoMap.set(dbColumnName, resolved.targetTable);
-  }
-
-  // Regular DB-mapped fields
+function addRegularFields(context: RegularFieldContext): void {
+  const {
+    program,
+    regularProps,
+    compositeUniqueColumns,
+    fkInfoMap,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    needsField,
+    needsColumn,
+    fieldDefs,
+    collectionStrategy,
+  } = context;
   for (const { prop } of regularProps) {
-    // Skip composite type fields - they are configuration only
     if (getCompositeFields(program, prop)) continue;
-    // Skip unique=True for fields that are part of composite unique
+
     const columnName = getColumnName(program, prop);
-    const isPartOfCompositeUnique = compositeUniqueColumns.has(columnName);
-    // Check if this field is a FK (used by any relation) - get target table name
-    const targetTable = fkInfoMap.get(columnName);
     fieldDefs.push(
       generateField(
         program,
@@ -144,99 +182,249 @@ export function PyModelFile(props: PyModelFileProps): Children {
         sqlmodelImports,
         needsField,
         needsColumn,
-        isPartOfCompositeUnique,
-        targetTable,
+        compositeUniqueColumns.has(columnName),
+        fkInfoMap.get(columnName),
+        collectionStrategy,
       ),
     );
   }
+}
 
-  // Composite indexes & unique constraints
-  const hasTableArgs = compositeTypeFields.length > 0;
+function buildTableArgEntries(
+  program: Program,
+  model: Model,
+  compositeTypeFields: ReturnType<typeof collectCompositeTypeFields>,
+  saImports: Set<string>,
+): string[] {
+  const tableArgEntries = buildCompositeTableArgEntries(compositeTypeFields, saImports);
+  addCheckConstraints(program, model, saImports, tableArgEntries);
+  return tableArgEntries;
+}
+
+function buildCompositeTableArgEntries(
+  compositeTypeFields: ReturnType<typeof collectCompositeTypeFields>,
+  saImports: Set<string>,
+): string[] {
+  const tableArgEntries: string[] = [];
   let hasIndex = false;
   let hasUniqueConstraint = false;
-  if (compositeTypeFields.length > 0) {
-    for (const ct of compositeTypeFields) {
-      if (ct.isPrimary || ct.isUnique) {
-        hasUniqueConstraint = true;
-      } else {
-        hasIndex = true;
-      }
+
+  for (const ct of compositeTypeFields) {
+    const cols = ct.columns.map((column) => `"${camelToSnake(column)}"`).join(", ");
+    if (ct.isPrimary || ct.isUnique) {
+      hasUniqueConstraint = true;
+      tableArgEntries.push(
+        `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${camelToSnake(ct.name)}")`,
+      );
+      continue;
     }
-    if (hasIndex) saImports.add("sqlalchemy.Index");
-    if (hasUniqueConstraint) saImports.add("sqlalchemy.UniqueConstraint");
+
+    hasIndex = true;
+    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index("${camelToSnake(ct.name)}", ${cols})`);
   }
 
-  // Enum imports
-  if (enumTypes.size > 0) {
-    stdImports.add("enum.Enum");
-    saImports.add("sqlalchemy.Enum as SAEnum");
+  if (hasIndex) saImports.add("sqlalchemy.Index");
+  if (hasUniqueConstraint) saImports.add("sqlalchemy.UniqueConstraint");
+  return tableArgEntries;
+}
+
+function addCheckConstraints(
+  program: Program,
+  model: Model,
+  saImports: Set<string>,
+  tableArgEntries: string[],
+): void {
+  for (const prop of model.properties.values()) {
+    const check = getCheck(program, prop);
+    if (!check) continue;
+
+    saImports.add("sqlalchemy.CheckConstraint");
+    tableArgEntries.push(
+      `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(check.expression)}, name=${JSON.stringify(check.name)})`,
+    );
+  }
+}
+
+function addEnumImports(
+  enumTypes: ReturnType<typeof classifyProperties>["enumTypes"],
+  stdImports: Set<string>,
+  saImports: Set<string>,
+): void {
+  if (enumTypes.size === 0) {
+    return;
   }
 
-  // Build file content
+  stdImports.add("enum.Enum");
+  saImports.add("sqlalchemy.Enum as SAEnum");
+}
+
+function buildPyModelCode(context: PyModelRenderContext): string {
+  const {
+    program,
+    model,
+    tableName,
+    enumTypes,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    runtimeImports,
+    relationTargetModels,
+    modelLookup,
+    namespacePath,
+    tableArgEntries,
+    fieldDefs,
+    relationDefs,
+  } = context;
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
-
-  // TYPE_CHECKING block for relation imports (avoids circular dependency)
-  if (relationTargetModels.size > 0) {
-    code += "\nif TYPE_CHECKING:\n";
-    for (const targetModel of [...relationTargetModels].sort()) {
-      code += `    from .${camelToSnake(targetModel)} import ${targetModel}\n`;
-    }
-  }
-
+  code += buildRuntimeImportBlock(runtimeImports);
+  code += buildTypeCheckingBlock(relationTargetModels, modelLookup, namespacePath);
   code += "\n\n";
+  code += buildEnumClasses(enumTypes);
+  code += buildModelClass(program, model, tableName, tableArgEntries, fieldDefs, relationDefs);
+  return code;
+}
 
-  // Enum classes
+function buildEnumClasses(enumTypes: ReturnType<typeof classifyProperties>["enumTypes"]): string {
+  let code = "";
   for (const [enumName, members] of enumTypes) {
     code += generateEnumClass(enumName, members);
     code += "\n\n";
   }
+  return code;
+}
 
-  // Class definition
-  const modelDoc = getDoc(program, model);
-  code += `class ${model.name}(SQLModel, table=True):\n`;
-  code += `${FOUR_SPACES}"""${modelDoc ?? `Represents the ${tableName} table.`}"""\n\n`;
+function buildModelClass(
+  program: Program,
+  model: Model,
+  tableName: string,
+  tableArgEntries: string[],
+  fieldDefs: string[],
+  relationDefs: string[],
+): string {
+  const modelDoc = getDoc(program, model) ?? `Represents the ${tableName} table.`;
+  let code = `class ${model.name}(SQLModel, table=True):\n`;
+  code += `${FOUR_SPACES}"""${modelDoc}"""\n\n`;
   code += `${FOUR_SPACES}__tablename__ = "${tableName}" # type: ignore \n`;
 
-  // Table args
-  if (hasTableArgs) {
-    const tableArgEntries: string[] = [];
-    for (const ct of compositeTypeFields) {
-      // Convert camelCase column names to snake_case for SQL
-      const cols = ct.columns.map((c) => `"${camelToSnake(c)}"`).join(", ");
-      if (ct.isPrimary || ct.isUnique) {
-        // Primary or unique constraint
-        tableArgEntries.push(
-          `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${camelToSnake(ct.name)}")`,
-        );
-      } else {
-        // Regular index
-        tableArgEntries.push(
-          `${FOUR_SPACES}${FOUR_SPACES}Index("${camelToSnake(ct.name)}", ${cols})`,
-        );
-      }
-    }
+  if (tableArgEntries.length > 0) {
     code += `${FOUR_SPACES}__table_args__ = (\n`;
     code += tableArgEntries.join(",\n") + ",\n";
     code += `${FOUR_SPACES})\n`;
   }
 
   code += "\n";
-
-  for (const field of fieldDefs) {
-    code += field;
-  }
+  code += fieldDefs.join("");
 
   if (relationDefs.length > 0) {
     code += `\n${FOUR_SPACES}# ─── Relationships ─────────────────────\n`;
-    for (const rd of relationDefs) {
-      code += rd;
-    }
+    code += relationDefs.join("");
   }
 
-  return (
-    <SourceFile path={fileName} filetype="py" printWidth={9999}>
-      {code}
-    </SourceFile>
-  );
+  return code;
+}
+
+function addIgnoredFields(
+  program: Program,
+  ignored: ReturnType<typeof classifyProperties>["ignored"],
+  fieldDefs: string[],
+  stdImports: Set<string>,
+): void {
+  for (const { prop, enumInfo } of ignored) {
+    fieldDefs.push(generateIgnoredField(program, prop, stdImports, enumInfo));
+  }
+}
+
+function addRelationFields(
+  program: Program,
+  relations: ReturnType<typeof classifyProperties>["relations"],
+  relationDefs: string[],
+  relationTargetModels: Set<Model>,
+  stdImports: Set<string>,
+  sqlmodelImports: Set<string>,
+  manyToManySecondaryByProp: Map<ModelProperty, string> | undefined,
+): void {
+  for (const { prop, resolved } of relations) {
+    sqlmodelImports.add("Relationship");
+    const secondary =
+      resolved.kind === "many-to-many" ? manyToManySecondaryByProp?.get(prop) : undefined;
+    const { field, targetModel } = generateRelationField(program, prop, resolved, secondary);
+    relationDefs.push(field);
+    relationTargetModels.add(targetModel);
+    stdImports.add("TYPE_CHECKING");
+  }
+}
+
+function buildForeignKeyInfoMap(
+  model: Model,
+  relations: ReturnType<typeof classifyProperties>["relations"],
+): Map<string, ResolvedForeignKeyFieldInfo> {
+  const fkInfoMap = new Map<string, ResolvedForeignKeyFieldInfo>();
+  for (const { resolved } of relations) {
+    if (resolved.kind === "many-to-many" || resolved.localProperty.model !== model) {
+      continue;
+    }
+
+    fkInfoMap.set(camelToSnake(resolved.fkColumnName), {
+      targetTable: resolved.targetTable,
+      targetColumn: resolved.fkTargetColumn,
+      onDelete: resolved.onDelete,
+      onUpdate: resolved.onUpdate,
+    });
+  }
+
+  return fkInfoMap;
+}
+
+function buildRuntimeImportBlock(runtimeImports?: Map<string, Set<string>>): string {
+  if (!runtimeImports || runtimeImports.size === 0) {
+    return "";
+  }
+
+  let code = "\n";
+  for (const [moduleName, names] of [...runtimeImports.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    code += `from ${moduleName} import ${[...names].sort((a, b) => a.localeCompare(b)).join(", ")}\n`;
+  }
+  return code;
+}
+
+function buildTypeCheckingBlock(
+  relationTargetModels: Set<Model>,
+  modelLookup: Map<Model, NormalizedOrmModel>,
+  namespacePath: string[],
+): string {
+  if (relationTargetModels.size === 0) {
+    return "";
+  }
+
+  let code = "\nif TYPE_CHECKING:\n";
+  for (const targetModel of [...relationTargetModels].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    const targetInfo = modelLookup.get(targetModel);
+    if (!targetInfo) continue;
+    code += `    from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
+  }
+  return code;
+}
+
+function toPythonRelativeImport(
+  fromSegments: string[],
+  toSegments: string[],
+  moduleName: string,
+): string {
+  let common = 0;
+  while (
+    common < fromSegments.length &&
+    common < toSegments.length &&
+    fromSegments[common] === toSegments[common]
+  ) {
+    common++;
+  }
+
+  const up = fromSegments.length - common;
+  const down = toSegments.slice(common);
+  return `${".".repeat(up + 1)}${[...down, moduleName].join(".")}`;
 }

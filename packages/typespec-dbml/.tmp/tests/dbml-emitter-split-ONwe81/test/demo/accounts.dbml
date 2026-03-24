@@ -1,0 +1,7 @@
+// Database Schema
+
+// Namespace: Test.Demo.Accounts
+
+Table users {
+  id uuid [pk, not null]
+}

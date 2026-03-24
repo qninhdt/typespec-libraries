@@ -5,21 +5,20 @@
 import { Children } from "@alloy-js/core";
 import { SourceFile } from "@alloy-js/typescript";
 import { Model, Program } from "@typespec/compiler";
-import { generatedHeader } from "@qninhdt/typespec-orm";
+import {
+  generatedHeader,
+  getInputTypeForProperty,
+  getPlaceholder,
+  getTitle,
+} from "@qninhdt/typespec-orm";
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
+import { toPascalCase } from "../utils.js";
 
 export interface ZodModelFileProps {
-  program: Program;
-  model: Model;
-  label: string;
-  modelsFolder?: boolean;
-}
-
-/**
- * Converts a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+  readonly program: Program;
+  readonly model: Model;
+  readonly label: string;
+  readonly path?: string;
 }
 
 /**
@@ -32,13 +31,39 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
   const name = props.model.name!;
   const pascalName = toPascalCase(name);
   const schemaName = pascalName + "Schema";
+  const metaName = pascalName + "Meta";
+  const filePath = props.path ?? `${name}.ts`;
+  const metadataEntries = [...props.model.properties.values()]
+    .map((prop) => {
+      const title = getTitle(props.program, prop);
+      const placeholder = getPlaceholder(props.program, prop);
+      const inputType = getInputTypeForProperty(props.program, prop);
+      const parts = [
+        title ? `title: ${JSON.stringify(title)}` : undefined,
+        placeholder ? `placeholder: ${JSON.stringify(placeholder)}` : undefined,
+        inputType ? `inputType: ${JSON.stringify(inputType)}` : undefined,
+      ].filter((item): item is string => !!item);
 
-  const filePath = props.modelsFolder ? `../models/${name}.ts` : `${name}.ts`;
+      if (parts.length === 0) {
+        return undefined;
+      }
+
+      return `  ${renderPropertyName(prop.name)}: { ${parts.join(", ")} },`;
+    })
+    .filter((item): item is string => !!item);
 
   return (
     <SourceFile path={filePath}>
       {`// ${generatedHeader}\n`}
       <ZodSchemaDeclaration type={props.model} name={schemaName} export />
+      {`\nexport type ${pascalName} = z.infer<typeof ${schemaName}>;\n`}
+      {metadataEntries.length > 0
+        ? `\nexport const ${metaName} = {\n${metadataEntries.join("\n")}\n} as const;\n`
+        : ""}
     </SourceFile>
   );
+}
+
+function renderPropertyName(name: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
 }

@@ -200,4 +200,21 @@ describe("Zod optional fields", () => {
 
     expect(output).toContain(".default(");
   });
+
+  it("matches numeric default literals to the emitted schema type", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        count: int32 = 0;
+        total: int64 = 42;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain(".default(0)");
+    expect(output).toContain(".default(42n)");
+    expect(output).not.toContain(".default(0n)");
+  });
 });

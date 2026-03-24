@@ -3,6 +3,9 @@
  * Pure data -no JSX needed.
  */
 
+import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
+import { camelToPascal, camelToSnake } from "@qninhdt/typespec-orm";
+
 /** Maps canonical DB type names → Go types, GORM column types, and required imports */
 export const GO_TYPE_MAP: Record<string, { goType: string; gormType: string; imports?: string[] }> =
   {
@@ -78,14 +81,14 @@ export interface CompositeFieldTag {
  * Escape characters that are unsafe inside a Go struct tag value.
  */
 export function escapeFormTagValue(value: string): string {
-  return value.replace(/`/g, "'").replace(/,/g, " ");
+  return value.replaceAll("`", "'").replaceAll(",", " ");
 }
 
 /**
  * Escape characters in doc comments for safe inclusion in Go tags.
  */
 export function escapeComment(doc: string): string {
-  return doc.replace(/;/g, ",").replace(/"/g, "'").replace(/`/g, "'");
+  return doc.replaceAll(";", ",").replaceAll('"', "'").replaceAll("`", "'");
 }
 
 /**
@@ -95,20 +98,33 @@ export function buildDocComment(doc: string | undefined): string {
   return doc ? `\t// ${doc}\n` : "";
 }
 
+export interface GoPackageImport {
+  alias: string;
+  path: string;
+}
+
 /**
  * Build Go import block from a set of import paths.
  */
-export function buildImportBlock(imports: Set<string>): string {
-  const sorted = [...imports].sort();
-  if (sorted.length === 0) return "";
+export function buildImportBlock(
+  imports: Set<string>,
+  packageImports: GoPackageImport[] = [],
+): string {
+  const sorted = [...imports].sort((left, right) => left.localeCompare(right));
+  if (sorted.length === 0 && packageImports.length === 0) return "";
   const stdImports = sorted.filter((i) => !i.includes("."));
   const extImports = sorted.filter((i) => i.includes("."));
-  const parts: string[] = [];
-  parts.push("import (");
-  for (const imp of stdImports) parts.push(`\t"${imp}"`);
-  if (stdImports.length > 0 && extImports.length > 0) parts.push("");
-  for (const imp of extImports) parts.push(`\t"${imp}"`);
-  parts.push(")");
+
+  const sortedPackageImports = [...packageImports].sort((a, b) => a.alias.localeCompare(b.alias));
+  const parts: string[] = ["import (", ...stdImports.map((imp) => `\t"${imp}"`)];
+  if (stdImports.length > 0 && (extImports.length > 0 || sortedPackageImports.length > 0)) {
+    parts.push("");
+  }
+  parts.push(...extImports.map((imp) => `\t"${imp}"`));
+  if (extImports.length > 0 && sortedPackageImports.length > 0) {
+    parts.push("");
+  }
+  parts.push(...sortedPackageImports.map((imp) => `\t${imp.alias} "${imp.path}"`), ")");
   return parts.join("\n") + "\n";
 }
 
@@ -133,9 +149,7 @@ export function buildCompositeMap(
     }
 
     for (let i = 0; i < ct.columns.length; i++) {
-      // Convert camelCase to snake_case for the key (e.g., "ownerId" -> "owner_id")
-      const camelCol = ct.columns[i];
-      const snakeCol = camelCol.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+      const snakeCol = camelToSnake(ct.columns[i]);
       const tags = map.get(snakeCol) ?? [];
       tags.push({ kind, name: ct.name, priority: i + 1 });
       map.set(snakeCol, tags);
@@ -143,4 +157,27 @@ export function buildCompositeMap(
   }
 
   return map;
+}
+
+/**
+ * Generate Go enum type + const block lines for a set of enum types.
+ * Shared between GormStruct and GormDataStruct to avoid duplication.
+ */
+export function buildGoEnumBlock(enumTypes: Map<string, EnumMemberInfo[]>): string[] {
+  const lines: string[] = [];
+  for (const [enumName, members] of enumTypes) {
+    const goTypeName = camelToPascal(enumName);
+    lines.push(
+      `// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`,
+      `type ${goTypeName} string`,
+      "",
+      "const (",
+    );
+    for (const m of members) {
+      const constName = `${goTypeName}${camelToPascal(m.name)}`;
+      lines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
+    }
+    lines.push(")", "");
+  }
+  return lines;
 }

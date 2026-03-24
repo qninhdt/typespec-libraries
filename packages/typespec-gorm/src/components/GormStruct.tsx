@@ -15,58 +15,47 @@ import {
   getCompositeFields,
   getDoc,
   classifyProperties,
+  collectCompositeTypeFields,
   isKey,
-  isUnique,
   camelToPascal,
   camelToSnake,
   resolveDbType,
   generatedHeader,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
-import { GO_TYPE_MAP, buildCompositeMap, buildImportBlock } from "./GormConstants.js";
+import {
+  GO_TYPE_MAP,
+  buildCompositeMap,
+  buildImportBlock,
+  buildGoEnumBlock,
+  type GoPackageImport,
+} from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
 import { generateRelationFieldLine } from "./GormRelationField.jsx";
+import type { GormEmitterOptions } from "../lib.js";
 
 export interface GormModelFileProps {
   readonly program: Program;
-  readonly model: Model;
-  readonly tableName: string;
-  readonly packageName: string;
+  readonly normalizedModel: NormalizedOrmModel;
+  readonly modelLookup: Map<Model, NormalizedOrmModel>;
+  readonly libraryName?: string;
+  readonly collectionStrategy?: GormEmitterOptions["collection-strategy"];
 }
 
 /**
  * JSX component: renders a complete Go source file for a GORM model.
  */
 export function GormModelFile(props: GormModelFileProps): Children {
-  const { program, model, tableName, packageName } = props;
+  const { program, normalizedModel, modelLookup, libraryName, collectionStrategy } = props;
+  const { model, packageName } = normalizedModel;
+  const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".go";
 
   const imports = new Set<string>();
+  const packageImports = new Map<string, GoPackageImport>();
 
-  // Collect composite type fields from properties (composite<col1, col2>)
-  const compositeTypeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      // Generate name: [tableName]_[col1]_[col2]_..._[idx|unique]
-      // Use snake_case for column names in the generated name
-      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
-      const snakeColumns = columns.map((c) => camelToSnake(c));
-      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
-      compositeTypeFields.push({
-        name: generatedName,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
-
-  // Build composite map from composite type fields
+  // Collect composite type fields and build composite map
+  const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
   const compositeMap = buildCompositeMap(compositeTypeFields);
 
   // Classify properties
@@ -81,22 +70,13 @@ export function GormModelFile(props: GormModelFileProps): Children {
   const fieldLines: string[] = [];
   const relationFieldLines: string[] = [];
 
-  // First: Key fields - always at the top
-  for (const { prop } of regularProps) {
-    if (isKey(program, prop)) {
-      // Skip composite type fields - they are configuration only
-      if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
-    }
-  }
-
-  // Second: Regular fields (excluding keys which are already output)
-  for (const { prop } of regularProps) {
-    if (!isKey(program, prop)) {
-      // Skip composite type fields - they are configuration only
-      if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
-    }
+  const orderedProps = [
+    ...regularProps.filter(({ prop }) => isKey(program, prop)),
+    ...regularProps.filter(({ prop }) => !isKey(program, prop)),
+  ];
+  for (const { prop } of orderedProps) {
+    if (getCompositeFields(program, prop)) continue;
+    fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
   }
 
   // Ignored fields → gorm:"-"
@@ -113,27 +93,24 @@ export function GormModelFile(props: GormModelFileProps): Children {
 
   // Relation navigation fields
   for (const { prop, resolved } of relations) {
-    relationFieldLines.push(generateRelationFieldLine(program, prop, resolved));
+    let targetType = resolved.targetModel.name;
+    const targetInfo = modelLookup.get(resolved.targetModel);
+    if (targetInfo && targetInfo.namespace !== normalizedModel.namespace) {
+      const alias = targetInfo.namespacePath.join("_");
+      packageImports.set(alias, {
+        alias,
+        path: libraryName ? `${libraryName}/${targetInfo.namespaceDir}` : targetInfo.namespaceDir,
+      });
+      targetType = `${alias}.${resolved.targetModel.name}`;
+    }
+    relationFieldLines.push(generateRelationFieldLine(program, prop, resolved, targetType));
   }
 
   // Build enum block
-  const enumLines: string[] = [];
-  for (const [enumName, members] of enumTypes) {
-    const goTypeName = camelToPascal(enumName);
-    enumLines.push(`// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`);
-    enumLines.push(`type ${goTypeName} string`);
-    enumLines.push("");
-    enumLines.push("const (");
-    for (const m of members) {
-      const constName = `${goTypeName}${camelToPascal(m.name)}`;
-      enumLines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
-    }
-    enumLines.push(")");
-    enumLines.push("");
-  }
+  const enumLines = buildGoEnumBlock(enumTypes);
 
   // Build import block
-  const importBlock = buildImportBlock(imports);
+  const importBlock = buildImportBlock(imports, [...packageImports.values()]);
 
   // Assembly
   const structName = model.name;

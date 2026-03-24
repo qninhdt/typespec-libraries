@@ -5,9 +5,9 @@
 
 import type {
   Enum,
-  EnumMember,
   Model,
   ModelProperty,
+  Namespace,
   Program,
   Scalar,
   Type,
@@ -25,16 +25,20 @@ import {
   getMinValue as tsGetMinValue,
   getPattern as tsGetPattern,
   isKey as tsIsKey,
+  walkPropertiesInherited,
 } from "@typespec/compiler";
 import {
   TableKey,
+  TableMixinKey,
   MapKey,
   IndexKey,
   UniqueKey,
+  CheckKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
   MappedByKey,
+  ManyToManyKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
@@ -53,10 +57,47 @@ export function isTable(program: Program, model: Model): boolean {
   return program.stateMap(TableKey).has(model);
 }
 
+export function isTableMixin(program: Program, model: Model): boolean {
+  return program.stateMap(TableMixinKey).has(model);
+}
+
 export function getTableName(program: Program, model: Model): string {
   const stored = program.stateMap(TableKey).get(model) as string | undefined;
   if (stored) return stored;
   return deriveTableName(model.name);
+}
+
+export function getNamespaceSegments(
+  namespace: Namespace | undefined,
+  globalNamespace?: Namespace,
+): string[] {
+  const segments: string[] = [];
+  let current = namespace;
+  while (current) {
+    if (globalNamespace && current === globalNamespace) break;
+    if (current.name !== "") {
+      segments.push(current.name);
+    }
+    current = current.namespace;
+  }
+  return segments.reverse();
+}
+
+export function getNamespaceFullName(
+  namespace: Namespace | undefined,
+  globalNamespace?: Namespace,
+): string | undefined {
+  const segments = getNamespaceSegments(namespace, globalNamespace);
+  return segments.length > 0 ? segments.join(".") : undefined;
+}
+
+export function getTypeFullName(
+  program: Program,
+  type: { name?: string; namespace?: Namespace },
+): string {
+  if (!type.name) return "";
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  return namespace ? `${namespace}.${type.name}` : type.name;
 }
 
 // ─── Property helpers ────────────────────────────────────────────────────────
@@ -97,6 +138,15 @@ export function getUniqueName(program: Program, prop: ModelProperty): string {
   return `${tableName}_${columnName}_unique`;
 }
 
+export interface CheckConstraintInfo {
+  name: string;
+  expression: string;
+}
+
+export function getCheck(program: Program, prop: ModelProperty): CheckConstraintInfo | undefined {
+  return program.stateMap(CheckKey).get(prop) as CheckConstraintInfo | undefined;
+}
+
 export function getDefaultValue(program: Program, prop: ModelProperty): string | undefined {
   // 1. TypeSpec builtin default (e.g. `credits: int32 = 0`) - preferred
   const builtin = prop.defaultValue;
@@ -109,7 +159,10 @@ export function getDefaultValue(program: Program, prop: ModelProperty): string |
       case "BooleanValue":
         return String(builtin.value);
       case "EnumValue":
-        return builtin.value.value !== undefined ? String(builtin.value.value) : builtin.value.name;
+        if (builtin.value.value === undefined) {
+          return builtin.value.name;
+        }
+        return String(builtin.value.value);
       default:
         break;
     }
@@ -138,15 +191,14 @@ export function isKey(program: Program, prop: ModelProperty): boolean {
 
 export function isArrayType(type: Type): boolean {
   // In TypeSpec, arrays are Models with an indexer
-  return type.kind === "Model" && (type as Model).indexer !== undefined;
+  return type.kind === "Model" && type.indexer !== undefined;
 }
 
 export function getArrayElementType(type: Type): Type | undefined {
   // In TypeSpec, arrays are Models with an indexer
   if (type.kind === "Model") {
-    const model = type as Model;
-    if (model.indexer) {
-      return model.indexer.value;
+    if (type.indexer) {
+      return type.indexer.value;
     }
   }
   return undefined;
@@ -163,35 +215,24 @@ export interface ValidatorInfo {
  */
 export function getValidators(program: Program, prop: ModelProperty): ValidatorInfo[] {
   const validators: ValidatorInfo[] = [];
-
-  // Length validators
-  const maxLen = getMaxLength(program, prop);
-  if (maxLen !== undefined) validators.push({ name: "maxLength", args: String(maxLen) });
-
-  const minLen = getMinLength(program, prop);
-  if (minLen !== undefined) validators.push({ name: "minLength", args: String(minLen) });
-
-  // Value validators
-  const maxVal = getMaxValue(program, prop);
-  if (maxVal !== undefined) validators.push({ name: "maxValue", args: String(maxVal) });
-
-  const minVal = getMinValue(program, prop);
-  if (minVal !== undefined) validators.push({ name: "minValue", args: String(minVal) });
-
-  const maxValEx = getMaxValueExclusive(program, prop);
-  if (maxValEx !== undefined)
-    validators.push({ name: "maxValueExclusive", args: String(maxValEx) });
-
-  const minValEx = getMinValueExclusive(program, prop);
-  if (minValEx !== undefined)
-    validators.push({ name: "minValueExclusive", args: String(minValEx) });
-
-  // Array item validators
-  const maxItems = getMaxItems(program, prop);
-  if (maxItems !== undefined) validators.push({ name: "maxItems", args: String(maxItems) });
-
-  const minItems = getMinItems(program, prop);
-  if (minItems !== undefined) validators.push({ name: "minItems", args: String(minItems) });
+  const validatorEntries: Array<[string, unknown]> = [
+    ["maxLength", getMaxLength(program, prop)],
+    ["minLength", getMinLength(program, prop)],
+    ["maxValue", getMaxValue(program, prop)],
+    ["minValue", getMinValue(program, prop)],
+    ["maxValueExclusive", getMaxValueExclusive(program, prop)],
+    ["minValueExclusive", getMinValueExclusive(program, prop)],
+    ["maxItems", getMaxItems(program, prop)],
+    ["minItems", getMinItems(program, prop)],
+  ];
+  for (const [name, value] of validatorEntries) {
+    if (value !== undefined) {
+      validators.push({
+        name,
+        args: typeof value === "object" ? JSON.stringify(value) : `${value}`,
+      });
+    }
+  }
 
   // Pattern
   const pattern = getPattern(program, prop);
@@ -213,113 +254,125 @@ export function getValidators(program: Program, prop: ModelProperty): ValidatorI
  * property when the type is a lookup reference.
  */
 function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
-  return prop.type.kind === "ModelProperty" ? (prop.type as ModelProperty) : undefined;
+  return prop.type.kind === "ModelProperty" ? prop.type : undefined;
 }
 
-export function getMaxValueExclusive(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return (
-    tsGetMaxValueExclusive(program, prop) ??
-    (src ? tsGetMaxValueExclusive(program, src) : undefined)
-  );
+/**
+ * Create a getter that reads a TypeSpec intrinsic value from the property,
+ * falling back to the lookup-source property when the direct read is undefined.
+ * Eliminates the repeated `const src = lookupSourceProp(prop); return … ?? …`
+ * boilerplate across all validation-getter wrappers.
+ */
+function withLookupFallback<T>(
+  getter: (program: Program, target: ModelProperty) => T | undefined,
+): (program: Program, prop: ModelProperty) => T | undefined {
+  return (program, prop) => {
+    const direct = getter(program, prop);
+    if (direct !== undefined) return direct;
+    const src = lookupSourceProp(prop);
+    return src ? getter(program, src) : undefined;
+  };
 }
 
-export function getMinValueExclusive(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return (
-    tsGetMinValueExclusive(program, prop) ??
-    (src ? tsGetMinValueExclusive(program, src) : undefined)
-  );
-}
-
-export function getMaxItems(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxItems(program, prop) ?? (src ? tsGetMaxItems(program, src) : undefined);
-}
-
-export function getMinItems(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinItems(program, prop) ?? (src ? tsGetMinItems(program, src) : undefined);
-}
-
-export function getMaxLength(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxLength(program, prop) ?? (src ? tsGetMaxLength(program, src) : undefined);
-}
-
-export function getMinLength(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinLength(program, prop) ?? (src ? tsGetMinLength(program, src) : undefined);
-}
-
-export function getMinValue(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMinValue(program, prop) ?? (src ? tsGetMinValue(program, src) : undefined);
-}
-
-export function getMaxValue(program: Program, prop: ModelProperty): number | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetMaxValue(program, prop) ?? (src ? tsGetMaxValue(program, src) : undefined);
-}
-
-export function getPattern(program: Program, prop: ModelProperty): string | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetPattern(program, prop) ?? (src ? tsGetPattern(program, src) : undefined);
-}
+export const getMaxValueExclusive = withLookupFallback(tsGetMaxValueExclusive);
+export const getMinValueExclusive = withLookupFallback(tsGetMinValueExclusive);
+export const getMaxItems = withLookupFallback(tsGetMaxItems);
+export const getMinItems = withLookupFallback(tsGetMinItems);
+export const getMaxLength = withLookupFallback(tsGetMaxLength);
+export const getMinLength = withLookupFallback(tsGetMinLength);
+export const getMinValue = withLookupFallback(tsGetMinValue);
+export const getMaxValue = withLookupFallback(tsGetMaxValue);
+export const getPattern = withLookupFallback(tsGetPattern);
 
 /**
  * Returns the TypeSpec @format value, e.g. "email", "uri", "date-time".
  * Used to emit format-specific validators in target languages.
  * Falls back to the source property for lookup types.
  */
-export function getFormat(program: Program, prop: ModelProperty): string | undefined {
-  const src = lookupSourceProp(prop);
-  return tsGetFormat(program, prop) ?? (src ? tsGetFormat(program, src) : undefined);
+export const getFormat = withLookupFallback(tsGetFormat);
+
+export interface ForeignKeyConfig {
+  field: string;
+  target?: string;
+}
+
+function normalizeForeignKeyConfig(value: unknown): ForeignKeyConfig | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    return { field: value };
+  }
+  if (typeof value === "object" && value !== null) {
+    const field = (value as { field?: unknown }).field;
+    const target = (value as { target?: unknown }).target;
+    if (typeof field === "string") {
+      return {
+        field,
+        target: typeof target === "string" && target !== "" ? target : undefined,
+      };
+    }
+  }
+  return undefined;
+}
+
+export function getForeignKeyConfig(
+  program: Program,
+  prop: ModelProperty,
+): ForeignKeyConfig | undefined {
+  return normalizeForeignKeyConfig(program.stateMap(ForeignKeyKey).get(prop));
 }
 
 export function getForeignKey(program: Program, prop: ModelProperty): string | undefined {
-  return program.stateMap(ForeignKeyKey).get(prop) as string | undefined;
+  return getForeignKeyConfig(program, prop)?.field;
+}
+
+export function getForeignKeyTarget(program: Program, prop: ModelProperty): string | undefined {
+  const config = getForeignKeyConfig(program, prop);
+  if (!config) return undefined;
+  return config.target ?? "id";
 }
 
 export function getMappedBy(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(MappedByKey).get(prop) as string | undefined;
 }
 
+export function getManyToMany(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(ManyToManyKey).get(prop) as string | undefined;
+}
+
 export function getCompositeFields(program: Program, prop: ModelProperty): string[] | undefined {
   const type = prop.type;
 
   // Handle scalar-based composite type (composite<field1, field2>)
-  if (type.kind === "Scalar") {
-    // Get the scalar name
-    let typeName = type.name;
-    if (!typeName) {
-      typeName = (type as any).node?.id?.escapedText;
+  if (type.kind !== "Scalar" || getCompositeScalarName(type) !== "composite") {
+    return undefined;
+  }
+
+  return getCompositeTemplateColumns(type);
+}
+
+function getCompositeScalarName(type: Scalar): string | undefined {
+  return type.name || (type as any).node?.id?.escapedText;
+}
+
+function getCompositeTemplateColumns(type: Scalar): string[] | undefined {
+  const args = (type as any).templateMapper?.args;
+  if (!args || !Array.isArray(args)) {
+    return undefined;
+  }
+
+  const columns: string[] = [];
+  for (const arg of args) {
+    if (!arg || typeof arg !== "object" || !arg.type) {
+      continue;
     }
 
-    if (typeName === "composite") {
-      // For template instantiations, check templateMapper
-      const scalar = type as any;
-
-      // templateMapper.args contains the template arguments
-      const args = scalar.templateMapper?.args;
-      if (args && Array.isArray(args)) {
-        const columns: string[] = [];
-        for (const arg of args) {
-          // Template arg structure: { entityKind: "Indeterminate", type: { kind: "String", value: "columnName" } }
-          if (arg && typeof arg === "object" && arg.type) {
-            const typeObj = arg.type;
-            if (typeObj.kind === "String" && typeObj.value && typeObj.value !== "") {
-              // Keep camelCase - emitters will convert to snake_case
-              columns.push(typeObj.value);
-            }
-          }
-        }
-        if (columns.length > 0) return columns;
-      }
+    const typeObj = arg.type;
+    if (typeObj.kind === "String" && typeObj.value) {
+      columns.push(typeObj.value);
     }
   }
 
-  return undefined;
+  return columns.length > 0 ? columns : undefined;
 }
 
 // ─── Timestamp auto-fill helpers ─────────────────────────────────────────────
@@ -391,6 +444,51 @@ export function getInputType(program: Program, scalar: Scalar): string | undefin
   return program.stateMap(InputTypeKey).get(scalar) as string | undefined;
 }
 
+function getInputTypeForScalar(program: Program, scalar: Scalar): string | undefined {
+  let current: Scalar | undefined = scalar;
+  while (current) {
+    const inputType = getInputType(program, current);
+    if (inputType) {
+      return inputType;
+    }
+    current = current.baseScalar;
+  }
+  return undefined;
+}
+
+function inferInputTypeFromFormat(format: string | undefined): string | undefined {
+  switch (format) {
+    case "email":
+      return "email";
+    case "uri":
+    case "url":
+      return "url";
+    case "date":
+      return "date";
+    case "time":
+      return "time";
+    case "password":
+      return "password";
+    default:
+      return undefined;
+  }
+}
+
+export function getInputTypeForProperty(program: Program, prop: ModelProperty): string | undefined {
+  if (prop.type.kind === "ModelProperty") {
+    return getInputTypeForProperty(program, prop.type);
+  }
+
+  if (prop.type.kind === "Scalar") {
+    const inputType = getInputTypeForScalar(program, prop.type);
+    if (inputType) {
+      return inputType;
+    }
+  }
+
+  return inferInputTypeFromFormat(getFormat(program, prop));
+}
+
 // ─── Doc helper ──────────────────────────────────────────────────────────────
 
 /**
@@ -406,7 +504,7 @@ export function getDoc(program: Program, target: Model | ModelProperty): string 
   }
   if (!raw) return undefined;
   // Collapse multi-line @doc / /** */ values to a single line
-  return raw.replace(/\r?\n[\t \*]*/g, " ").trim();
+  return raw.replaceAll(/\r?\n[\t *]*/g, " ").trim();
 }
 
 // ─── Enum helpers ────────────────────────────────────────────────────────────
@@ -431,10 +529,9 @@ export function isEnum(type: Type): type is Enum {
 export function getEnumMembers(enumType: Enum): EnumMemberInfo[] {
   const members: EnumMemberInfo[] = [];
   for (const [, member] of enumType.members) {
-    const m = member as EnumMember;
     members.push({
-      name: m.name,
-      value: m.value !== undefined ? String(m.value) : m.name,
+      name: member.name,
+      value: member.value === undefined ? member.name : String(member.value),
     });
   }
   return members;
@@ -451,13 +548,15 @@ export function getPropertyEnum(
   let type = prop.type;
   // Unwrap lookup types: User.plan → plan.type (the actual Enum)
   if (type.kind === "ModelProperty") {
-    type = (type as ModelProperty).type;
+    type = type.type;
   }
-  if (!isEnum(type)) return undefined;
-  return {
-    enumType: type,
-    members: getEnumMembers(type),
-  };
+  if (isEnum(type)) {
+    return {
+      enumType: type,
+      members: getEnumMembers(type),
+    };
+  }
+  return undefined;
 }
 
 // ─── Scalar resolution ───────────────────────────────────────────────────────
@@ -515,10 +614,10 @@ const STANDARD_SCALAR_MAP: Record<string, string> = {
 export function resolveDbType(type: Type): string | undefined {
   // Unwrap lookup types: User.email → email.type (the actual Scalar)
   if (type.kind === "ModelProperty") {
-    return resolveDbType((type as ModelProperty).type);
+    return resolveDbType(type.type);
   }
   if (type.kind !== "Scalar") return undefined;
-  const chain = getScalarChain(type as Scalar);
+  const chain = getScalarChain(type);
 
   for (const name of chain) {
     if (CUSTOM_SCALARS.has(name)) return name;
@@ -535,13 +634,38 @@ export function resolveDbType(type: Type): string | undefined {
 
 /** Convert camelCase to snake_case */
 export function camelToSnake(name: string): string {
-  return name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase();
+  if (name.length === 0) {
+    return name;
+  }
+
+  let result = "";
+
+  for (let index = 0; index < name.length; index++) {
+    const current = name[index];
+    const previous = index > 0 ? name[index - 1] : undefined;
+    const next = index + 1 < name.length ? name[index + 1] : undefined;
+    const isUpper = current >= "A" && current <= "Z";
+    const previousIsLowerOrDigit =
+      previous !== undefined &&
+      ((previous >= "a" && previous <= "z") || (previous >= "0" && previous <= "9"));
+    const previousIsUpper = previous !== undefined && previous >= "A" && previous <= "Z";
+    const nextIsLower = next !== undefined && next >= "a" && next <= "z";
+
+    if (isUpper && index > 0 && (previousIsLowerOrDigit || (previousIsUpper && nextIsLower))) {
+      result += "_";
+    }
+
+    result += current.toLowerCase();
+  }
+
+  return result;
 }
 
 /** Pre-compiled Go abbreviation replacement patterns (avoids per-call RegExp construction) */
+function escapeRegExpLiteral(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const GO_ABBREVIATION_RULES: { endPattern: RegExp; midPattern: RegExp; to: string }[] = [
   ["Id", "ID"],
   ["Ids", "IDs"],
@@ -561,8 +685,8 @@ const GO_ABBREVIATION_RULES: { endPattern: RegExp; midPattern: RegExp; to: strin
   ["Cpu", "CPU"],
   ["Json", "JSON"],
 ].map(([from, to]) => ({
-  endPattern: new RegExp(`${from}$`),
-  midPattern: new RegExp(`${from}(?=[A-Z])`, "g"),
+  endPattern: new RegExp(`${escapeRegExpLiteral(from)}$`),
+  midPattern: new RegExp(`${escapeRegExpLiteral(from)}(?=[A-Z])`, "g"),
   to,
 }));
 
@@ -581,8 +705,12 @@ export function camelToPascal(name: string): string {
 /** Derive table name from model name: PascalCase → snake_case plural */
 export function deriveTableName(modelName: string): string {
   const snake = camelToSnake(modelName);
-  if (snake.endsWith("s")) return snake;
-  if (snake.endsWith("y")) return snake.slice(0, -1) + "ies";
+  if (snake.endsWith("s") || snake.endsWith("x") || snake.endsWith("z")) return snake + "es";
+  if (snake.endsWith("sh") || snake.endsWith("ch")) return snake + "es";
+  // Only convert trailing -y to -ies when preceded by a consonant
+  if (snake.endsWith("y") && snake.length > 1 && !/[aeiou]/.test(snake.at(-2) ?? "")) {
+    return snake.slice(0, -1) + "ies";
+  }
   return snake + "s";
 }
 
@@ -595,6 +723,10 @@ export interface ResolvedRelation {
   targetModel: Model;
   /** Table name of the target model */
   targetTable: string;
+  /** The concrete FK-bearing property involved in this relation */
+  localProperty: ModelProperty;
+  /** The referenced property on the target model */
+  targetProperty: ModelProperty;
   /** FK column name (snake_case) */
   fkColumnName: string;
   /** Column referenced in target table (default: "id") */
@@ -605,10 +737,10 @@ export interface ResolvedRelation {
   onDelete?: string;
   /** ON UPDATE action */
   onUpdate?: string;
-  /** For one-to-many: PascalCase FK field name on target (for GORM foreignKey tag) */
-  inverseFkFieldName?: string;
   /** For one-to-many/many-to-one: snake_case inverse relation name (for SQLModel back_populates) */
   backPopulates?: string;
+  /** Join table name for many-to-many shorthand */
+  joinTable?: string;
 }
 
 /**
@@ -616,8 +748,7 @@ export interface ResolvedRelation {
  * Checks for @key (TypeSpec built-in)
  */
 export function findPrimaryKey(program: Program, model: Model): ModelProperty | undefined {
-  // Check for @key decorator (TypeSpec built-in) - decorators is an array
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     if (isKey(program, prop)) return prop;
   }
   return undefined;
@@ -632,8 +763,265 @@ export function unwrapArrayType(type: Type): Model | undefined {
   if (type.kind !== "Model") return undefined;
   if (!type.indexer) return undefined;
   const elementType = type.indexer.value;
-  if (elementType.kind === "Model") return elementType as Model;
+  if (elementType.kind === "Model") return elementType;
   return undefined;
+}
+
+export function resolvePropertyReference(
+  program: Program,
+  model: Model,
+  reference: string,
+): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(model)) {
+    if (prop.name === reference) {
+      return prop;
+    }
+  }
+
+  for (const prop of walkPropertiesInherited(model)) {
+    if (getColumnName(program, prop) === reference) {
+      return prop;
+    }
+  }
+
+  return undefined;
+}
+
+function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(model)) {
+    if (prop.name === name) return prop;
+  }
+  return undefined;
+}
+
+function getComparableTypeId(program: Program, type: Type): string | undefined {
+  if (type.kind === "ModelProperty") {
+    return getComparableTypeId(program, type.type);
+  }
+  if (type.kind === "Enum") {
+    return `enum:${getTypeFullName(program, type)}`;
+  }
+  if (type.kind === "Scalar") {
+    return `scalar:${resolveDbType(type) ?? getTypeFullName(program, type)}`;
+  }
+  return undefined;
+}
+
+export function describeComparableType(program: Program, prop: ModelProperty): string {
+  if (prop.type.kind === "ModelProperty") {
+    return describeComparableType(program, prop.type);
+  }
+  if (prop.type.kind === "Enum") {
+    return getTypeFullName(program, prop.type);
+  }
+  if ("name" in prop.type && typeof prop.type.name === "string") {
+    return (
+      resolveDbType(prop.type) ??
+      getTypeFullName(program, prop.type as { name?: string; namespace?: Namespace }) ??
+      prop.type.kind
+    );
+  }
+  return resolveDbType(prop.type) ?? prop.type.kind;
+}
+
+export function arePropertyTypesCompatible(
+  program: Program,
+  left: ModelProperty,
+  right: ModelProperty,
+): boolean {
+  return getComparableTypeId(program, left.type) === getComparableTypeId(program, right.type);
+}
+
+export function isRelationLocalKeyUnique(program: Program, prop: ModelProperty): boolean {
+  return isKey(program, prop) || isUnique(program, prop);
+}
+
+function isModelReferenceTo(type: Type, expected: Model): boolean {
+  return type.kind === "Model" ? type === expected : false;
+}
+
+function findInverseMappedBy(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  relationPropName: string,
+): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    if (getMappedBy(program, prop) !== relationPropName) continue;
+    const arrayElement = unwrapArrayType(prop.type);
+    if (arrayElement === parentModel || isModelReferenceTo(prop.type, parentModel)) {
+      return prop;
+    }
+  }
+  return undefined;
+}
+
+interface ResolvedForeignKeyReference {
+  targetModel: Model;
+  targetTable: string;
+  localProperty: ModelProperty;
+  targetProperty: ModelProperty;
+  localColumnName: string;
+  targetColumnName: string;
+  fkDbType: string | undefined;
+}
+
+export interface ManyToManyAssociation {
+  tableName: string;
+  leftModel: Model;
+  rightModel: Model;
+  leftProperty: ModelProperty;
+  rightProperty: ModelProperty;
+  leftKey: ModelProperty;
+  rightKey: ModelProperty;
+  leftJoinColumn: string;
+  rightJoinColumn: string;
+}
+
+function resolveOwnedRelationReference(
+  program: Program,
+  relationProp: ModelProperty,
+  parentModel: Model,
+  targetModel: Model,
+): ResolvedForeignKeyReference | undefined {
+  const fk = getForeignKeyConfig(program, relationProp);
+  if (!fk) return undefined;
+  const resolved = resolveRelationProperties(program, parentModel, targetModel, fk);
+  if (!resolved) return undefined;
+  const { localProperty, targetProperty } = resolved;
+
+  return {
+    targetModel,
+    targetTable: getTableName(program, targetModel),
+    localProperty,
+    targetProperty,
+    localColumnName: getColumnName(program, localProperty),
+    targetColumnName: getColumnName(program, targetProperty),
+    fkDbType: resolveDbType(targetProperty.type),
+  };
+}
+
+function resolveRelationProperties(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  fk: ForeignKeyConfig,
+): { localProperty: ModelProperty; targetProperty: ModelProperty } | undefined {
+  const localProperty = resolvePropertyReference(program, parentModel, fk.field);
+  if (!localProperty) {
+    return undefined;
+  }
+
+  const targetProperty = resolvePropertyReference(program, targetModel, fk.target ?? "id");
+  if (!targetProperty) {
+    return undefined;
+  }
+
+  return { localProperty, targetProperty };
+}
+
+function findInverseManyToMany(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  sourceProp: ModelProperty,
+): { prop: ModelProperty; tableName: string } | undefined {
+  const joinTable = getManyToMany(program, sourceProp);
+  if (!joinTable) return undefined;
+
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    const inverseTable = getManyToMany(program, prop);
+    if (!inverseTable) continue;
+    const inverseTarget = unwrapArrayType(prop.type);
+    if (inverseTarget !== parentModel) continue;
+    if (inverseTable !== joinTable) continue;
+    return { prop, tableName: inverseTable };
+  }
+
+  return undefined;
+}
+
+export function deriveManyToManyJoinColumnName(
+  program: Program,
+  model: Model,
+  keyProperty: ModelProperty,
+): string {
+  return `${camelToSnake(model.name)}_${getColumnName(program, keyProperty)}`;
+}
+
+export function collectManyToManyAssociations(
+  program: Program,
+  models: Iterable<Model>,
+): ManyToManyAssociation[] {
+  const associations = new Map<string, ManyToManyAssociation>();
+
+  for (const model of models) {
+    for (const prop of walkPropertiesInherited(model)) {
+      const association = buildManyToManyAssociation(program, model, prop);
+      if (!association) continue;
+      if (associations.has(association.pairKey)) continue;
+
+      associations.set(association.pairKey, association.value);
+    }
+  }
+
+  return [...associations.values()].sort((a, b) => a.tableName.localeCompare(b.tableName));
+}
+
+function buildManyToManyAssociation(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+): { pairKey: string; value: ManyToManyAssociation } | undefined {
+  const joinTable = getManyToMany(program, prop);
+  if (!joinTable) return undefined;
+
+  const targetModel = unwrapArrayType(prop.type);
+  if (!targetModel || !isTable(program, targetModel)) return undefined;
+
+  const inverse = findInverseManyToMany(program, model, targetModel, prop);
+  if (!inverse) return undefined;
+
+  const leftKey = findPrimaryKey(program, model);
+  const rightKey = findPrimaryKey(program, targetModel);
+  if (!leftKey || !rightKey) return undefined;
+
+  const leftName = getTypeFullName(program, model);
+  const rightName = getTypeFullName(program, targetModel);
+  const [pairKey, leftFirst] = buildAssociationOrdering(joinTable, leftName, rightName);
+  const leftModel = leftFirst ? model : targetModel;
+  const rightModel = leftFirst ? targetModel : model;
+  const leftProperty = leftFirst ? prop : inverse.prop;
+  const rightProperty = leftFirst ? inverse.prop : prop;
+  const leftPk = leftFirst ? leftKey : rightKey;
+  const rightPk = leftFirst ? rightKey : leftKey;
+
+  return {
+    pairKey,
+    value: {
+      tableName: joinTable,
+      leftModel,
+      rightModel,
+      leftProperty,
+      rightProperty,
+      leftKey: leftPk,
+      rightKey: rightPk,
+      leftJoinColumn: deriveManyToManyJoinColumnName(program, leftModel, leftPk),
+      rightJoinColumn: deriveManyToManyJoinColumnName(program, rightModel, rightPk),
+    },
+  };
+}
+
+function buildAssociationOrdering(
+  joinTable: string,
+  leftName: string,
+  rightName: string,
+): [string, boolean] {
+  const leftFirst = leftName <= rightName;
+  const pairKey = leftFirst
+    ? `${joinTable}:${leftName}:${rightName}`
+    : `${joinTable}:${rightName}:${leftName}`;
+  return [pairKey, leftFirst];
 }
 
 /**
@@ -652,120 +1040,179 @@ export function resolveRelation(
 ): ResolvedRelation | undefined {
   const onDelete = getOnDelete(program, prop);
   const onUpdate = getOnUpdate(program, prop);
-  const explicitFk = getForeignKey(program, prop);
+  const explicitFk = getForeignKeyConfig(program, prop);
   const explicitMappedBy = getMappedBy(program, prop);
+  const explicitManyToMany = getManyToMany(program, prop);
 
-  // Case 1: Singular @table Model reference → many-to-one
-  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
-    const targetModel = prop.type as Model;
-    const targetTable = getTableName(program, targetModel);
-
-    // FK column name is required for many-to-one
-    if (!explicitFk) {
-      return undefined;
-    }
-
-    const fkColumnName = explicitFk;
-    const fkTargetColumn = "id";
-
-    // Resolve FK type from target's primary key
-    const targetPk = findPrimaryKey(program, targetModel);
-    const fkDbType = targetPk ? resolveDbType(targetPk.type) : "uuid";
-
-    // Determine kind: @unique → one-to-one, otherwise → many-to-one
-    const hasUnique = isUnique(program, prop);
-    const kind = hasUnique ? "one-to-one" : "many-to-one";
-
-    // Find inverse one-to-many on target for back_populates
-    const forwardRef = findForwardReference(program, parentModel, targetModel, fkColumnName);
-
-    return {
-      kind,
-      targetModel,
-      targetTable,
-      fkColumnName,
-      fkTargetColumn,
-      fkDbType,
-      onDelete,
-      onUpdate,
-      backPopulates: forwardRef,
-    };
+  const directRelation = resolveDirectRelation(
+    program,
+    prop,
+    parentModel,
+    explicitFk,
+    onDelete,
+    onUpdate,
+  );
+  if (directRelation) {
+    return directRelation;
   }
 
-  // Case 2: Array Model reference → one-to-many
   const arrayElement = unwrapArrayType(prop.type);
-  if (arrayElement && isTable(program, arrayElement)) {
-    const targetModel = arrayElement;
-    const targetTable = getTableName(program, targetModel);
 
-    // mappedBy is required for one-to-many
-    if (!explicitMappedBy) {
-      return undefined;
-    }
-
-    // Find the property on target model that has @foreignKey
-    const targetProp = targetModel.properties.get(explicitMappedBy);
-    if (!targetProp) {
-      return undefined;
-    }
-
-    const targetFk = getForeignKey(program, targetProp);
-    if (!targetFk) {
-      return undefined;
-    }
-
-    const fkColumnName = targetFk;
-    const inverseFkFieldName = camelToPascal(explicitMappedBy + "Id");
-    const backPopulates = explicitMappedBy;
-
-    // Get cascade from the inverse property
-    const inverseOnDelete = getOnDelete(program, targetProp);
-    const inverseOnUpdate = getOnUpdate(program, targetProp);
-
-    return {
-      kind: "one-to-many",
-      targetModel,
-      targetTable,
-      fkColumnName,
-      fkTargetColumn: "id",
-      fkDbType: undefined,
-      onDelete: inverseOnDelete ?? onDelete,
-      onUpdate: inverseOnUpdate ?? onUpdate,
-      inverseFkFieldName,
-      backPopulates,
-    };
+  const manyToManyRelation = resolveManyToManyRelation(
+    program,
+    prop,
+    parentModel,
+    arrayElement,
+    explicitManyToMany,
+  );
+  if (manyToManyRelation) {
+    return manyToManyRelation;
   }
 
-  return undefined;
+  // Case 3: @mappedBy on array or singular model reference → inverse collection / has-one
+  const mappedByTarget = resolveMappedByTarget(program, prop, arrayElement);
+
+  return resolveMappedByRelation({
+    program,
+    parentModel,
+    arrayElement,
+    mappedByTarget,
+    explicitMappedBy,
+    onDelete,
+    onUpdate,
+  });
 }
 
-/**
- * Find the forward-reference (one-to-many) on targetModel that collects parentModel.
- * Used for SQLModel back_populates on the many-to-one side.
- */
-function findForwardReference(
+function resolveDirectRelation(
   program: Program,
+  prop: ModelProperty,
   parentModel: Model,
-  targetModel: Model,
-  fkColumnName: string,
-): string | undefined {
-  // Search on targetModel for one-to-many arrays that collect parentModel
-  for (const [, prop] of targetModel.properties) {
-    const arrElement = unwrapArrayType(prop.type);
-    if (arrElement && arrElement === parentModel) {
-      // Check if this array has @mappedBy pointing to a property with matching FK column
-      const mappedBy = getMappedBy(program, prop);
-      if (mappedBy) {
-        const targetProp = parentModel.properties.get(mappedBy);
-        if (targetProp) {
-          const targetFk = getForeignKey(program, targetProp);
-          if (targetFk === fkColumnName) {
-            return camelToSnake(prop.name);
-          }
-        }
-      }
-    }
+  explicitFk: ForeignKeyConfig | undefined,
+  onDelete: string | undefined,
+  onUpdate: string | undefined,
+): ResolvedRelation | undefined {
+  if (prop.type.kind !== "Model" || !isTable(program, prop.type) || !explicitFk) {
+    return undefined;
   }
+
+  const targetModel = prop.type;
+  const resolved = resolveOwnedRelationReference(program, prop, parentModel, targetModel);
+  if (!resolved) {
+    return undefined;
+  }
+
+  const kind = isRelationLocalKeyUnique(program, resolved.localProperty)
+    ? "one-to-one"
+    : "many-to-one";
+  const inverseRef = findInverseMappedBy(program, parentModel, targetModel, prop.name);
+
+  return {
+    kind,
+    ...resolved,
+    fkColumnName: resolved.localColumnName,
+    fkTargetColumn: resolved.targetColumnName,
+    onDelete,
+    onUpdate,
+    backPopulates: inverseRef ? camelToSnake(inverseRef.name) : undefined,
+  };
+}
+
+function resolveManyToManyRelation(
+  program: Program,
+  prop: ModelProperty,
+  parentModel: Model,
+  arrayElement: Model | undefined,
+  explicitManyToMany: string | undefined,
+): ResolvedRelation | undefined {
+  if (!arrayElement || !isTable(program, arrayElement) || !explicitManyToMany) {
+    return undefined;
+  }
+
+  const inverse = findInverseManyToMany(program, parentModel, arrayElement, prop);
+  if (!inverse) {
+    return undefined;
+  }
+
+  const localPk = findPrimaryKey(program, parentModel);
+  const targetPk = findPrimaryKey(program, arrayElement);
+  if (!localPk || !targetPk) {
+    return undefined;
+  }
+
+  return {
+    kind: "many-to-many",
+    targetModel: arrayElement,
+    targetTable: getTableName(program, arrayElement),
+    localProperty: localPk,
+    targetProperty: targetPk,
+    fkColumnName: getColumnName(program, localPk),
+    fkTargetColumn: getColumnName(program, targetPk),
+    fkDbType: resolveDbType(targetPk.type),
+    backPopulates: camelToSnake(inverse.prop.name),
+    joinTable: explicitManyToMany,
+  };
+}
+
+function resolveMappedByRelation(context: {
+  program: Program;
+  parentModel: Model;
+  arrayElement: Model | undefined;
+  mappedByTarget: Model | undefined;
+  explicitMappedBy: string | undefined;
+  onDelete: string | undefined;
+  onUpdate: string | undefined;
+}): ResolvedRelation | undefined {
+  const {
+    program,
+    parentModel,
+    arrayElement,
+    mappedByTarget,
+    explicitMappedBy,
+    onDelete,
+    onUpdate,
+  } = context;
+  if (!mappedByTarget || !explicitMappedBy) {
+    return undefined;
+  }
+
+  const targetProp = resolvePropertyByName(mappedByTarget, explicitMappedBy);
+  if (!targetProp) {
+    return undefined;
+  }
+
+  const resolved = resolveOwnedRelationReference(program, targetProp, mappedByTarget, parentModel);
+  if (!resolved) {
+    return undefined;
+  }
+
+  return {
+    kind: arrayElement ? "one-to-many" : "one-to-one",
+    targetModel: mappedByTarget,
+    targetTable: getTableName(program, mappedByTarget),
+    localProperty: resolved.localProperty,
+    targetProperty: resolved.targetProperty,
+    fkColumnName: resolved.localColumnName,
+    fkTargetColumn: resolved.targetColumnName,
+    fkDbType: resolved.fkDbType,
+    onDelete: getOnDelete(program, targetProp) ?? onDelete,
+    onUpdate: getOnUpdate(program, targetProp) ?? onUpdate,
+    backPopulates: explicitMappedBy,
+  };
+}
+
+function resolveMappedByTarget(
+  program: Program,
+  prop: ModelProperty,
+  arrayElement: Model | undefined,
+): Model | undefined {
+  if (arrayElement && isTable(program, arrayElement)) {
+    return arrayElement;
+  }
+
+  if (prop.type.kind === "Model" && isTable(program, prop.type)) {
+    return prop.type;
+  }
+
   return undefined;
 }
 
@@ -781,11 +1228,22 @@ export function collectTableModels(program: Program): TableModel[] {
   const tables: TableModel[] = [];
   for (const [type, name] of program.stateMap(TableKey)) {
     if (type.kind === "Model") {
-      const model = type as Model;
-      const tableName = (name as string) || deriveTableName(model.name);
+      const tableName = (name as string | undefined) || deriveTableName(type.name);
+      const model = type;
       tables.push({ model, tableName });
     }
   }
   tables.sort((a, b) => a.tableName.localeCompare(b.tableName));
   return tables;
+}
+
+export function collectTableMixins(program: Program): Model[] {
+  const mixins: Model[] = [];
+  for (const [type] of program.stateMap(TableMixinKey)) {
+    if (type.kind === "Model") {
+      mixins.push(type);
+    }
+  }
+  mixins.sort((a, b) => getTypeFullName(program, a).localeCompare(getTypeFullName(program, b)));
+  return mixins;
 }

@@ -2,22 +2,27 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
-  pull_request:
     branches: [main]
+  pull_request:
+    branches: [main, dev]
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-and-lint:
     name: Build, Lint, Typecheck & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -28,20 +33,67 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm run build
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Lint
-        run: pnpm run lint
+      - name: Install Python Tooling
+        run: python -m pip install ruff
 
       - name: Format check
         run: pnpm run format:check
 
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
       - name: Test
         run: pnpm run test
+
+      - name: Test Coverage
+        run: pnpm run test:coverage
+
+      - name: Prepare Sonar LCOV Paths
+        run: node scripts/prepare-sonar-lcov.mjs
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Compile Examples
+        run: pnpm run compile-examples
+
+      - name: Verify Generated Outputs Are Current
+        run: git diff --exit-code -- outputs
+
+      - name: Verify Generated Go
+        working-directory: outputs/gorm
+        run: go build -mod=mod ./...
+
+      - name: Verify Generated Python
+        run: python -m compileall outputs/sqlmodel
+
+      - name: Verify Generated TypeScript
+        run: pnpm --dir outputs/zod exec tsc -p tsconfig.json
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

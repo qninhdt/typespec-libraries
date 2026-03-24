@@ -2,12 +2,7 @@
  * Re-exports all DBML code generation components and functions.
  */
 
-export {
-  DBML_TYPE_MAP,
-  getDbmlType,
-  formatColumnSettings,
-  formatIndexDefinition,
-} from "./DbmlConstants.js";
+export { DBML_TYPE_MAP, getDbmlType, formatColumnSettings } from "./DbmlConstants.js";
 export type { ColumnSettings } from "./DbmlConstants.js";
 
 export { generateColumnLine } from "./DbmlColumn.jsx";

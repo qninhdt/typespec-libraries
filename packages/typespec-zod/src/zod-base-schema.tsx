@@ -2,7 +2,7 @@
  * Zod base schema - maps TypeSpec types to Zod base schemas.
  */
 
-import { Children, For } from "@alloy-js/core";
+import { Children, For, refkey } from "@alloy-js/core";
 import {
   ArrayExpression,
   MemberExpression,
@@ -14,7 +14,6 @@ import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
 import { ZodCustomTypeComponent } from "./components/ZodCustomTypeComponent.js";
 import { ZodSchema } from "./components/ZodSchema.js";
-import { refkey } from "@alloy-js/core";
 import {
   callPart,
   idPart,
@@ -70,69 +69,40 @@ function literalBaseType($: Typekit, type: LiteralType) {
   }
 }
 
-function scalarBaseType($: Typekit, type: Scalar) {
+function scalarBaseType($: Typekit, type: Scalar): Children {
   if (type.baseScalar && shouldReference($.program, type.baseScalar)) {
     return <MemberExpression.Part refkey={refkey(type.baseScalar, refkeySym)} />;
   }
 
   if ($.scalar.extendsBoolean(type)) {
     return zodMemberExpr(callPart("boolean"));
-  } else if ($.scalar.extendsNumeric(type)) {
-    if ($.scalar.extendsInteger(type)) {
-      if (
-        $.scalar.extendsInt32(type) ||
-        $.scalar.extendsUint32(type) ||
-        $.scalar.extendsSafeint(type)
-      ) {
-        return zodMemberExpr(callPart("number"), callPart("int"));
-      } else {
-        return zodMemberExpr(callPart("bigint"));
-      }
-    } else {
-      // floats and such, best we can do here lacking a decimal type.
-      return zodMemberExpr(callPart("number"));
-    }
-  } else if ($.scalar.extendsString(type)) {
-    if ($.scalar.extendsUrl(type)) {
-      return zodMemberExpr(callPart("string"), callPart("url"));
-    }
-    return zodMemberExpr(callPart("string"));
-  } else if ($.scalar.extendsBytes(type)) {
-    return zodMemberExpr(callPart("instanceof"), "Uint8Array");
-  } else if ($.scalar.extendsPlainDate(type)) {
-    return zodMemberExpr(idPart("coerce"), callPart("date"));
-  } else if ($.scalar.extendsPlainTime(type)) {
-    return zodMemberExpr(callPart("string"), callPart("time"));
-  } else if ($.scalar.extendsUtcDateTime(type)) {
-    const encoding = $.scalar.getEncoding(type);
-    if (encoding === undefined) {
-      return zodMemberExpr(idPart("coerce"), callPart("date"));
-    } else if (encoding.encoding === "unixTimestamp") {
-      return scalarBaseType($, encoding.type);
-    } else if (encoding.encoding === "rfc3339") {
-      return zodMemberExpr(callPart("string"), callPart("datetime"));
-    } else {
-      return scalarBaseType($, encoding.type);
-    }
-  } else if ($.scalar.extendsOffsetDateTime(type)) {
-    const encoding = $.scalar.getEncoding(type);
-    if (encoding === undefined) {
-      return zodMemberExpr(idPart("coerce"), callPart("date"));
-    } else if (encoding.encoding === "rfc3339") {
-      return zodMemberExpr(callPart("string"), callPart("datetime"));
-    } else {
-      return scalarBaseType($, encoding.type);
-    }
-  } else if ($.scalar.extendsDuration(type)) {
-    const encoding = $.scalar.getEncoding(type);
-    if (encoding === undefined || encoding.encoding === "ISO8601") {
-      return zodMemberExpr(callPart("string"), callPart("duration"));
-    } else {
-      return scalarBaseType($, encoding.type);
-    }
-  } else {
-    return zodMemberExpr(callPart("any"));
   }
+  if ($.scalar.extendsNumeric(type)) {
+    return numericScalarBaseType($, type);
+  }
+  if ($.scalar.extendsString(type)) {
+    return stringScalarBaseType($, type);
+  }
+  if ($.scalar.extendsBytes(type)) {
+    return zodMemberExpr(callPart("instanceof"), "Uint8Array");
+  }
+  if ($.scalar.extendsPlainDate(type)) {
+    return zodMemberExpr(idPart("coerce"), callPart("date"));
+  }
+  if ($.scalar.extendsPlainTime(type)) {
+    return zodMemberExpr(callPart("string"), callPart("time"));
+  }
+  if ($.scalar.extendsUtcDateTime(type)) {
+    return datetimeScalarBaseType($, type);
+  }
+  if ($.scalar.extendsOffsetDateTime(type)) {
+    return offsetDateTimeScalarBaseType($, type);
+  }
+  if ($.scalar.extendsDuration(type)) {
+    return durationScalarBaseType($, type);
+  }
+
+  return zodMemberExpr(callPart("any"));
 }
 
 function enumBaseType(type: Enum) {
@@ -220,15 +190,7 @@ function modelBaseType(type: Model) {
     memberPart = zodMemberExpr(callPart("object", members));
   }
 
-  let parts: Children;
-
-  if (!memberPart && !recordPart) {
-    parts = zodMemberExpr(callPart("object", <ObjectExpression />));
-  } else if (memberPart && recordPart) {
-    parts = zodMemberExpr(callPart("intersection", memberPart, recordPart));
-  } else {
-    parts = memberPart ?? recordPart;
-  }
+  const parts = combineModelSchemaParts(memberPart, recordPart);
 
   if (type.baseModel && shouldReference($.program, type.baseModel)) {
     return (
@@ -271,22 +233,9 @@ function unionBaseType(type: Union) {
       <For each={Array.from(type.variants.values())} comma line>
         {(variant: any) => {
           if (discriminated.options.envelope === "object") {
-            const envelope = $.model.create({
-              properties: {
-                [propKey]: $.modelProperty.create({
-                  name: propKey,
-                  type: $.literal.create(variant.name as string),
-                }),
-                [envKey]: $.modelProperty.create({
-                  name: envKey,
-                  type: variant.type,
-                }),
-              },
-            });
-            return <ZodSchema type={envelope} nested />;
-          } else {
-            return <ZodSchema type={variant.type} nested />;
+            return <ZodSchema type={createEnvelopeModel($, propKey, envKey, variant)} nested />;
           }
+          return <ZodSchema type={variant.type} nested />;
         }}
       </For>
     </ArrayExpression>,
@@ -296,20 +245,105 @@ function unionBaseType(type: Union) {
 }
 
 function intrinsicBaseType(type: Type) {
-  // Only the base z.null(), z.never(), etc.
-  if (type.kind === "Intrinsic") {
-    switch (type.name) {
-      case "null":
-        return zodMemberExpr(callPart("null"));
-      case "never":
-        return zodMemberExpr(callPart("never"));
-      case "unknown":
-        return zodMemberExpr(callPart("unknown"));
-      case "void":
-        return zodMemberExpr(callPart("void"));
-      default:
-        return zodMemberExpr(callPart("any"));
-    }
+  if (type.kind !== "Intrinsic") {
+    return zodMemberExpr(callPart("any"));
   }
-  return zodMemberExpr(callPart("any"));
+
+  switch (type.name) {
+    case "null":
+      return zodMemberExpr(callPart("null"));
+    case "never":
+      return zodMemberExpr(callPart("never"));
+    case "unknown":
+      return zodMemberExpr(callPart("unknown"));
+    case "void":
+      return zodMemberExpr(callPart("void"));
+    default:
+      return zodMemberExpr(callPart("any"));
+  }
+}
+
+function numericScalarBaseType($: Typekit, type: Scalar): Children {
+  if (!$.scalar.extendsInteger(type)) {
+    return zodMemberExpr(callPart("number"));
+  }
+
+  const usesNumberSchema =
+    $.scalar.extendsInt32(type) || $.scalar.extendsUint32(type) || $.scalar.extendsSafeint(type);
+  return usesNumberSchema
+    ? zodMemberExpr(callPart("number"), callPart("int"))
+    : zodMemberExpr(callPart("bigint"));
+}
+
+function stringScalarBaseType($: Typekit, type: Scalar): Children {
+  return $.scalar.extendsUrl(type)
+    ? zodMemberExpr(callPart("string"), callPart("url"))
+    : zodMemberExpr(callPart("string"));
+}
+
+function datetimeScalarBaseType($: Typekit, type: Scalar): Children {
+  const encoding = $.scalar.getEncoding(type);
+  if (!encoding) {
+    return zodMemberExpr(idPart("coerce"), callPart("date"));
+  }
+
+  if (encoding.encoding === "unixTimestamp") {
+    return scalarBaseType($, encoding.type);
+  }
+  if (encoding.encoding === "rfc3339") {
+    return zodMemberExpr(callPart("string"), callPart("datetime"));
+  }
+  return scalarBaseType($, encoding.type);
+}
+
+function offsetDateTimeScalarBaseType($: Typekit, type: Scalar): Children {
+  const encoding = $.scalar.getEncoding(type);
+  if (!encoding) {
+    return zodMemberExpr(idPart("coerce"), callPart("date"));
+  }
+
+  return encoding.encoding === "rfc3339"
+    ? zodMemberExpr(callPart("string"), callPart("datetime"))
+    : scalarBaseType($, encoding.type);
+}
+
+function durationScalarBaseType($: Typekit, type: Scalar): Children {
+  const encoding = $.scalar.getEncoding(type);
+  if (!encoding || encoding.encoding === "ISO8601") {
+    return zodMemberExpr(callPart("string"), callPart("duration"));
+  }
+  return scalarBaseType($, encoding.type);
+}
+
+function combineModelSchemaParts(
+  memberPart: Children | undefined,
+  recordPart: Children | undefined,
+): Children {
+  if (!memberPart && !recordPart) {
+    return zodMemberExpr(callPart("object", <ObjectExpression />));
+  }
+  if (memberPart && recordPart) {
+    return zodMemberExpr(callPart("intersection", memberPart, recordPart));
+  }
+  return memberPart ?? recordPart;
+}
+
+function createEnvelopeModel(
+  $: Typekit,
+  propKey: string,
+  envKey: string,
+  variant: { name: string; type: Type },
+): Model {
+  return $.model.create({
+    properties: {
+      [propKey]: $.modelProperty.create({
+        name: propKey,
+        type: $.literal.create(variant.name),
+      }),
+      [envKey]: $.modelProperty.create({
+        name: envKey,
+        type: variant.type,
+      }),
+    },
+  });
 }

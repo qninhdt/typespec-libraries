@@ -1,21 +1,30 @@
 import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface SqlModelEmitterOptions {
+  /** Output directory override handled by TypeSpec */
+  "output-dir"?: string;
   /** Whether to generate standalone Python package (default: false) */
   standalone?: boolean;
-  /** Python package name for standalone package (required when standalone is true) */
-  "package-name"?: string;
-  /** Python module name for generated files (default: "models") */
-  "module-name"?: string;
+  /** Python distribution name for standalone package */
+  "library-name"?: string;
+  /** Namespace selectors to include */
+  include?: string[];
+  /** Namespace selectors to exclude */
+  exclude?: string[];
+  /** Explicit persistence strategy for collection fields */
+  "collection-strategy"?: "jsonb" | "postgres";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
   type: "object",
   additionalProperties: false,
   properties: {
+    "output-dir": { type: "string", nullable: true },
     standalone: { type: "boolean", nullable: true },
-    "package-name": { type: "string", nullable: true },
-    "module-name": { type: "string", nullable: true },
+    "library-name": { type: "string", nullable: true },
+    include: { type: "array", items: { type: "string" }, nullable: true },
+    exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "collection-strategy": { type: "string", nullable: true },
   },
   required: [],
 };
@@ -23,16 +32,16 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
 export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-sqlmodel",
   diagnostics: {
-    "standalone-requires-package-name": {
+    "standalone-requires-library-name": {
       severity: "error",
       messages: {
-        default: "standalone mode requires 'package-name' option",
+        default: "standalone mode requires 'library-name' option",
       },
     },
     "unsupported-type": {
-      severity: "warning",
+      severity: "error",
       messages: {
-        default: paramMessage`Type "${"typeName"}" on property "${"propName"}" could not be mapped to a Python type. Using Any as fallback.`,
+        default: paramMessage`Type "${"typeName"}" on property "${"propName"}" could not be mapped to a Python type.`,
       },
     },
     "missing-back-reference": {

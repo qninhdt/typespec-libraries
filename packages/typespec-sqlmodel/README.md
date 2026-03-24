@@ -1,25 +1,49 @@
 # @qninhdt/typespec-sqlmodel
 
-[![npm version](https://img.shields.io/npm/v/@qninhdt/typespec-sqlmodel)](https://www.npmjs.com/package/@qninhdt/typespec-sqlmodel)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+TypeSpec emitter that generates namespace-grouped SQLModel packages.
 
-TypeSpec emitter that generates **Python classes for [SQLModel](https://sqlmodel.tiangolo.com)** from your TypeSpec schemas annotated with `@qninhdt/typespec-orm`.
+This emitter consumes `@qninhdt/typespec-orm` schemas and generates:
 
----
+- SQLModel classes for `@table`
+- Pydantic-style data models for `@data`
+- package scaffolding for standalone distribution
+- Alembic-friendly package metadata
+
+## What This Emitter Is For
+
+Use this emitter when you want TypeSpec to drive Python persistence models and form/data shapes with one shared schema contract.
+
+It is designed for:
+
+- namespace-derived Python package layouts
+- explicit relation mapping
+- strict persistence behavior
+- easy migration setup through `metadata = SQLModel.metadata`
 
 ## Installation
 
-```bash
-pnpm add -D @qninhdt/typespec-sqlmodel @qninhdt/typespec-orm
-# or
-npm install --save-dev @qninhdt/typespec-sqlmodel @qninhdt/typespec-orm
+```sh
+pnpm add -D \
+  @typespec/compiler \
+  @typespec/emitter-framework \
+  @alloy-js/core \
+  @alloy-js/typescript \
+  @qninhdt/typespec-orm \
+  @qninhdt/typespec-sqlmodel
 ```
 
----
+## Runtime Expectations
 
-## Configuration
+Generated Python output targets the SQLModel and SQLAlchemy ecosystem.
 
-Add the emitter to your `tspconfig.yaml`:
+- standalone mode writes `pyproject.toml`
+- package roots export `metadata = SQLModel.metadata`
+- many-to-many shorthand generates `__associations__.py`
+- collection persistence may rely on SQLAlchemy dialect-specific types depending on the configured strategy
+
+The repo currently verifies generated output with Python `3.10+`.
+
+## Configuration Reference
 
 ```yaml
 emit:
@@ -28,378 +52,268 @@ emit:
 options:
   "@qninhdt/typespec-sqlmodel":
     output-dir: "./outputs/sqlmodel"
-    module-name: "models" # Python file / module name (default: "models")
+    standalone: true
+    library-name: "acme-models"
+    collection-strategy: "jsonb"
+    include:
+      - "Demo.Platform"
+    exclude:
+      - "Demo.Platform.Audit"
 ```
 
----
+Supported options:
 
-## Example
+| Option                | Type                    | Meaning                                           |
+| --------------------- | ----------------------- | ------------------------------------------------- |
+| `output-dir`          | `string`                | target directory handled by the TypeSpec compiler |
+| `standalone`          | `boolean`               | write `pyproject.toml` and package scaffolding    |
+| `library-name`        | `string`                | distribution name used in standalone mode         |
+| `collection-strategy` | `"jsonb" \| "postgres"` | persistence strategy for list-like fields         |
+| `include`             | `string[]`              | namespace or declaration selectors to keep        |
+| `exclude`             | `string[]`              | namespace or declaration selectors to drop        |
 
-### Input - TypeSpec schema
+Not supported:
+
+- `module-name`
+- emitter-specific folder aliases
+
+## Selector Behavior
+
+SQLModel generation uses the shared ORM selector engine. Selectors are dotted names, not glob patterns.
+
+Examples:
+
+```yaml
+include:
+  - "Demo.GamePlatform"
+exclude:
+  - "Demo.GamePlatform.Audit"
+```
+
+Behavior:
+
+- `exclude` wins over `include`
+- redundant selectors warn
+- excluding a required dependency fails emission before any Python package is written
+
+## Output Layout
+
+Given:
+
+```typescript
+namespace App.Identity;
+```
+
+Standalone output looks like:
+
+```text
+outputs/sqlmodel/
+  pyproject.toml
+  app/
+    __init__.py
+    identity/
+      __init__.py
+      user.py
+```
+
+Rules:
+
+- namespace segments become Python package directories
+- `__init__.py` files are generated at every emitted package level
+- top-level package roots expose `metadata = SQLModel.metadata`
+
+That root-level `metadata` export is the intended Alembic integration point.
+
+## Generated Package Contract
+
+Standalone output typically includes:
+
+- `pyproject.toml`
+- namespace package folders with generated `__init__.py`
+- one module per emitted model
+- a top-level `__associations__.py` for shorthand many-to-many tables
+- a root package export for `metadata = SQLModel.metadata`
+
+Non-standalone mode emits only the code tree and skips package metadata files.
+
+## Schema Example
 
 ```typescript
 import "@qninhdt/typespec-orm";
+
 using Qninhdt.Orm;
 
-enum PostStatus {
-  draft: "draft",
-  published: "published",
-  archived: "archived",
-}
+namespace Demo.Shared;
 
-/** A blog post authored by a user. */
-@table("posts")
-model Post {
+@tableMixin
+model Timestamped {
   @key id: uuid;
-
-  @maxLength(255) title: string;
-  body: text;
-
-  @index status: PostStatus;
-
-  @precision(10, 2) @map("view_count")
-  viewCount: decimal;
-
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-  @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
-  @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
-
-  @foreignKey("author_id") @onDelete("CASCADE")
-  author: User;
-
-  // Use composite<> type for multi-column indexes
-  authorStatus: composite<"author_id", "status">;
+  @autoCreateTime createdAt: utcDateTime;
+  @autoUpdateTime updatedAt?: utcDateTime;
 }
-```
 
-### Output - Python (SQLModel)
-
-```python
-# Code generated by @qninhdt/typespec-sqlmodel. DO NOT EDIT.
-# Source: https://github.com/qninhdt/typespec-libraries
-
-from datetime import datetime
-from decimal import Decimal
-from enum import Enum
-from uuid import UUID, uuid4
-
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Numeric, func
-from sqlalchemy import Enum as SAEnum
-from sqlmodel import Field, Relationship, SQLModel
-
-
-class PostStatus(str, Enum):
-    """Auto-generated enum for post_status."""
-
-    draft = "draft"
-    published = "published"
-    archived = "archived"
-
-
-class Post(SQLModel, table=True):
-    """A blog post authored by a user."""
-
-    __tablename__ = "posts"
-    __table_args__ = (
-        Index("posts_author_status_idx", "author_id", "status"),
-    )
-
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    title: str = Field(max_length=255, sa_column_kwargs={"nullable": False})
-    body: str = Field(sa_column_kwargs={"nullable": False})
-    status: PostStatus = Field(sa_column=Column(SAEnum(PostStatus), nullable=False, index=True))
-    view_count: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()))
-    updated_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now()))
-    deleted_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), index=True))
-    author_id: UUID = Field(foreign_key="users.id", sa_column=Column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False))
-
-    # ─── Relationships ─────────────────────
-    author: "User" | None = Relationship(back_populates="posts")
-```
-
----
-
-## Relations
-
-All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`.
-
-### Many-to-One
-
-```typescript
-@table
-model Post {
-  @key id: uuid;
-  title: string;
-
-  @foreignKey("author_id")
-  @onDelete("CASCADE")
-  author: User;
-}
-```
-
-### One-to-Many
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  @mappedBy("author")
-  posts: Post[];
-}
-```
-
-### One-to-One
-
-Use `owner_id` as **both primary key and foreign key** (identifying relationship):
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-
-  // Inverse side - points back to Passport
-  @mappedBy("owner")
-  passport?: Passport;
-}
+namespace Demo.Accounts;
 
 @table
-model Passport {
-  // owner_id is both PK and FK
-  @key @map("owner_id") ownerId: uuid;
-
-  passportNumber: string;
-
-  // No need for @unique - PK is inherently unique
-  @foreignKey("owner_id")
-  owner: User;
-}
-```
-
-### Cascade
-
-```typescript
-@table
-model Post {
-  @key id: uuid;
-
-  @foreignKey("author_id")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  author: User;
-}
-```
-
-### Self-Referencing
-
-```typescript
-@table
-model Category {
-  @key id: uuid;
-  name: string;
-
-  // Category has many subcategories
-  @mappedBy("parent")
-  children?: Category[];
-
-  // Parent category reference
-  @foreignKey("parent_id")
-  parent?: Category;
-}
-```
-
-### Many-to-Many
-
-A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
-
-```typescript
-// User and Role have a many-to-many relationship via UserRole
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  // Points to "user" property on UserRole
-  @mappedBy("user")
-  userRoles: UserRole[];
-}
-
-@table
-model Role {
-  @key id: uuid;
-  name: string;
-
-  // Points to "role" property on UserRole
-  @mappedBy("role")
-  roleUsers: UserRole[];
-}
-
-// Junction table - defines the relationship
-@table
-model UserRole {
-  @key id: uuid;
-
-  @foreignKey("user_id")
-  user: User;
-
-  @foreignKey("role_id")
-  role: Role;
-}
-```
-
----
-
-## Composite Indexes & Unique Constraints (`composite<>`)
-
-Use the `composite<>` type to define multi-column indexes and unique constraints:
-
-```typescript
-@table
-model Post {
-  @key id: uuid;
-  authorId: uuid;
-  status: string;
-
-  // Multi-column index
-  authorStatus: composite<"authorId", "status">;
-
-  // Unique constraint
+model User is Demo.Shared.Timestamped {
   @unique
-  authorStatus: composite<"authorId", "status">;
+  @maxLength(320)
+  @format("email")
+  email: string;
+
+  @check("users_credits_non_negative", "credits >= 0")
+  credits: int32 = 0;
+
+  @manyToMany("user_badges")
+  badges?: Badge[];
+}
+
+@table
+model Badge is Demo.Shared.Timestamped {
+  @unique code: string;
+
+  @manyToMany("user_badges")
+  users?: User[];
 }
 ```
 
-**Python (SQLModel):**
+## Generated Behavior
 
-```python
-class Post(SQLModel, table=True):
-    __table_args__ = (
-        Index("posts_author_status_idx", "author_id", "status"),
-    )
-    # or for unique constraints:
-    __table_args__ = (
-        UniqueConstraint("author_id", "status", name="posts_author_status_unique"),
-    )
-```
+### Tables
 
----
+`@table` models become SQLModel classes with:
 
-## Form / Data Models (`@data`)
+- `__tablename__`
+- SQLAlchemy column types when needed
+- index and unique metadata
+- composite constraint support
+- foreign-key handling with delete/update actions
 
-Models decorated with `@data` (instead of `@table`) are emitted as **Pydantic `BaseModel` subclasses** - no SQLModel table, no `__tablename__`. `@title` maps to `Field(title=...)`, `@placeholder` maps to `Field(json_schema_extra={"placeholder": ...})`, and `@doc` maps to `Field(description=...)`.
+### Data models
 
-### Input
+`@data` models become non-table Python models that preserve:
+
+- validation metadata
+- titles and descriptions
+- placeholder metadata in JSON schema extras
+
+### Named checks
 
 ```typescript
-@data("Create Invitation Form")
-model CreateInvitationForm {
-  /** Lookup type - inherits @maxLength(320) and @format("email") from User.email */
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: User.email;
-
-  @title("Personal Message")
-  @placeholder("Write a short note to your invitee…")
-  @maxLength(1000)
-  message?: text;
-}
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 ```
 
-### Output
+becomes:
 
-```python
-# Code generated by @qninhdt/typespec-sqlmodel. DO NOT EDIT.
-
-from typing import Optional
-
-from pydantic import BaseModel, EmailStr, Field
-
-
-class CreateInvitationForm(BaseModel):
-    """Create Invitation Form"""
-
-    # Lookup type - inherits @maxLength(320) and @format("email") from User.email
-    invitee_email: EmailStr = Field(
-        ..., max_length=320, title="Invitee Email",
-        description="Lookup type - inherits @maxLength(320) and @format(\"email\") from User.email",
-        json_schema_extra={"placeholder": "friend@example.com"}
-    )
-    message: Optional[str] = Field(
-        None, max_length=1000, title="Personal Message",
-        json_schema_extra={"placeholder": "Write a short note to your invitee…"}
-    )
+```py
+CheckConstraint("credits >= 0", name="users_credits_non_negative")
 ```
 
+inside `__table_args__`.
+
+### Many-to-many shorthand
+
+When both sides declare:
+
+```typescript
+@manyToMany("user_badges")
+```
+
+the emitter generates:
+
+- relationship fields using `secondary`
+- a synthesized association table inside `__associations__.py`
+- imports from that association module where needed
+
+### Alembic helper
+
+Top-level package roots expose:
+
+```py
+from sqlmodel import SQLModel
+
+metadata = SQLModel.metadata
+```
+
+This makes it straightforward to wire the generated package into Alembic.
+
+Example:
+
+```py
+from demo import metadata
+
+target_metadata = metadata
+```
+
+### Collection persistence
+
+`collection-strategy` controls array storage:
+
+- `"jsonb"`: JSON-backed list persistence
+- `"postgres"`: PostgreSQL `ARRAY(...)` where supported
+
+Unsupported persistence shapes fail with diagnostics.
+
+## Generated Relationship Model
+
+What the emitter produces for common patterns:
+
+- many-to-one and one-to-one relations become `Relationship(...)` pairs with explicit ownership driven by `@foreignKey`
+- many-to-many shorthand becomes `secondary=...` relationships backed by generated association tables
+- referenced-column foreign keys are preserved instead of assuming every relation points at `id`
+
+When you need payload columns on the join itself, define an explicit junction table model instead of relying on shorthand.
+
+## Supported Features
+
+- namespace-first package layout
+- standalone package generation with `pyproject.toml`
+- `@tableMixin`
+- referenced-column foreign keys
+- named checks
+- many-to-many shorthand
+- collection persistence strategies
+- `@data` model generation
+- shared filtering with `include` and `exclude`
+
+## Limitations
+
+- many-to-many shorthand is for simple join tables without payload columns
+- if a join table needs extra data, model it explicitly
+- non-standalone mode emits code only and skips package metadata
+
+## Common Diagnostics And Gotchas
+
+- `standalone-requires-library-name`
+  Standalone mode needs `library-name` to write a coherent Python distribution manifest.
+- `unsupported-type`
+  The TypeSpec field could not be mapped to a SQLModel or SQLAlchemy field.
+- `missing-back-reference`
+  A collection relation has no inverse owner. SQLAlchemy may require additional manual configuration if you keep the model shape as-is.
+- `foreign-key-target-not-table`
+  `@foreignKey` points at something that is not a `@table` model.
+
+Practical guidance:
+
+- keep generated packages importable on their own before wiring them into application code
+- use the exported root `metadata` in Alembic instead of manually assembling model imports
+- prefer explicit data models for public-facing API shapes rather than exposing persistence models directly
+
+## Verification
+
+The repo verifies generated Python output with:
+
+```sh
+pnpm run compile-examples
+python -m compileall outputs/sqlmodel
+```
+
+## Related Docs
+
+- [`README.md`](/home/qninh/projects/typespec-libraries/README.md)
+- [`packages/typespec-orm/README.md`](/home/qninh/projects/typespec-libraries/packages/typespec-orm/README.md)
+
 ---
 
-## TypeSpec → Python Type Mapping
-
-> All column types target **PostgreSQL** via SQLAlchemy. Apply `@precision(p, s)` on `decimal`/`float64` to produce `Numeric(p, s)`.
-
-| TypeSpec type | PostgreSQL column  | Python type      | SQLAlchemy column type    | Import                                 |
-| ------------- | ------------------ | ---------------- | ------------------------- | -------------------------------------- |
-| `uuid`        | `uuid`             | `UUID`           | _(inferred)_              | `from uuid import UUID`                |
-| `string`      | `varchar(255)`     | `str`            | `String(255)`             | `sqlalchemy.String`                    |
-| `text`        | `text`             | `str`            | `Text`                    | `sqlalchemy.Text`                      |
-| `boolean`     | `boolean`          | `bool`           | `Boolean`                 | `sqlalchemy.Boolean`                   |
-| `int8`        | `smallint`         | `int`            | `SmallInteger`            | `sqlalchemy.SmallInteger`              |
-| `int16`       | `smallint`         | `int`            | `SmallInteger`            | `sqlalchemy.SmallInteger`              |
-| `int32`       | `integer`          | `int`            | `Integer`                 | `sqlalchemy.Integer`                   |
-| `int64`       | `bigint`           | `int`            | `BigInteger`              | `sqlalchemy.BigInteger`                |
-| `uint8`       | `smallint`         | `int`            | `Integer`                 | `sqlalchemy.Integer`                   |
-| `uint16`      | `integer`          | `int`            | `Integer`                 | `sqlalchemy.Integer`                   |
-| `uint32`      | `bigint`           | `int`            | `BigInteger`              | `sqlalchemy.BigInteger`                |
-| `uint64`      | `bigint`           | `int`            | `BigInteger`              | `sqlalchemy.BigInteger`                |
-| `float32`     | `real`             | `float`          | `Float`                   | `sqlalchemy.Float`                     |
-| `float64`     | `double precision` | `float`          | `Double`                  | `sqlalchemy.Double`                    |
-| `decimal`     | `numeric`          | `Decimal`        | `Numeric`                 | `from decimal import Decimal`          |
-| `serial`      | `serial`           | `int`            | `Integer`                 | `sqlalchemy.Integer`                   |
-| `bigserial`   | `bigserial`        | `int`            | `BigInteger`              | `sqlalchemy.BigInteger`                |
-| `utcDateTime` | `timestamptz`      | `datetime`       | `DateTime(timezone=True)` | `from datetime import datetime`        |
-| `plainDate`   | `date`             | `date`           | `Date`                    | `from datetime import date`            |
-| `plainTime`   | `time`             | `time`           | `Time`                    | `from datetime import time`            |
-| `duration`    | `interval`         | `timedelta`      | `Interval`                | `from datetime import timedelta`       |
-| `bytes`       | `bytea`            | `bytes`          | `LargeBinary`             | `sqlalchemy.LargeBinary`               |
-| `jsonb`       | `jsonb`            | `dict[str, Any]` | `JSONB`                   | `sqlalchemy.dialects.postgresql.JSONB` |
-
-**`@format` → Pydantic type mapping:**
-
-| `@format(...)`    | Python / Pydantic type   | Import                               |
-| ----------------- | ------------------------ | ------------------------------------ |
-| `"email"`         | `pydantic.EmailStr`      | `from pydantic import EmailStr`      |
-| `"url"` / `"uri"` | `pydantic.AnyUrl`        | `from pydantic import AnyUrl`        |
-| `"uuid"`          | `uuid.UUID`              | `from uuid import UUID`              |
-| `"ipv4"`          | `pydantic.IPvAnyAddress` | `from pydantic import IPvAnyAddress` |
-| `"ipv6"`          | `pydantic.IPvAnyAddress` | `from pydantic import IPvAnyAddress` |
-
----
-
-## Emitter Options
-
-| Option        | Type     | Default              | Description                         |
-| ------------- | -------- | -------------------- | ----------------------------------- |
-| `output-dir`  | `string` | `./outputs/sqlmodel` | Directory for generated `.py` files |
-| `module-name` | `string` | `"models"`           | Python filename (without `.py`)     |
-
----
-
-## Diagnostics
-
-| Code                         | Severity | Condition                                     |
-| ---------------------------- | -------- | --------------------------------------------- |
-| `sqlmodel-unsupported-type`  | warning  | TypeSpec type has no known Python equivalent  |
-| `sqlmodel-missing-precision` | warning  | `decimal`/`float64` used without `@precision` |
-| `sqlmodel-unknown-format`    | warning  | `@format` value is not recognised             |
-| `sqlmodel-unknown-on-delete` | warning  | `@onDelete` action is not a standard SQL rule |
-
----
-
-## License
-
-[MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
-
----
-
-_Made by @qninhdt and @claude-opus-4-6_
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

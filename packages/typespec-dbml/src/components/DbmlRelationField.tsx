@@ -29,7 +29,12 @@ export function generateRelationField(
 
   // Generate reference line: Ref: source.fk_column > target.pk_column
   // For many-to-one: Ref: posts.author_id > users.id
-  return `Ref: ${sourceTableName}.${fromColumn} ${symbol} ${toTable}.${toColumn}`;
+  const actionParts: string[] = [];
+  if (rel.onDelete) actionParts.push(`delete: ${rel.onDelete}`);
+  if (rel.onUpdate) actionParts.push(`update: ${rel.onUpdate}`);
+  const actionSuffix = actionParts.length > 0 ? ` [${actionParts.join(", ")}]` : "";
+
+  return `Ref: ${sourceTableName}.${fromColumn} ${symbol} ${toTable}.${toColumn}${actionSuffix}`;
 }
 
 /**

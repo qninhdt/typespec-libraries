@@ -1,30 +1,11 @@
 # @qninhdt/typespec-zod
 
-TypeSpec emitter that generates Zod schemas from TypeSpec types.
+This lowercase file is kept only as a compatibility pointer for tools or environments that resolve `readme.md` instead of `README.md`.
 
-## Installation
+For the real documentation, use:
 
-```bash
-npm install @qninhdt/typespec-zod
-```
+- [`README.md`](/home/qninh/projects/typespec-libraries/packages/typespec-zod/README.md)
 
-## Usage
+---
 
-```bash
-tsp compile . --emit @qninhdt/typespec-zod
-```
-
-## Features
-
-- Generates Zod schemas from TypeSpec models
-- Supports all TypeSpec scalar types
-- Handles unions, enums, tuples, and arrays
-- Generates discriminated unions when possible
-- Supports model inheritance via `extends`
-- Handles circular references with `z.lazy()`
-- Supports constraints (min/max length, patterns, formats)
-- Generates documentation via `describe()`
-
-## License
-
-MIT
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

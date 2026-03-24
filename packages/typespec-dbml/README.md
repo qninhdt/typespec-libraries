@@ -1,25 +1,41 @@
 # @qninhdt/typespec-dbml
 
-[![npm version](https://img.shields.io/npm/v/@qninhdt/typespec-dbml)](https://www.npmjs.com/package/@qninhdt/typespec-dbml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+TypeSpec emitter that generates DBML from `@qninhdt/typespec-orm` table models.
 
-TypeSpec emitter that generates **DBML (Database Markup Language)** from your TypeSpec schemas annotated with `@qninhdt/typespec-orm`.
+This emitter is meant for schema review, architecture visualization, and keeping DBML aligned with the same TypeSpec schema used by the runtime emitters.
 
----
+## When To Use This Emitter
+
+DBML output is the right fit when you want:
+
+- architecture review artifacts that stay close to the source schema
+- a shareable representation for product, platform, or database discussions
+- a single place to inspect table names, foreign keys, checks, and enum usage
+- namespace-grouped documentation that mirrors the same domain boundaries used by code emitters
+
+## What This Emitter Is For
+
+Use this emitter when you want DBML that stays in sync with:
+
+- namespace-aware table organization
+- the same relation semantics used by GORM and SQLModel
+- lookup-type columns
+- FK delete/update actions
+- synthesized many-to-many join tables
 
 ## Installation
 
-```bash
-pnpm add -D @qninhdt/typespec-dbml @qninhdt/typespec-orm
-# or
-npm install --save-dev @qninhdt/typespec-dbml @qninhdt/typespec-orm
+```sh
+pnpm add -D \
+  @typespec/compiler \
+  @typespec/emitter-framework \
+  @alloy-js/core \
+  @alloy-js/typescript \
+  @qninhdt/typespec-orm \
+  @qninhdt/typespec-dbml
 ```
 
----
-
-## Configuration
-
-Add the emitter to your `tspconfig.yaml`:
+## Configuration Reference
 
 ```yaml
 emit:
@@ -27,121 +43,220 @@ emit:
 
 options:
   "@qninhdt/typespec-dbml":
+    output-dir: "./outputs/dbml"
     filename: "schema"
+    split-by-namespace: true
+    include:
+      - "Demo.Platform"
+    exclude:
+      - "Demo.Platform.Audit"
 ```
 
----
+Supported options:
 
-## Example
+| Option               | Type       | Meaning                                            |
+| -------------------- | ---------- | -------------------------------------------------- |
+| `output-dir`         | `string`   | target directory handled by the TypeSpec compiler  |
+| `filename`           | `string`   | single-file output name without the `.dbml` suffix |
+| `split-by-namespace` | `boolean`  | emit one DBML file per namespace group             |
+| `include`            | `string[]` | namespace or declaration selectors to keep         |
+| `exclude`            | `string[]` | namespace or declaration selectors to drop         |
 
-### Input - TypeSpec schema
+Notes:
+
+- `filename` applies to single-file mode only
+- in split mode, the final namespace segment becomes the file name
+- filtering uses the same shared dependency rules as the code emitters
+
+## Selector Behavior
+
+DBML uses the same selector engine as the ORM-backed emitters.
+
+Examples:
+
+```yaml
+include:
+  - "Demo.GamePlatform"
+exclude:
+  - "Demo.GamePlatform.Audit"
+```
+
+Behavior:
+
+- `exclude` wins over `include`
+- redundant selectors warn
+- excluding a table dependency required by a selected table fails emission
+
+## Output Modes
+
+### Single-file mode
+
+```text
+outputs/dbml/schema.dbml
+```
+
+The emitter groups content by namespace sections inside the single file.
+
+### Namespace-split mode
+
+```text
+outputs/dbml/demo/game_platform/accounts.dbml
+outputs/dbml/demo/game_platform/worlds.dbml
+```
+
+In split mode:
+
+- namespace path controls folders
+- the final namespace segment becomes the DBML filename
+
+## Emission Contract
+
+Single-file mode is useful when you want one handoff artifact for a whole bounded system.
+
+Split mode is useful when you want documentation files to mirror namespace ownership, for example:
+
+- `demo/game_platform/accounts.dbml`
+- `demo/game_platform/worlds.dbml`
+- `demo/game_platform/audit.dbml`
+
+In either mode the emitter is deterministic:
+
+- namespace grouping is stable
+- relations are generated from the same normalized graph used by the runtime emitters
+- lookup-derived field types resolve to the source property's scalar type
+- many-to-many shorthand synthesizes a join table automatically
+
+## Schema Example
 
 ```typescript
 import "@qninhdt/typespec-orm";
+
 using Qninhdt.Orm;
 
-enum PostStatus {
-  draft: "draft",
-  published: "published",
-}
+namespace Demo.Accounts;
 
-@table("users")
+@table
 model User {
   @key id: uuid;
-  name: string;
+
+  @check("users_credits_non_negative", "credits >= 0")
+  credits: int32 = 0;
+
+  @manyToMany("user_badges")
+  badges?: Badge[];
 }
 
-@table("posts")
-model Post {
+@table
+model Badge {
   @key id: uuid;
-  title: string;
-  body: text;
-  @index status: PostStatus;
-  @foreignKey("author_id") @onDelete("CASCADE") author: User;
-  authorStatus: composite<"author_id", "status">;
+
+  @manyToMany("user_badges")
+  users?: User[];
+}
+
+@table
+model Membership {
+  @key id: uuid;
+  organizationCode: string;
+
+  @foreignKey("organizationCode", "code")
+  organization: Organization;
 }
 ```
 
-### Output - DBML
+## Generated Behavior
 
-```dbml
-// Database Schema
+### Columns
 
-Enum PostStatus {
-  draft
-  published
-}
+DBML column generation preserves:
 
-Table users {
-  id uuid [pk, not null]
-  name varchar(255) [not null]
-}
+- scalar type mapping
+- optional vs required nullability
+- soft-delete nullability
+- precision on decimal types
+- lookup-derived scalar columns
 
-Table posts {
-  id uuid [pk, not null]
-  title varchar(255) [not null]
-  body text [not null]
-  author_id uuid [not null]
-  status PostStatus
+### Constraints
 
-  indexes {
-    (author_id, status)
-    status
-  }
-}
+DBML preserves:
 
-Ref: posts.author_id > users.id
+- primary keys
+- uniques
+- indexes
+- composite constraints
+- named checks as notes on the relevant column
+
+### Relations
+
+DBML refs preserve:
+
+- referenced-column foreign keys
+- `@onDelete`
+- `@onUpdate`
+
+### Many-to-many shorthand
+
+For `@manyToMany(...)`, the emitter synthesizes:
+
+- a join table
+- two refs from the join table to the participating tables
+
+## How Checks And Lookup Types Render
+
+DBML is documentation-oriented output, so some runtime-level concepts are represented in DBML-friendly ways:
+
+- named checks are preserved in column notes
+- lookup-derived fields resolve to the source property's scalar type instead of rendering as opaque TypeSpec syntax
+- FK delete and update actions are preserved in `Ref:` metadata
+
+This makes DBML useful for review even when the source schema uses richer TypeSpec constructs.
+
+## Supported Features
+
+- namespace-aware grouping
+- namespace-split output
+- lookup-type scalar emission
+- enum columns with indexes and uniques
+- FK action preservation
+- synthesized many-to-many join tables
+- shared filtering with `include` and `exclude`
+
+## Limitations
+
+- DBML is documentation-oriented output, so named checks are preserved as notes rather than a richer DBML-native construct
+- many-to-many shorthand remains simple join-table generation; payload-column junctions should be explicit models
+
+## Review Workflow
+
+A practical way to use DBML in a team workflow:
+
+1. update the TypeSpec schema
+2. regenerate DBML with `pnpm run compile-examples` or your project compile step
+3. review the namespace-specific `.dbml` files in diffs
+4. use DBML output for architecture review, diagrams, or handoff documentation
+
+Because the files are generated from the same normalized graph as the runtime emitters, DBML diffs are a reliable signal for schema drift.
+
+## Common Gotchas
+
+- DBML output is not a migration tool; it is a review/documentation artifact
+- if you need payload fields on a join, model the junction table explicitly instead of relying on shorthand
+- selector filtering still enforces dependency closure, even though the output is documentation-focused
+
+## Verification
+
+The repo verifies DBML generation through:
+
+```sh
+pnpm run compile-examples
+git diff --exit-code -- outputs
 ```
 
----
+## Related Docs
 
-## Output
-
-The emitter generates a single `{filename}.dbml` file (default: `schema.dbml`) containing:
-
-- All table definitions
-- All enum definitions
-- Indexes and unique constraints
-- Foreign key references
+- [`README.md`](/home/qninh/projects/typespec-libraries/README.md)
+- [`packages/typespec-orm/README.md`](/home/qninh/projects/typespec-libraries/packages/typespec-orm/README.md)
 
 ---
 
-## TypeSpec → DBML Type Mapping
-
-| TypeSpec type | DBML type   |
-| ------------- | ----------- |
-| `uuid`        | `uuid`      |
-| `string`      | `varchar`   |
-| `text`        | `text`      |
-| `boolean`     | `boolean`   |
-| `int*`        | `integer`   |
-| `uint*`       | `integer`   |
-| `float32`     | `float`     |
-| `float64`     | `double`    |
-| `decimal`     | `decimal`   |
-| `serial`      | `serial`    |
-| `bigserial`   | `bigserial` |
-| `utcDateTime` | `timestamp` |
-| `plainDate`   | `date`      |
-| `plainTime`   | `time`      |
-| `duration`    | `interval`  |
-| `bytes`       | `blob`      |
-| `jsonb`       | `jsonb`     |
-
----
-
-## Emitter Options
-
-| Option     | Type     | Default  | Description                      |
-| ---------- | -------- | -------- | -------------------------------- |
-| `filename` | `string` | `schema` | Filename for generated DBML file |
-
----
-
-## License
-
-[MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
-
----
-
-_Made by @qninhdt and @claude-opus-4-6_
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

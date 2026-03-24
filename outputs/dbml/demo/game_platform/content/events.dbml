@@ -1,0 +1,23 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Content.Events
+
+Table game_events {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  name varchar(200) [not null, note: 'Name of the event - indexed for lookup.']
+  description text [not null, note: 'Narrative description used in AI generation.']
+  conditions jsonb [note: 'Predicate expression evaluated at runtime.']
+  effects jsonb [note: 'Mutations applied when the event fires.']
+
+  indexes {
+    world_id
+    name
+  }
+}
+
+
+Ref: game_events.world_id > worlds.id [delete: CASCADE, update: CASCADE]

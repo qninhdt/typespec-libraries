@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmitterTestRunner } from "../utils.jsx";
+import { createEmitterTestRunner, renderPyOutput } from "../utils.jsx";
 
 describe("SQLModel emitter end-to-end", () => {
   it("emits a complete SQLModel file without errors", async () => {
@@ -42,6 +42,7 @@ describe("SQLModel emitter end-to-end", () => {
         @key id: uuid;
         title: string;
         content: text;
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE")
         user: User;
@@ -106,5 +107,29 @@ describe("SQLModel emitter end-to-end", () => {
 
     const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
     expect(errors).toHaveLength(0);
+  });
+
+  it("emits standalone package metadata", async () => {
+    const output = await renderPyOutput(
+      `
+      namespace App.Identity {
+        @table
+        model User {
+          @key id: uuid;
+          name: string;
+        }
+      }
+    `,
+      "models",
+      {
+        standalone: true,
+        "library-name": "acme-models",
+      },
+    );
+
+    const files = JSON.stringify(output);
+    expect(files).toContain("pyproject.toml");
+    expect(files).toContain("acme-models");
+    expect(files).toContain("__init__.py");
   });
 });

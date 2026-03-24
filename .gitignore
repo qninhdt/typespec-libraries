@@ -4,6 +4,7 @@
 # Build output
 dist/
 packages/*/dist/
+__pycache__/
 
 # Dependency directories
 node_modules/
@@ -33,3 +34,6 @@ packages/**/@qninhdt/
 
 # Ruff cache
 .ruff_cache/
+
+# Environment variables
+.env

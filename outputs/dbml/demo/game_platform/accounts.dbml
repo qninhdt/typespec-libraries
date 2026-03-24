@@ -1,0 +1,83 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Accounts
+
+Enum SubscriptionPlan {
+  free
+  basic
+  premium
+  enterprise
+}
+
+Enum UserRole {
+  player
+  moderator
+  admin
+}
+
+Table badges {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  code varchar(80) [not null, note: 'Stable badge code used by tooling and migration scripts.']
+  label varchar(160) [not null, note: 'Human-readable badge name rendered in the UI.']
+
+  indexes {
+    code [unique]
+  }
+}
+
+Table subscriptions {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  plan SubscriptionPlan [note: 'Selected plan tier.']
+  monthly_price decimal(10, 2) [not null, note: 'Monthly price stored as NUMERIC(10,2) to avoid floating-point drift. | check subscriptions_monthly_price_non_negative: monthlyPrice >= 0']
+  start_date timestamp [not null, note: 'Start date of the billing period.']
+  end_date timestamp [note: 'Optional end date - null means the subscription is open-ended.']
+  is_active boolean [not null, note: 'Fast boolean used by feature gates and entitlement checks.']
+  user_id uuid [not null]
+
+  indexes {
+    (user_id, is_active)
+    plan
+  }
+}
+
+Table users {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  email varchar(320) [not null, note: 'Email address used for login and invitations. Other namespaces reference this via lookup types.']
+  password_hash varchar(255) [not null, note: 'Hashed password - never expose or store plain text credentials.']
+  display_name varchar(100) [not null, note: 'Display name shown throughout the UI.']
+  avatar_url varchar(512) [note: 'Public avatar URL rendered in lists and profile cards.']
+  preferred_locale varchar(16) [note: 'Optional locale preference for formatting and localization.']
+  credits integer [not null, note: 'Entitlement credits or consumable balance. | check users_credits_non_negative: credits >= 0']
+  role UserRole [note: 'Role used by moderation features and internal tooling.']
+  is_active boolean [not null, note: 'Whether the account is currently active.']
+  // Example of a computed UI field excluded from persistence.
+
+  indexes {
+    (email, deleted_at) [unique]
+    email [unique]
+    role
+  }
+}
+
+Table user_badges {
+  badge_id uuid [not null]
+  user_id uuid [not null]
+
+  indexes {
+    (badge_id, user_id) [pk]
+  }
+}
+
+
+Ref: subscriptions.user_id > users.id [delete: CASCADE, update: CASCADE]
+Ref: user_badges.badge_id > badges.id
+Ref: user_badges.user_id > users.id

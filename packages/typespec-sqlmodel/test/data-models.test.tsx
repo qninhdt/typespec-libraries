@@ -35,7 +35,7 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
     expect(output).toContain("max_length=100");
   });
 
-  it("generates Optional[T] with Field(None) for optional fields", async () => {
+  it("generates T | None with Field(None) for optional fields", async () => {
     const output = await emitPyFile(
       `
       @data("Form")
@@ -46,9 +46,9 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
       "test_form.py",
     );
 
-    expect(output).toContain("Optional[str]");
+    expect(output).toContain("str | None");
     expect(output).toContain("Field(None");
-    expect(output).toContain("from typing import Optional");
+    expect(output).not.toContain("Optional");
   });
 
   it("generates title and placeholder in Field kwargs", async () => {

@@ -1,0 +1,35 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Collaboration.Invites
+
+Enum InvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+}
+
+Table world_invitations {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  invitee_email varchar(320) [not null, note: 'Email of the invitee - inherits validators from Accounts.User.email.']
+  redeem_code varchar(64) [not null, note: 'Unique redeem code sent through email or copied in the UI.']
+  status InvitationStatus [note: 'Current lifecycle state for the invitation.']
+  message text [note: 'Optional personal note from the inviter.']
+  expires_at timestamp [note: 'When the invitation expires, if at all.']
+  accepted_at timestamp [note: 'When the invitation was accepted by the recipient.']
+  inviter_id uuid [not null]
+  world_id uuid [not null]
+
+  indexes {
+    (inviter_id, status)
+    redeem_code [unique]
+    status
+  }
+}
+
+
+Ref: world_invitations.inviter_id > users.id [delete: CASCADE, update: CASCADE]
+Ref: world_invitations.world_id > worlds.id [delete: CASCADE, update: CASCADE]

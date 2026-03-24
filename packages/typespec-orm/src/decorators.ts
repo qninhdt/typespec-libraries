@@ -1,13 +1,16 @@
 import type { DecoratorContext, Model, ModelProperty, Scalar } from "@typespec/compiler";
 import {
   TableKey,
+  TableMixinKey,
   MapKey,
   IndexKey,
   UniqueKey,
+  CheckKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
   MappedByKey,
+  ManyToManyKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
@@ -24,6 +27,10 @@ import {
 
 export function $table(context: DecoratorContext, target: Model, name?: string): void {
   context.program.stateMap(TableKey).set(target, name ?? "");
+}
+
+export function $tableMixin(context: DecoratorContext, target: Model): void {
+  context.program.stateMap(TableMixinKey).set(target, true);
 }
 
 // ─── @map ────────────────────────────────────────────────────────────────────
@@ -46,6 +53,17 @@ export function $unique(context: DecoratorContext, target: ModelProperty): void 
   context.program.stateMap(UniqueKey).set(target, true);
 }
 
+// ─── @check ──────────────────────────────────────────────────────────────────
+
+export function $check(
+  context: DecoratorContext,
+  target: ModelProperty,
+  name: string,
+  expression: string,
+): void {
+  context.program.stateMap(CheckKey).set(target, { name, expression });
+}
+
 // ─── @autoIncrement ──────────────────────────────────────────────────────────
 
 export function $autoIncrement(context: DecoratorContext, target: ModelProperty): void {
@@ -60,14 +78,32 @@ export function $softDelete(context: DecoratorContext, target: ModelProperty): v
 
 // ─── @foreignKey ─────────────────────────────────────────────────────────────
 
-export function $foreignKey(context: DecoratorContext, target: ModelProperty, field: string): void {
-  context.program.stateMap(ForeignKeyKey).set(target, field);
+export function $foreignKey(
+  context: DecoratorContext,
+  target: ModelProperty,
+  field: string,
+  referencedField?: string,
+): void {
+  context.program.stateMap(ForeignKeyKey).set(target, {
+    field,
+    target: referencedField,
+  });
 }
 
 // ─── @mappedBy ───────────────────────────────────────────────────────────────
 
 export function $mappedBy(context: DecoratorContext, target: ModelProperty, field: string): void {
   context.program.stateMap(MappedByKey).set(target, field);
+}
+
+// ─── @manyToMany ─────────────────────────────────────────────────────────────
+
+export function $manyToMany(
+  context: DecoratorContext,
+  target: ModelProperty,
+  tableName: string,
+): void {
+  context.program.stateMap(ManyToManyKey).set(target, tableName);
 }
 
 // ─── @autoCreateTime ─────────────────────────────────────────────────────────

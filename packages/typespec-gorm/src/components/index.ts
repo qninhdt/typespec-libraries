@@ -8,6 +8,7 @@ export {
   buildCompositeMap,
   buildImportBlock,
   buildDocComment,
+  buildGoEnumBlock,
   escapeFormTagValue,
   escapeComment,
 } from "./GormConstants.js";

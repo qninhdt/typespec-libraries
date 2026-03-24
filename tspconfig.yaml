@@ -6,12 +6,19 @@ emit:
   - "@qninhdt/typespec-zod"
 options:
   "@qninhdt/typespec-zod":
+    output-dir: "./outputs/zod"
     standalone: true
-    package-name: "demo"
+    library-name: "demo"
   "@qninhdt/typespec-gorm":
+    output-dir: "./outputs/gorm"
     standalone: true
-    module-name: "github.com/demo-user/demo"
-    package-name: "models"
+    library-name: "github.com/demo-user/demo"
+    collection-strategy: "jsonb"
   "@qninhdt/typespec-sqlmodel":
+    output-dir: "./outputs/sqlmodel"
     standalone: true
-    package-name: "demo"
+    library-name: "demo"
+    collection-strategy: "jsonb"
+  "@qninhdt/typespec-dbml":
+    output-dir: "./outputs/dbml"
+    split-by-namespace: true

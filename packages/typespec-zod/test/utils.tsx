@@ -9,7 +9,6 @@ import {
   type ContentOutputFile,
 } from "@alloy-js/core";
 import { Output } from "@typespec/emitter-framework";
-import type { Model } from "@typespec/compiler";
 import {
   createTestHost as coreCreateTestHost,
   createTestWrapper,
@@ -32,7 +31,8 @@ export async function createTestHost() {
 export async function createTestRunner() {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
   });
 }
 
@@ -42,7 +42,8 @@ export async function createEmitterTestRunner(emitterOptions?: Record<string, un
   });
 
   return createTestWrapper(host, {
-    wrapper: (code) => `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\n${code}`,
+    wrapper: (code) =>
+      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
     compilerOptions: {
       emit: ["@qninhdt/typespec-zod"],
       options: {
@@ -80,35 +81,12 @@ function listAllFiles(dir: OutputDirectory): string[] {
 }
 
 /**
- * Converts a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
-}
-
-/**
- * Add type aliases (e.g., `export type User = z.infer<typeof UserSchema>`) to rendered output.
- * This mimics what the emitter does via writeFileSync after writeOutput.
- */
-function addTypeAliases(content: string, dataModels: { model: Model; label: string }[]): string {
-  const aliases = dataModels
-    .map(({ model }) => {
-      const name = model.name;
-      const pascalName = toPascalCase(name);
-      return `export type ${pascalName} = z.infer<typeof ${pascalName}Schema>;`;
-    })
-    .join("\n");
-
-  return content.trim() + "\n" + aliases + "\n";
-}
-
-/**
  * Compile TypeSpec, build JSX tree, render in memory, and return a specific file's content.
  */
 export async function emitZodFile(
   code: string,
   fileName: string,
-  modelsFolder = false,
+  pathPrefix: string | boolean = false,
 ): Promise<string> {
   const runner = await createTestRunner();
   await runner.compile(code);
@@ -139,9 +117,20 @@ export async function emitZodFile(
           }
           return null;
         })}
-        {dataModels.map(({ model, label }) => (
-          <ZodModelFile program={program} model={model} label={label} modelsFolder={modelsFolder} />
-        ))}
+        {dataModels.map(({ model, label }) =>
+          (() => {
+            let path: string;
+            if (typeof pathPrefix === "string") {
+              path = `${pathPrefix}/${model.name}.ts`;
+            } else if (pathPrefix) {
+              path = `models/${model.name}.ts`;
+            } else {
+              path = `${model.name}.ts`;
+            }
+
+            return <ZodModelFile program={program} model={model} label={label} path={path} />;
+          })(),
+        )}
       </SourceDirectory>
     </Output>
   );
@@ -155,13 +144,7 @@ export async function emitZodFile(
       `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
     );
   }
-
-  let content = file.contents;
-
-  // Add type aliases (normally added by emitter via writeFileSync after writeOutput)
-  content = addTypeAliases(content, dataModels);
-
-  return content;
+  return file.contents;
 }
 
 /**

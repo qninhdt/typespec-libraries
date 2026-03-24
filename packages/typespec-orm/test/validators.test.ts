@@ -140,4 +140,279 @@ describe("$onValidate diagnostics", () => {
     );
     expect(ormDiagnostics).toHaveLength(0);
   });
+
+  it("reports missing local FK field", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Organization {
+        @key id: uuid;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        @foreignKey("organizationId")
+        organization: Organization;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-local-missing",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports missing target FK field", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Organization {
+        @key id: uuid;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        organizationCode: string;
+        @foreignKey("organizationCode", "code")
+        organization: Organization;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-target-missing",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports incompatible FK column types", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Organization {
+        @key code: string;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        organizationCode: uuid;
+        @foreignKey("organizationCode", "code")
+        organization: Organization;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-type-mismatch",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it('reports @onDelete("SET NULL") on a non-nullable FK field', async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Organization {
+        @key id: uuid;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        organizationId: uuid;
+        @foreignKey("organizationId")
+        @onDelete("SET NULL")
+        organization: Organization;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-set-null-non-nullable",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports missing @mappedBy target property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("owner")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        userId: uuid;
+        @foreignKey("userId")
+        user: User;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/mapped-by-missing-property",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports one-to-one inverse relations without a unique local FK", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("user")
+        profile?: Profile;
+      }
+
+      @table
+      model Profile {
+        @key id: uuid;
+        userId: uuid;
+        @foreignKey("userId")
+        user: User;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/one-to-one-missing-unique",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports cascade decorators used on scalar fields", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @onDelete("CASCADE")
+        status: string;
+        @onUpdate("CASCADE")
+        code: string;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/cascade-without-relation",
+    );
+    expect(diags).toHaveLength(2);
+  });
+
+  it("reports many-to-many declarations without an inverse", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-missing-inverse",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports conflicting many-to-many join table names", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("role_users")
+        users: User[];
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-conflicting-table",
+    );
+    expect(diags).toHaveLength(2);
+  });
+
+  it("reports explicit join-table conflicts", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table("user_roles")
+      model UserRole {
+        @key id: uuid;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        users: User[];
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-conflicting-explicit-table",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("accepts a valid non-id referenced column relation", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Organization {
+        @key
+        @unique
+        code: string;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        organizationCode: string;
+        @foreignKey("organizationCode", "code")
+        organization: Organization;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const ormErrors = runner.program.diagnostics.filter(
+      (d) =>
+        d.code?.startsWith("@qninhdt/typespec-orm/") &&
+        d.severity === "error" &&
+        !d.code.endsWith("namespace-required"),
+    );
+    expect(ormErrors).toHaveLength(0);
+  });
 });

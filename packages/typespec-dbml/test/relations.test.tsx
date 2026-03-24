@@ -18,6 +18,7 @@ model User {
 @table
 model Post {
   @key id: uuid;
+  authorId: uuid;
   @foreignKey("author_id")
   author: User;
 }
@@ -41,6 +42,7 @@ model User {
 @table
 model Post {
   @key id: uuid;
+  authorId: uuid;
   @foreignKey("author_id")
   author: User;
 }
@@ -58,6 +60,7 @@ model Post {
 model Category {
   @key id: uuid;
   name: string;
+  parentId?: uuid;
   @foreignKey("parent_id")
   parent?: Category;
 }
@@ -67,27 +70,70 @@ model Category {
     expect(output).toContain("Ref: categories.parent_id > categories.id");
   });
 
-  it("generates one-to-one reference", async () => {
+  it("generates a referenced-column relation", async () => {
+    const output = await emitDbmlFile(
+      `
+@table
+model Organization {
+  @key
+  @unique
+  code: string;
+}
+
+@table
+model User {
+  @key id: uuid;
+  organizationCode: string;
+  @foreignKey("organizationCode", "code")
+  organization: Organization;
+}
+`,
+      "users.dbml",
+    );
+    expect(output).toContain("Ref: users.organization_code > organizations.code");
+  });
+
+  it("preserves delete and update actions on references", async () => {
     const output = await emitDbmlFile(
       `
 @table
 model User {
   @key id: uuid;
-  @mappedBy("owner")
-  passport?: Passport;
 }
 
 @table
-model Passport {
-  @key ownerId: uuid;
-  passportNumber: string;
-  @foreignKey("owner_id")
-  owner: User;
+model Post {
+  @key id: uuid;
+  authorId: uuid;
+  @foreignKey("authorId")
+  @onDelete("CASCADE")
+  @onUpdate("CASCADE")
+  author: User;
 }
 `,
-      "passports.dbml",
+      "posts.dbml",
     );
-    // One-to-one: passports.owner_id > users.id (FK on passports)
-    expect(output).toContain("Ref: passports.owner_id > users.id");
+    expect(output).toContain("Ref: posts.author_id > users.id [delete: CASCADE, update: CASCADE]");
+  });
+
+  it("keeps indexes for enum columns", async () => {
+    const output = await emitDbmlFile(
+      `
+enum SubscriptionPlan {
+  free: "free",
+  premium: "premium",
+}
+
+@table
+model Subscription {
+  @key id: uuid;
+  @index plan: SubscriptionPlan;
+}
+`,
+      "subscriptions.dbml",
+    );
+    expect(output).toContain("plan SubscriptionPlan");
+    expect(output).toContain("indexes {");
+    expect(output).toContain("    plan");
   });
 });

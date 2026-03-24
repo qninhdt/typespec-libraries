@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createEmitterTestRunner } from "../utils.jsx";
+import { createEmitterTestRunner, renderGoOutput } from "../utils.jsx";
 
 describe("GORM emitter end-to-end", () => {
   it("emits a complete model without errors", async () => {
@@ -42,6 +42,7 @@ describe("GORM emitter end-to-end", () => {
         @key id: uuid;
         title: string;
         content: text;
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE")
         user: User;
@@ -106,5 +107,29 @@ describe("GORM emitter end-to-end", () => {
 
     const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
     expect(errors).toHaveLength(0);
+  });
+
+  it("emits standalone module manifests with namespace-based imports", async () => {
+    const output = await renderGoOutput(
+      `
+      namespace App.Identity {
+        @table
+        model User {
+          @key id: uuid;
+          name: string;
+        }
+      }
+    `,
+      "test",
+      {
+        standalone: true,
+        "library-name": "github.com/acme/domain-models",
+      },
+    );
+
+    const files = JSON.stringify(output);
+    expect(files).toContain("go.mod");
+    expect(files).toContain("models.go");
+    expect(files).toContain("github.com/acme/domain-models");
   });
 });

@@ -29,6 +29,7 @@ import {
   getPythonTypeMap,
   generateEnumClass,
   buildPythonImportBlock,
+  resolveFormatPyType,
 } from "./PyConstants.js";
 
 export interface PyDataFileProps {
@@ -85,6 +86,11 @@ export function PyDataFile(props: PyDataFileProps): Children {
 
 // ─── Pydantic field generator ───────────────────────────────────────────────
 
+interface PydanticFieldContext {
+  pyType: string;
+  doc?: string;
+}
+
 function generatePydanticField(
   program: Program,
   prop: ModelProperty,
@@ -92,26 +98,56 @@ function generatePydanticField(
   pydanticImports: Set<string>,
 ): string {
   const pyFieldName = camelToSnake(prop.name);
+  const { pyType, doc } = resolvePydanticFieldContext(program, prop, stdImports, pydanticImports);
+  const fieldArgs = buildPydanticFieldArgs(program, prop, doc);
+  pydanticImports.add("Field");
+  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
+  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+}
+
+function resolvePydanticFieldContext(
+  program: Program,
+  prop: ModelProperty,
+  stdImports: Set<string>,
+  pydanticImports: Set<string>,
+): PydanticFieldContext {
   const dbType = resolveDbType(prop.type);
   const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
-
   const enumInfo = getPropertyEnum(prop);
-  let pyType = mapping.pyType;
-  if (enumInfo) {
-    pyType = enumInfo.enumType.name;
-  } else {
-    for (const imp of mapping.imports) stdImports.add(imp);
+  const baseType = enumInfo?.enumType.name ?? mapping.pyType;
+
+  if (!enumInfo) {
+    for (const imp of mapping.imports) {
+      stdImports.add(imp);
+    }
   }
 
-  // Format-based type overrides
+  return {
+    pyType: prop.optional
+      ? `${resolvePydanticFormatType(program, prop, baseType, pydanticImports)} | None`
+      : resolvePydanticFormatType(program, prop, baseType, pydanticImports),
+    doc: getDoc(program, prop),
+  };
+}
+
+function resolvePydanticFormatType(
+  program: Program,
+  prop: ModelProperty,
+  pyType: string,
+  pydanticImports: Set<string>,
+): string {
   const format = getFormat(program, prop);
-  if (format === "email") {
-    pydanticImports.add("EmailStr");
-    pyType = "EmailStr";
-  } else if (format === "url" || format === "uri") {
-    pydanticImports.add("AnyUrl");
-    pyType = "AnyUrl";
-  } else if (format !== undefined && format !== null && format !== "") {
+  if (!format) {
+    return pyType;
+  }
+
+  const formatType = resolveFormatPyType(format);
+  if (formatType) {
+    pydanticImports.add(formatType);
+    return formatType;
+  }
+
+  if (format !== "") {
     reportDiagnostic(program, {
       code: "unknown-format",
       target: prop,
@@ -119,14 +155,30 @@ function generatePydanticField(
     });
   }
 
-  const isOpt = prop.optional;
-  if (isOpt) {
-    stdImports.add("typing.Optional");
-    pyType = `Optional[${pyType}]`;
+  return pyType;
+}
+
+function buildPydanticFieldArgs(program: Program, prop: ModelProperty, doc?: string): string[] {
+  const fieldArgs: string[] = [prop.optional ? "None" : "..."];
+  pushValidationFieldArgs(program, prop, fieldArgs);
+
+  const titleVal = getTitle(program, prop);
+  if (titleVal) {
+    fieldArgs.push(`title="${escapePythonString(titleVal)}"`);
+  }
+  if (doc) {
+    fieldArgs.push(`description="${escapePythonString(doc)}"`);
   }
 
-  const fieldArgs: string[] = [isOpt ? "None" : "..."];
+  const placeholder = getPlaceholder(program, prop);
+  if (placeholder) {
+    fieldArgs.push(`json_schema_extra={"placeholder": ${toPythonStringLiteral(placeholder)}}`);
+  }
 
+  return fieldArgs;
+}
+
+function pushValidationFieldArgs(program: Program, prop: ModelProperty, fieldArgs: string[]): void {
   const maxLen = getMaxLength(program, prop);
   const minLen = getMinLength(program, prop);
   const minVal = getMinValue(program, prop);
@@ -138,21 +190,12 @@ function generatePydanticField(
   if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
   if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
   if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
+}
 
-  const titleVal = getTitle(program, prop);
-  if (titleVal) fieldArgs.push(`title="${titleVal.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
+function escapePythonString(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll('"', String.raw`\"`);
+}
 
-  const doc = getDoc(program, prop);
-  if (doc) fieldArgs.push(`description="${doc.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`);
-
-  const placeholder = getPlaceholder(program, prop);
-  if (placeholder)
-    fieldArgs.push(
-      `json_schema_extra={"placeholder": "${placeholder.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"}`,
-    );
-
-  pydanticImports.add("Field");
-
-  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
-  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+function toPythonStringLiteral(value: string): string {
+  return String.raw`"${escapePythonString(value)}"`;
 }
