@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, func, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 

@@ -634,10 +634,31 @@ export function resolveDbType(type: Type): string | undefined {
 
 /** Convert camelCase to snake_case */
 export function camelToSnake(name: string): string {
-  return name
-    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase();
+  if (name.length === 0) {
+    return name;
+  }
+
+  let result = "";
+
+  for (let index = 0; index < name.length; index++) {
+    const current = name[index];
+    const previous = index > 0 ? name[index - 1] : undefined;
+    const next = index + 1 < name.length ? name[index + 1] : undefined;
+    const isUpper = current >= "A" && current <= "Z";
+    const previousIsLowerOrDigit =
+      previous !== undefined &&
+      ((previous >= "a" && previous <= "z") || (previous >= "0" && previous <= "9"));
+    const previousIsUpper = previous !== undefined && previous >= "A" && previous <= "Z";
+    const nextIsLower = next !== undefined && next >= "a" && next <= "z";
+
+    if (isUpper && index > 0 && (previousIsLowerOrDigit || (previousIsUpper && nextIsLower))) {
+      result += "_";
+    }
+
+    result += current.toLowerCase();
+  }
+
+  return result;
 }
 
 /** Pre-compiled Go abbreviation replacement patterns (avoids per-call RegExp construction) */

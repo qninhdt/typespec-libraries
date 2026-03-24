@@ -12,8 +12,8 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum as SAEnum,
-    UniqueConstraint,
     func,
+    UniqueConstraint,
 )
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -37,8 +37,8 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"  # type: ignore
     __table_args__ = (
-        CheckConstraint("credits >= 0", name="users_credits_non_negative"),
         UniqueConstraint("email", "deleted_at", name="users_email_deleted_at_unique"),
+        CheckConstraint("credits >= 0", name="users_credits_non_negative"),
     )
 
     # Example of a computed UI field excluded from persistence.

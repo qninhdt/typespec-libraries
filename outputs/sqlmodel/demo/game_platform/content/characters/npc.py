@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, func, Index, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 

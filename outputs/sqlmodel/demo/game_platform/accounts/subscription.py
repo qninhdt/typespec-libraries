@@ -13,9 +13,9 @@ from sqlalchemy import (
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    func,
     Index,
     Numeric,
-    func,
 )
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -37,10 +37,10 @@ class Subscription(SQLModel, table=True):
 
     __tablename__ = "subscriptions"  # type: ignore
     __table_args__ = (
+        Index("subscriptions_user_id_is_active_idx", "user_id", "is_active"),
         CheckConstraint(
             "monthlyPrice >= 0", name="subscriptions_monthly_price_non_negative"
         ),
-        Index("subscriptions_user_id_is_active_idx", "user_id", "is_active"),
     )
 
     # Unique identifier shared by most persisted records.

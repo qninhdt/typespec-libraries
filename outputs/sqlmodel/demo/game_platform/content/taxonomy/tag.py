@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, func, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:

@@ -5,8 +5,8 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID
 from datetime import datetime
 
+from sqlalchemy import Column, DateTime, ForeignKey, func, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import Column, DateTime, ForeignKey, Index, String, func
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:

@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import EmailStr
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, func, Index, Text
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
