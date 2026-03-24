@@ -24,15 +24,22 @@ export function generateRelationFieldLine(
 
   // Determine Go type based on relation kind
   const isMany = rel.kind === "one-to-many" || rel.kind === "many-to-many";
-  const goType = isMany ? `[]${targetType}` : prop.optional ? `*${targetType}` : targetType;
+  let goType = targetType;
+  if (isMany) {
+    goType = `[]${targetType}`;
+  } else if (prop.optional) {
+    goType = `*${targetType}`;
+  }
 
   // Build GORM tag parts
   const tagParts: string[] = [];
   if (rel.kind === "many-to-many") {
     tagParts.push(`many2many:${rel.joinTable}`);
   } else {
-    tagParts.push(`foreignKey:${camelToPascal(rel.localProperty.name)}`);
-    tagParts.push(`references:${camelToPascal(rel.targetProperty.name)}`);
+    tagParts.push(
+      `foreignKey:${camelToPascal(rel.localProperty.name)}`,
+      `references:${camelToPascal(rel.targetProperty.name)}`,
+    );
   }
 
   // Add cascade constraints

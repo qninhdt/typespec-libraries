@@ -10,45 +10,25 @@ import { callPart, shouldReference } from "./utils.js";
 
 export function zodConstraintsParts(type: Type, member?: ModelProperty) {
   const { $ } = useTsp();
+  const { effectiveType, effectiveMember } = unwrapLookupType($, type, member);
 
-  // Handle lookup types: when type is a ModelProperty (e.g., User.email),
-  // unwrap it to get the underlying scalar type
-  let effectiveType = type;
-  let effectiveMember = member;
-
-  if ($.modelProperty.is(type)) {
-    const sourceProperty = type as ModelProperty;
-    // For lookup types, the member becomes the source property
-    effectiveMember = sourceProperty;
-    // Get the underlying type (follow the chain for nested lookups)
-    let targetType = sourceProperty.type;
-    while ($.modelProperty.is(targetType)) {
-      targetType = (targetType as ModelProperty).type;
-    }
-    effectiveType = targetType;
-  }
-
-  let constraintParts: Children[] = [];
   if ($.scalar.extendsNumeric(effectiveType)) {
-    constraintParts = numericConstraintsParts($, effectiveType, effectiveMember);
-  } else if ($.scalar.extendsString(effectiveType)) {
-    constraintParts = stringConstraints($, effectiveType, effectiveMember);
-  } else if (
-    $.scalar.extendsUtcDateTime(effectiveType) ||
-    $.scalar.extendsOffsetDateTime(effectiveType) ||
-    $.scalar.extendsDuration(effectiveType)
-  ) {
-    const encoding = $.scalar.getEncoding(effectiveType);
-    if (encoding === undefined) {
-      constraintParts = [];
-    } else {
-      constraintParts = numericConstraintsToParts(intrinsicNumericConstraints($, encoding.type));
-    }
-  } else if ($.array.is(effectiveType)) {
-    constraintParts = arrayConstraints($, effectiveType, effectiveMember);
+    return numericConstraintsParts($, effectiveType, effectiveMember);
   }
 
-  return constraintParts;
+  if ($.scalar.extendsString(effectiveType)) {
+    return stringConstraints($, effectiveType, effectiveMember);
+  }
+
+  if (isEncodedNumericScalar($, effectiveType)) {
+    return encodedNumericConstraints($, effectiveType);
+  }
+
+  if ($.array.is(effectiveType)) {
+    return arrayConstraints($, effectiveType, effectiveMember);
+  }
+
+  return [];
 }
 
 interface StringConstraints {
@@ -62,7 +42,7 @@ interface StringConstraints {
 function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
   const sources = getDecoratorSources($, type, member);
   const constraints: StringConstraints = {};
-  for (const source of sources.reverse()) {
+  for (const source of [...sources].reverse()) {
     const decoratorConstraints: StringConstraints = {
       minLength: $.type.minLength(source),
       maxLength: $.type.maxLength(source),
@@ -75,19 +55,17 @@ function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
 
   const parts: Children[] = [];
 
-  for (const [name, value] of Object.entries(constraints)) {
-    if (value === undefined) {
-      continue;
-    }
-    if (name === "minLength" && value !== 0) {
-      parts.push(callPart("min", value));
-    } else if (name === "maxLength" && isFinite(value)) {
-      parts.push(callPart("max", value));
-    } else if (name === "pattern") {
-      parts.push(callPart("regex", `/${value}/`));
-    } else if (name === "format") {
-      parts.push(callPart(value));
-    }
+  if (constraints.minLength !== undefined && constraints.minLength !== 0) {
+    parts.push(callPart("min", constraints.minLength));
+  }
+  if (constraints.maxLength !== undefined && Number.isFinite(constraints.maxLength)) {
+    parts.push(callPart("max", constraints.maxLength));
+  }
+  if (constraints.pattern !== undefined) {
+    parts.push(callPart("regex", `/${constraints.pattern}/`));
+  }
+  if (constraints.format !== undefined) {
+    parts.push(callPart(constraints.format));
   }
 
   return parts;
@@ -140,42 +118,18 @@ function getDecoratorSources(
   type: Type,
   member?: ModelProperty,
 ): (Scalar | ModelProperty)[] {
-  // Handle lookup types: when type is a ModelProperty (e.g., User.email),
-  // the actual scalar type is in type.type
-  if ($.modelProperty.is(type)) {
-    const sourceProperty = type as ModelProperty;
-    const scalarType = sourceProperty.type;
-
-    // If the source property points to another ModelProperty (chained lookup),
-    // follow the chain to find the ultimate scalar
-    let targetType = scalarType;
-    while ($.modelProperty.is(targetType)) {
-      targetType = (targetType as ModelProperty).type;
-    }
-
-    // If it's a scalar, get constraints from both the source property and the scalar
-    if ($.scalar.is(targetType)) {
-      const sources: (Scalar | ModelProperty)[] = [...(member ? [member] : []), sourceProperty];
-      let currentType: Scalar | undefined = targetType as Scalar;
-      while (currentType && !shouldReference($.program, currentType)) {
-        sources.push(currentType);
-        currentType = currentType.baseScalar;
-      }
-      return sources;
-    }
-
-    // For non-scalar types (like Model references), just use the source property
-    return [...(member ? [member] : []), sourceProperty];
-  }
-
-  if (!$.scalar.is(type)) {
+  const { effectiveType, effectiveMember } = unwrapLookupType($, type, member);
+  if (!$.scalar.is(effectiveType)) {
     // Non-scalar, non-ModelProperty type (Model, Union, etc.) - just return member if present
-    return member ? [member] : [];
+    return effectiveMember ? [effectiveMember] : [];
   }
 
-  const sources: (Scalar | ModelProperty)[] = [...(member ? [member] : []), type];
+  const sources: (Scalar | ModelProperty)[] = [
+    ...(effectiveMember ? [effectiveMember] : []),
+    effectiveType,
+  ];
 
-  let currentType: Scalar | undefined = type.baseScalar;
+  let currentType: Scalar | undefined = effectiveType.baseScalar;
   while (currentType && !shouldReference($.program, currentType)) {
     sources.push(currentType);
     currentType = currentType.baseScalar;
@@ -195,53 +149,7 @@ function numericConstraintsParts($: Typekit, type: Scalar, member?: ModelPropert
   const intrinsicConstraints = intrinsicNumericConstraints($, type);
   const decoratorConstraints = decoratorNumericConstraints($, sources);
 
-  if (decoratorConstraints.min !== undefined && decoratorConstraints.minExclusive !== undefined) {
-    if (decoratorConstraints.minExclusive > decoratorConstraints.min) {
-      delete decoratorConstraints.min;
-    } else {
-      delete decoratorConstraints.minExclusive;
-    }
-  }
-
-  if (decoratorConstraints.max !== undefined && decoratorConstraints.maxExclusive !== undefined) {
-    if (decoratorConstraints.maxExclusive < decoratorConstraints.max) {
-      delete decoratorConstraints.max;
-    } else {
-      delete decoratorConstraints.maxExclusive;
-    }
-  }
-
-  if (intrinsicConstraints.min !== undefined) {
-    if (decoratorConstraints.min !== undefined) {
-      if (intrinsicConstraints.min > decoratorConstraints.min) {
-        delete decoratorConstraints.min;
-      } else {
-        delete intrinsicConstraints.min;
-      }
-    } else if (decoratorConstraints.minExclusive !== undefined) {
-      if (intrinsicConstraints.min! > decoratorConstraints.minExclusive) {
-        delete decoratorConstraints.minExclusive;
-      } else {
-        delete intrinsicConstraints.min;
-      }
-    }
-  }
-
-  if (intrinsicConstraints.max !== undefined) {
-    if (decoratorConstraints.max !== undefined) {
-      if (intrinsicConstraints.max < decoratorConstraints.max) {
-        delete decoratorConstraints.max;
-      } else {
-        delete intrinsicConstraints.max;
-      }
-    } else if (decoratorConstraints.maxExclusive !== undefined) {
-      if (intrinsicConstraints.max! < decoratorConstraints.maxExclusive) {
-        delete decoratorConstraints.maxExclusive;
-      } else {
-        delete intrinsicConstraints.max;
-      }
-    }
-  }
+  resolveOverlappingNumericBounds(decoratorConstraints, intrinsicConstraints);
   assignNumericConstraints(finalConstraints, intrinsicConstraints);
   assignNumericConstraints(finalConstraints, decoratorConstraints);
 
@@ -296,7 +204,8 @@ function intrinsicNumericConstraints($: Typekit, type: Scalar): NumericConstrain
   }
   if (!$.scalar.extendsNumeric(knownType)) {
     return {};
-  } else if ($.scalar.extendsSafeint(knownType)) {
+  }
+  if ($.scalar.extendsSafeint(knownType)) {
     return {
       safe: true,
     };
@@ -327,6 +236,100 @@ function assignNumericConstraints(target: NumericConstraints, source: NumericCon
   target.minExclusive = maxNumeric(source.minExclusive, target.minExclusive);
   target.maxExclusive = minNumeric(source.maxExclusive, target.maxExclusive);
   target.safe = target.safe ?? source.safe;
+}
+
+function unwrapLookupType(
+  $: Typekit,
+  type: Type,
+  member?: ModelProperty,
+): { effectiveType: Type; effectiveMember?: ModelProperty } {
+  if (!$.modelProperty.is(type)) {
+    return { effectiveType: type, effectiveMember: member };
+  }
+
+  const sourceProperty = type as ModelProperty;
+  let targetType = sourceProperty.type;
+  while ($.modelProperty.is(targetType)) {
+    targetType = (targetType as ModelProperty).type;
+  }
+
+  return { effectiveType: targetType, effectiveMember: sourceProperty };
+}
+
+function isEncodedNumericScalar($: Typekit, type: Type): type is Scalar {
+  return (
+    $.scalar.extendsUtcDateTime(type) ||
+    $.scalar.extendsOffsetDateTime(type) ||
+    $.scalar.extendsDuration(type)
+  );
+}
+
+function encodedNumericConstraints($: Typekit, type: Scalar): Children[] {
+  const encoding = $.scalar.getEncoding(type);
+  return encoding ? numericConstraintsToParts(intrinsicNumericConstraints($, encoding.type)) : [];
+}
+
+function resolveOverlappingNumericBounds(
+  decoratorConstraints: NumericConstraints,
+  intrinsicConstraints: NumericConstraints,
+): void {
+  resolveDecoratorBounds(decoratorConstraints);
+  resolveIntrinsicBound("min", intrinsicConstraints, decoratorConstraints);
+  resolveIntrinsicBound("max", intrinsicConstraints, decoratorConstraints);
+}
+
+function resolveDecoratorBounds(constraints: NumericConstraints): void {
+  if (constraints.min !== undefined && constraints.minExclusive !== undefined) {
+    if (constraints.minExclusive > constraints.min) {
+      delete constraints.min;
+    } else {
+      delete constraints.minExclusive;
+    }
+  }
+
+  if (constraints.max !== undefined && constraints.maxExclusive !== undefined) {
+    if (constraints.maxExclusive < constraints.max) {
+      delete constraints.max;
+    } else {
+      delete constraints.maxExclusive;
+    }
+  }
+}
+
+function resolveIntrinsicBound(
+  bound: "min" | "max",
+  intrinsicConstraints: NumericConstraints,
+  decoratorConstraints: NumericConstraints,
+): void {
+  const intrinsicValue = intrinsicConstraints[bound];
+  if (intrinsicValue === undefined) {
+    return;
+  }
+
+  const decoratorValue = decoratorConstraints[bound];
+  const exclusiveKey = bound === "min" ? "minExclusive" : "maxExclusive";
+  const exclusiveValue = decoratorConstraints[exclusiveKey];
+  const wins =
+    bound === "min"
+      ? (left: number | bigint, right: number | bigint) => left > right
+      : (left: number | bigint, right: number | bigint) => left < right;
+
+  if (decoratorValue !== undefined) {
+    if (wins(intrinsicValue, decoratorValue)) {
+      delete decoratorConstraints[bound];
+    } else {
+      delete intrinsicConstraints[bound];
+    }
+    return;
+  }
+
+  if (exclusiveValue !== undefined) {
+    if (wins(intrinsicValue, exclusiveValue)) {
+      delete decoratorConstraints[exclusiveKey];
+    } else {
+      delete intrinsicConstraints[bound];
+    }
+  }
 }
 
 interface ArrayConstraints {

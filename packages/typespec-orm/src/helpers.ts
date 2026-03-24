@@ -214,35 +214,21 @@ export interface ValidatorInfo {
  */
 export function getValidators(program: Program, prop: ModelProperty): ValidatorInfo[] {
   const validators: ValidatorInfo[] = [];
-
-  // Length validators
-  const maxLen = getMaxLength(program, prop);
-  if (maxLen !== undefined) validators.push({ name: "maxLength", args: String(maxLen) });
-
-  const minLen = getMinLength(program, prop);
-  if (minLen !== undefined) validators.push({ name: "minLength", args: String(minLen) });
-
-  // Value validators
-  const maxVal = getMaxValue(program, prop);
-  if (maxVal !== undefined) validators.push({ name: "maxValue", args: String(maxVal) });
-
-  const minVal = getMinValue(program, prop);
-  if (minVal !== undefined) validators.push({ name: "minValue", args: String(minVal) });
-
-  const maxValEx = getMaxValueExclusive(program, prop);
-  if (maxValEx !== undefined)
-    validators.push({ name: "maxValueExclusive", args: String(maxValEx) });
-
-  const minValEx = getMinValueExclusive(program, prop);
-  if (minValEx !== undefined)
-    validators.push({ name: "minValueExclusive", args: String(minValEx) });
-
-  // Array item validators
-  const maxItems = getMaxItems(program, prop);
-  if (maxItems !== undefined) validators.push({ name: "maxItems", args: String(maxItems) });
-
-  const minItems = getMinItems(program, prop);
-  if (minItems !== undefined) validators.push({ name: "minItems", args: String(minItems) });
+  const validatorEntries: Array<[string, unknown]> = [
+    ["maxLength", getMaxLength(program, prop)],
+    ["minLength", getMinLength(program, prop)],
+    ["maxValue", getMaxValue(program, prop)],
+    ["minValue", getMinValue(program, prop)],
+    ["maxValueExclusive", getMaxValueExclusive(program, prop)],
+    ["minValueExclusive", getMinValueExclusive(program, prop)],
+    ["maxItems", getMaxItems(program, prop)],
+    ["minItems", getMinItems(program, prop)],
+  ];
+  for (const [name, value] of validatorEntries) {
+    if (value !== undefined) {
+      validators.push({ name, args: `${value}` });
+    }
+  }
 
   // Pattern
   const pattern = getPattern(program, prop);
@@ -515,7 +501,7 @@ export function getDoc(program: Program, target: Model | ModelProperty): string 
   }
   if (!raw) return undefined;
   // Collapse multi-line @doc / /** */ values to a single line
-  return raw.replaceAll(/\r?\n[\t \*]*/g, " ").trim();
+  return raw.replaceAll(/\r?\n[\t *]*/g, " ").trim();
 }
 
 // ─── Enum helpers ────────────────────────────────────────────────────────────
@@ -942,51 +928,71 @@ export function collectManyToManyAssociations(
 
   for (const model of models) {
     for (const prop of walkPropertiesInherited(model)) {
-      const joinTable = getManyToMany(program, prop);
-      if (!joinTable) continue;
+      const association = buildManyToManyAssociation(program, model, prop);
+      if (!association) continue;
+      if (associations.has(association.pairKey)) continue;
 
-      const targetModel = unwrapArrayType(prop.type);
-      if (!targetModel || !isTable(program, targetModel)) continue;
-
-      const inverse = findInverseManyToMany(program, model, targetModel, prop);
-      if (!inverse) continue;
-
-      const leftKey = findPrimaryKey(program, model);
-      const rightKey = findPrimaryKey(program, targetModel);
-      if (!leftKey || !rightKey) continue;
-
-      const leftName = getTypeFullName(program, model);
-      const rightName = getTypeFullName(program, targetModel);
-      const pairKey =
-        leftName <= rightName
-          ? `${joinTable}:${leftName}:${rightName}`
-          : `${joinTable}:${rightName}:${leftName}`;
-
-      if (associations.has(pairKey)) continue;
-
-      const leftFirst = leftName <= rightName;
-      const leftModel = leftFirst ? model : targetModel;
-      const rightModel = leftFirst ? targetModel : model;
-      const leftProperty = leftFirst ? prop : inverse.prop;
-      const rightProperty = leftFirst ? inverse.prop : prop;
-      const leftPk = leftFirst ? leftKey : rightKey;
-      const rightPk = leftFirst ? rightKey : leftKey;
-
-      associations.set(pairKey, {
-        tableName: joinTable,
-        leftModel,
-        rightModel,
-        leftProperty,
-        rightProperty,
-        leftKey: leftPk,
-        rightKey: rightPk,
-        leftJoinColumn: deriveManyToManyJoinColumnName(program, leftModel, leftPk),
-        rightJoinColumn: deriveManyToManyJoinColumnName(program, rightModel, rightPk),
-      });
+      associations.set(association.pairKey, association.value);
     }
   }
 
   return [...associations.values()].sort((a, b) => a.tableName.localeCompare(b.tableName));
+}
+
+function buildManyToManyAssociation(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+): { pairKey: string; value: ManyToManyAssociation } | undefined {
+  const joinTable = getManyToMany(program, prop);
+  if (!joinTable) return undefined;
+
+  const targetModel = unwrapArrayType(prop.type);
+  if (!targetModel || !isTable(program, targetModel)) return undefined;
+
+  const inverse = findInverseManyToMany(program, model, targetModel, prop);
+  if (!inverse) return undefined;
+
+  const leftKey = findPrimaryKey(program, model);
+  const rightKey = findPrimaryKey(program, targetModel);
+  if (!leftKey || !rightKey) return undefined;
+
+  const leftName = getTypeFullName(program, model);
+  const rightName = getTypeFullName(program, targetModel);
+  const [pairKey, leftFirst] = buildAssociationOrdering(joinTable, leftName, rightName);
+  const leftModel = leftFirst ? model : targetModel;
+  const rightModel = leftFirst ? targetModel : model;
+  const leftProperty = leftFirst ? prop : inverse.prop;
+  const rightProperty = leftFirst ? inverse.prop : prop;
+  const leftPk = leftFirst ? leftKey : rightKey;
+  const rightPk = leftFirst ? rightKey : leftKey;
+
+  return {
+    pairKey,
+    value: {
+      tableName: joinTable,
+      leftModel,
+      rightModel,
+      leftProperty,
+      rightProperty,
+      leftKey: leftPk,
+      rightKey: rightPk,
+      leftJoinColumn: deriveManyToManyJoinColumnName(program, leftModel, leftPk),
+      rightJoinColumn: deriveManyToManyJoinColumnName(program, rightModel, rightPk),
+    },
+  };
+}
+
+function buildAssociationOrdering(
+  joinTable: string,
+  leftName: string,
+  rightName: string,
+): [string, boolean] {
+  const leftFirst = leftName <= rightName;
+  const pairKey = leftFirst
+    ? `${joinTable}:${leftName}:${rightName}`
+    : `${joinTable}:${rightName}:${leftName}`;
+  return [pairKey, leftFirst];
 }
 
 /**
@@ -1025,6 +1031,7 @@ export function resolveRelation(
       ? "one-to-one"
       : "many-to-one";
     const inverseRef = findInverseMappedBy(program, parentModel, targetModel, prop.name);
+    const backPopulates = inverseRef ? camelToSnake(inverseRef.name) : undefined;
 
     return {
       kind,
@@ -1033,7 +1040,7 @@ export function resolveRelation(
       fkTargetColumn: resolved.targetColumnName,
       onDelete,
       onUpdate,
-      backPopulates: inverseRef ? camelToSnake(inverseRef.name) : undefined,
+      backPopulates,
     };
   }
 
@@ -1067,12 +1074,7 @@ export function resolveRelation(
   }
 
   // Case 3: @mappedBy on array or singular model reference → inverse collection / has-one
-  const mappedByTarget =
-    arrayElement && isTable(program, arrayElement)
-      ? arrayElement
-      : prop.type.kind === "Model" && isTable(program, prop.type as Model)
-        ? (prop.type as Model)
-        : undefined;
+  const mappedByTarget = resolveMappedByTarget(program, prop, arrayElement);
 
   if (mappedByTarget && explicitMappedBy) {
     const targetProp = resolvePropertyByName(mappedByTarget, explicitMappedBy);
@@ -1093,8 +1095,9 @@ export function resolveRelation(
     const inverseOnDelete = getOnDelete(program, targetProp);
     const inverseOnUpdate = getOnUpdate(program, targetProp);
 
+    const kind = arrayElement ? "one-to-many" : "one-to-one";
     return {
-      kind: arrayElement ? "one-to-many" : "one-to-one",
+      kind,
       targetModel: mappedByTarget,
       targetTable: getTableName(program, mappedByTarget),
       localProperty: resolved.localProperty,
@@ -1106,6 +1109,22 @@ export function resolveRelation(
       onUpdate: inverseOnUpdate ?? onUpdate,
       backPopulates: explicitMappedBy,
     };
+  }
+
+  return undefined;
+}
+
+function resolveMappedByTarget(
+  program: Program,
+  prop: ModelProperty,
+  arrayElement: Model | undefined,
+): Model | undefined {
+  if (arrayElement && isTable(program, arrayElement)) {
+    return arrayElement;
+  }
+
+  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
+    return prop.type as Model;
   }
 
   return undefined;

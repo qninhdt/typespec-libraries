@@ -68,8 +68,8 @@ const ORM_NAMESPACE = "Qninhdt.Orm";
 
 export function getLibraryLeafName(libraryName: string): string {
   const trimmed = libraryName.trim();
-  const leaf = trimmed.split("/").filter(Boolean).at(-1) ?? trimmed;
-  return leaf.replace(/[^a-zA-Z0-9_]/g, "_");
+  const leaf = [...trimmed.split("/")].reverse().find(Boolean) ?? trimmed;
+  return leaf.replaceAll(/[^\w]/g, "_");
 }
 
 export function getRelativeImportPath(
@@ -107,7 +107,7 @@ export function selectorMatchesName(
     fullName === selector ||
     fullName.startsWith(`${selector}.`) ||
     namespace === selector ||
-    namespace?.startsWith(`${selector}.`) === true
+    (namespace?.startsWith(`${selector}.`) ?? false)
   );
 }
 
@@ -121,9 +121,10 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
     if (entities.has(model)) {
       const existing = entities.get(model)!;
       if (existing.kind !== kind) {
+        const nextKind = existing.kind === "table" ? "table" : kind;
         entities.set(model, {
           ...existing,
-          kind: existing.kind === "table" ? "table" : kind,
+          kind: nextKind,
         });
       }
       return;
@@ -154,7 +155,7 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
       namespaceSegments,
       namespacePath,
       namespaceDir: namespacePath.join("/"),
-      packageName: namespacePath.at(-1)!,
+      packageName: namespacePath[namespacePath.length - 1]!,
       tableName: kind === "table" ? getTableName(program, model) : undefined,
       label: kind === "data" ? getDataLabel(program, model) : undefined,
       mixins: collectMixinSources(program, model),
@@ -237,7 +238,7 @@ export function selectModelsForEmitter(
 
   const topLevelNamespaces = [...new Set(selected.map((model) => model.namespacePath[0]))]
     .filter(Boolean)
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 
   return { models: selected, byNamespace, topLevelNamespaces };
 }
@@ -347,46 +348,9 @@ function validateMixinFieldConflicts(program: Program, model: Model, reported: S
   }
 
   const ownership = new Map<string, string>();
-
-  const registerConflict = (fieldName: string, incomingSource: string, existingSource: string) => {
-    const key = `${getTypeFullName(program, model)}:${fieldName}:${incomingSource}:${existingSource}`;
-    if (reported.has(key)) return;
-    reported.add(key);
-    reportDiagnostic(program, {
-      code: "mixin-field-conflict",
-      target: model,
-      format: {
-        fieldName,
-        incomingSource,
-        existingSource,
-        typeName: model.name,
-      },
-    });
-  };
-
-  for (const source of model.sourceModels) {
-    if (!isTableMixin(program, source.model)) continue;
-    for (const [fieldName] of source.model.properties) {
-      const incomingSource = getTypeFullName(program, source.model);
-      const existingSource = ownership.get(fieldName);
-      if (existingSource && existingSource !== incomingSource) {
-        registerConflict(fieldName, incomingSource, existingSource);
-      } else {
-        ownership.set(fieldName, incomingSource);
-      }
-    }
-  }
-
-  if (model.baseModel && isTableMixin(program, model.baseModel)) {
-    for (const [fieldName] of model.baseModel.properties) {
-      const incomingSource = getTypeFullName(program, model.baseModel);
-      const existingSource = ownership.get(fieldName);
-      if (existingSource && existingSource !== incomingSource) {
-        registerConflict(fieldName, incomingSource, existingSource);
-      } else {
-        ownership.set(fieldName, incomingSource);
-      }
-    }
+  const mixinSources = getModelMixinSources(program, model);
+  for (const source of mixinSources) {
+    registerMixinOwnership(program, model, source, ownership, reported);
   }
 }
 
@@ -396,26 +360,13 @@ function collectDependencies(
 ): NormalizedDependency[] {
   const dependencies = new Map<string, NormalizedDependency>();
 
-  const push = (dependency: NormalizedDependency) => {
-    if (dependency.fullName === normalized.fullName) return;
-    dependencies.set(`${dependency.kind}:${dependency.fullName}`, dependency);
-  };
+  const push = createDependencyCollector(normalized, dependencies);
 
   for (const mixin of normalized.mixins) {
-    const namespace = getNamespaceFullName(mixin.namespace, program.getGlobalNamespaceType());
-    if (!namespace) {
-      reportDiagnostic(program, {
-        code: "namespace-required",
-        target: mixin,
-        format: { kind: "mixin", typeName: mixin.name },
-      });
-      continue;
+    const dependency = createDependencyFromNamespace(program, mixin, "mixin");
+    if (dependency) {
+      push(dependency);
     }
-    push({
-      kind: "mixin",
-      fullName: getTypeFullName(program, mixin),
-      namespace,
-    });
   }
 
   for (const prop of walkPropertiesInherited(normalized.model)) {
@@ -423,22 +374,9 @@ function collectDependencies(
 
     const relation = resolveRelation(program, prop, normalized.model);
     if (relation) {
-      const targetNamespace = getNamespaceFullName(
-        relation.targetModel.namespace,
-        program.getGlobalNamespaceType(),
-      );
-      if (!targetNamespace) {
-        reportDiagnostic(program, {
-          code: "namespace-required",
-          target: relation.targetModel,
-          format: { kind: "model", typeName: relation.targetModel.name },
-        });
-      } else {
-        push({
-          kind: isTableMixin(program, relation.targetModel) ? "mixin" : "model",
-          fullName: getTypeFullName(program, relation.targetModel),
-          namespace: targetNamespace,
-        });
+      const dependency = createDependencyFromRelation(program, relation.targetModel);
+      if (dependency) {
+        push(dependency);
       }
       continue;
     }
@@ -570,4 +508,95 @@ function relationLikeType(program: Program, type: Type): string | undefined {
   }
 
   return undefined;
+}
+
+function getModelMixinSources(program: Program, model: Model): Model[] {
+  const mixinSources = model.sourceModels
+    .map((source) => source.model)
+    .filter((source): source is Model => isTableMixin(program, source));
+  if (model.baseModel && isTableMixin(program, model.baseModel)) {
+    mixinSources.push(model.baseModel);
+  }
+  return mixinSources;
+}
+
+function registerMixinOwnership(
+  program: Program,
+  model: Model,
+  source: Model,
+  ownership: Map<string, string>,
+  reported: Set<string>,
+): void {
+  const incomingSource = getTypeFullName(program, source);
+  for (const [fieldName] of source.properties) {
+    const existingSource = ownership.get(fieldName);
+    if (existingSource && existingSource !== incomingSource) {
+      reportMixinConflict(program, model, fieldName, incomingSource, existingSource, reported);
+    } else {
+      ownership.set(fieldName, incomingSource);
+    }
+  }
+}
+
+function reportMixinConflict(
+  program: Program,
+  model: Model,
+  fieldName: string,
+  incomingSource: string,
+  existingSource: string,
+  reported: Set<string>,
+): void {
+  const key = `${getTypeFullName(program, model)}:${fieldName}:${incomingSource}:${existingSource}`;
+  if (reported.has(key)) return;
+  reported.add(key);
+  reportDiagnostic(program, {
+    code: "mixin-field-conflict",
+    target: model,
+    format: {
+      fieldName,
+      incomingSource,
+      existingSource,
+      typeName: model.name,
+    },
+  });
+}
+
+function createDependencyCollector(
+  normalized: NormalizedOrmModel,
+  dependencies: Map<string, NormalizedDependency>,
+): (dependency: NormalizedDependency) => void {
+  return (dependency) => {
+    if (dependency.fullName === normalized.fullName) return;
+    dependencies.set(`${dependency.kind}:${dependency.fullName}`, dependency);
+  };
+}
+
+function createDependencyFromNamespace(
+  program: Program,
+  type: { name: string; namespace?: Model["namespace"] },
+  kind: NormalizedDependency["kind"],
+): NormalizedDependency | undefined {
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  if (!namespace) {
+    reportDiagnostic(program, {
+      code: "namespace-required",
+      target: type as never,
+      format: { kind, typeName: type.name },
+    });
+    return undefined;
+  }
+
+  return {
+    kind,
+    fullName: getTypeFullName(program, type),
+    namespace,
+  };
+}
+
+function createDependencyFromRelation(
+  program: Program,
+  targetModel: Model,
+): NormalizedDependency | undefined {
+  const kind = isTableMixin(program, targetModel) ? "mixin" : "model";
+  return createDependencyFromNamespace(program, targetModel, kind);
 }

@@ -201,21 +201,20 @@ export function groupImports(imports: Set<string>): Map<string, Set<string>> {
   const groups = new Map<string, Set<string>>();
 
   for (const imp of imports) {
-    const asMatch = imp.match(/^(.+)\.(\w+)\s+as\s+(\w+)$/);
-    if (asMatch) {
-      const [, mod, name, alias] = asMatch;
-      if (!groups.has(mod)) groups.set(mod, new Set());
-      groups.get(mod)!.add(`${name} as ${alias}`);
+    const aliasedImport = parseAliasedImport(imp);
+    if (aliasedImport) {
+      addGroupedImport(
+        groups,
+        aliasedImport.moduleName,
+        `${aliasedImport.name} as ${aliasedImport.alias}`,
+      );
       continue;
     }
 
     const lastDot = imp.lastIndexOf(".");
     if (lastDot === -1) {
-      // No dot - single import like "TYPE_CHECKING" or "Enum"
-      // For TYPE_CHECKING, we need to add it to typing module
       if (imp === "TYPE_CHECKING") {
-        if (!groups.has("typing")) groups.set("typing", new Set());
-        groups.get("typing")!.add(imp);
+        addGroupedImport(groups, "typing", imp);
       } else {
         groups.set(imp, new Set([imp]));
       }
@@ -224,8 +223,7 @@ export function groupImports(imports: Set<string>): Map<string, Set<string>> {
 
     const mod = imp.substring(0, lastDot);
     const name = imp.substring(lastDot + 1);
-    if (!groups.has(mod)) groups.set(mod, new Set());
-    groups.get(mod)!.add(name);
+    addGroupedImport(groups, mod, name);
   }
 
   return groups;
@@ -313,16 +311,18 @@ export function buildPythonImportBlock(
 
   const stdGroups = groupImports(stdImports);
   for (const [mod, names] of stdGroups) {
-    code += `from ${mod} import ${[...names].sort().join(", ")}\n`;
+    code += `from ${mod} import ${[...names].sort((left, right) => left.localeCompare(right)).join(", ")}\n`;
   }
   if (stdGroups.size > 0) code += "\n";
 
   const saGroups = groupImports(saImports);
   for (const [mod, names] of saGroups) {
-    code += `from ${mod} import ${[...names].sort().join(", ")}\n`;
+    code += `from ${mod} import ${[...names].sort((left, right) => left.localeCompare(right)).join(", ")}\n`;
   }
 
-  const importList = [...sqlmodelOrPydanticImports].sort();
+  const importList = [...sqlmodelOrPydanticImports].sort((left, right) =>
+    left.localeCompare(right),
+  );
   code += `from ${importSource} import ${importList.join(", ")}\n`;
 
   return code;
@@ -337,4 +337,28 @@ export function resolveFormatPyType(format: string): string | undefined {
   if (format === "email") return "EmailStr";
   if (["url", "uri"].includes(format)) return "AnyUrl";
   return undefined;
+}
+
+function parseAliasedImport(
+  value: string,
+): { moduleName: string; name: string; alias: string } | undefined {
+  const pattern = /^(.+)\.(\w+)\s+as\s+(\w+)$/;
+  const match = pattern.exec(value);
+  if (!match) {
+    return undefined;
+  }
+
+  const [, moduleName, name, alias] = match;
+  return { moduleName, name, alias };
+}
+
+function addGroupedImport(
+  groups: Map<string, Set<string>>,
+  moduleName: string,
+  name: string,
+): void {
+  if (!groups.has(moduleName)) {
+    groups.set(moduleName, new Set());
+  }
+  groups.get(moduleName)!.add(name);
 }

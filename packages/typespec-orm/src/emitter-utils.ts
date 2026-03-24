@@ -89,7 +89,12 @@ export function collectCompositeTypeFields(
   for (const [, prop] of model.properties) {
     const columns = getCompositeFields(program, prop);
     if (columns) {
-      const suffix = isKey(program, prop) ? "pk" : isUnique(program, prop) ? "unique" : "idx";
+      let suffix = "idx";
+      if (isKey(program, prop)) {
+        suffix = "pk";
+      } else if (isUnique(program, prop)) {
+        suffix = "unique";
+      }
       const snakeColumns = columns.map((c) => camelToSnake(c));
       const generatedName = [tableName, ...snakeColumns, suffix].join("_");
       result.push({

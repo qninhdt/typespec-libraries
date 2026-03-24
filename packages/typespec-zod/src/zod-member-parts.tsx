@@ -70,9 +70,7 @@ function usesBigIntSchema($: Typekit, member: ModelProperty): boolean {
     return false;
   }
 
-  return !(
-    $.scalar.extendsInt32(type) ||
-    $.scalar.extendsUint32(type) ||
-    $.scalar.extendsSafeint(type)
+  return (
+    !$.scalar.extendsInt32(type) && !$.scalar.extendsUint32(type) && !$.scalar.extendsSafeint(type)
   );
 }

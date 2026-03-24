@@ -99,6 +99,11 @@ function buildCompositeIndexLine(ct: {
   isPrimary: boolean;
 }): string {
   const snakeColumns = ct.columns.map((column) => camelToSnake(column));
-  const suffix = ct.isPrimary ? " [pk]" : ct.isUnique ? " [unique]" : "";
+  let suffix = "";
+  if (ct.isPrimary) {
+    suffix = " [pk]";
+  } else if (ct.isUnique) {
+    suffix = " [unique]";
+  }
   return `    (${snakeColumns.join(", ")})${suffix}`;
 }

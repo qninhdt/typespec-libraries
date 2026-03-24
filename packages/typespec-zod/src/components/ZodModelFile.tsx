@@ -15,10 +15,10 @@ import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
 import { toPascalCase } from "../utils.js";
 
 export interface ZodModelFileProps {
-  program: Program;
-  model: Model;
-  label: string;
-  path?: string;
+  readonly program: Program;
+  readonly model: Model;
+  readonly label: string;
+  readonly path?: string;
 }
 
 /**

@@ -40,8 +40,8 @@ export const ZodCustomEmitOptions = function () {
 };
 
 export class ZodCustomEmitOptionsClass {
-  #typeEmitOptions: Map<Type, ZodCustomEmitOptionsBase<any>> = new Map();
-  #typeKindEmitOptions: Map<Type["kind"], ZodCustomEmitOptionsBase<any>> = new Map();
+  readonly #typeEmitOptions: Map<Type, ZodCustomEmitOptionsBase<any>> = new Map();
+  readonly #typeKindEmitOptions: Map<Type["kind"], ZodCustomEmitOptionsBase<any>> = new Map();
 
   forType<const T extends Type>(type: T, options: ZodCustomEmitOptionsBase<T>) {
     this.#typeEmitOptions.set(type, options);

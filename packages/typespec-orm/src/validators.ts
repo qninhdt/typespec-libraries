@@ -388,85 +388,7 @@ function validateManyToMany(
 
   for (const { model } of tableModels) {
     for (const prop of walkPropertiesInherited(model)) {
-      const joinTable = getManyToMany(program, prop);
-      if (!joinTable) {
-        continue;
-      }
-
-      const arrayTarget = unwrapArrayType(prop.type);
-      if (!arrayTarget) {
-        reportDiagnostic(program, {
-          code: "many-to-many-not-array",
-          target: prop,
-          format: {
-            propName: prop.name,
-            tableName: joinTable,
-          },
-        });
-        continue;
-      }
-
-      if (!isTable(program, arrayTarget)) {
-        reportDiagnostic(program, {
-          code: "many-to-many-target-not-table",
-          target: prop,
-          format: {
-            propName: prop.name,
-            tableName: joinTable,
-          },
-        });
-        continue;
-      }
-
-      const inverse = findInverseManyToManyDeclaration(program, model, arrayTarget);
-      if (!inverse) {
-        reportDiagnostic(program, {
-          code: "many-to-many-missing-inverse",
-          target: prop,
-          format: {
-            tableName: joinTable,
-            modelName: model.name,
-            propName: prop.name,
-            targetModel: arrayTarget.name,
-          },
-        });
-      } else if (inverse.joinTable !== joinTable) {
-        reportDiagnostic(program, {
-          code: "many-to-many-conflicting-table",
-          target: prop,
-          format: {
-            modelName: model.name,
-            propName: prop.name,
-            tableName: joinTable,
-            targetModel: arrayTarget.name,
-            targetProp: inverse.prop.name,
-            otherTableName: inverse.joinTable,
-          },
-        });
-      }
-
-      const explicitTable = tableByName.get(joinTable);
-      if (explicitTable) {
-        const leftName = getTypeFullName(program, model);
-        const rightName = getTypeFullName(program, arrayTarget);
-        const key =
-          leftName <= rightName
-            ? `${joinTable}:${leftName}:${rightName}`
-            : `${joinTable}:${rightName}:${leftName}`;
-        if (!explicitJoinConflictReported.has(key)) {
-          explicitJoinConflictReported.add(key);
-          reportDiagnostic(program, {
-            code: "many-to-many-conflicting-explicit-table",
-            target: prop,
-            format: {
-              tableName: joinTable,
-              modelName: model.name,
-              propName: prop.name,
-              existingModel: explicitTable.name,
-            },
-          });
-        }
-      }
+      validateManyToManyProperty(program, model, prop, tableByName, explicitJoinConflictReported);
     }
   }
 }
@@ -489,12 +411,7 @@ function validateRelationProperty(
   }
 
   const arrayTarget = unwrapArrayType(prop.type);
-  const targetModel =
-    arrayTarget && isTable(program, arrayTarget)
-      ? arrayTarget
-      : prop.type.kind === "Model" && isTable(program, prop.type as Model)
-        ? (prop.type as Model)
-        : undefined;
+  const targetModel = getMappedByTargetModel(program, prop, arrayTarget);
 
   if (!targetModel) {
     return;
@@ -525,6 +442,144 @@ function validateRelationProperty(
       reportOneToOneMissingUnique(program, prop, model.name, localProperty.name, oneToOneReported);
     }
   }
+}
+
+function validateManyToManyProperty(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+  tableByName: Map<string, Model>,
+  explicitJoinConflictReported: Set<string>,
+): void {
+  const joinTable = getManyToMany(program, prop);
+  if (!joinTable) {
+    return;
+  }
+
+  const arrayTarget = unwrapArrayType(prop.type);
+  if (!arrayTarget) {
+    reportDiagnostic(program, {
+      code: "many-to-many-not-array",
+      target: prop,
+      format: { propName: prop.name, tableName: joinTable },
+    });
+    return;
+  }
+
+  if (!isTable(program, arrayTarget)) {
+    reportDiagnostic(program, {
+      code: "many-to-many-target-not-table",
+      target: prop,
+      format: { propName: prop.name, tableName: joinTable },
+    });
+    return;
+  }
+
+  reportManyToManyInverseProblems(program, model, prop, joinTable, arrayTarget);
+  reportExplicitJoinConflict(
+    program,
+    model,
+    prop,
+    joinTable,
+    arrayTarget,
+    tableByName,
+    explicitJoinConflictReported,
+  );
+}
+
+function reportManyToManyInverseProblems(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+  joinTable: string,
+  arrayTarget: Model,
+): void {
+  const inverse = findInverseManyToManyDeclaration(program, model, arrayTarget);
+  if (!inverse) {
+    reportDiagnostic(program, {
+      code: "many-to-many-missing-inverse",
+      target: prop,
+      format: {
+        tableName: joinTable,
+        modelName: model.name,
+        propName: prop.name,
+        targetModel: arrayTarget.name,
+      },
+    });
+    return;
+  }
+
+  if (inverse.joinTable !== joinTable) {
+    reportDiagnostic(program, {
+      code: "many-to-many-conflicting-table",
+      target: prop,
+      format: {
+        modelName: model.name,
+        propName: prop.name,
+        tableName: joinTable,
+        targetModel: arrayTarget.name,
+        targetProp: inverse.prop.name,
+        otherTableName: inverse.joinTable,
+      },
+    });
+  }
+}
+
+function reportExplicitJoinConflict(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+  joinTable: string,
+  arrayTarget: Model,
+  tableByName: Map<string, Model>,
+  explicitJoinConflictReported: Set<string>,
+): void {
+  const explicitTable = tableByName.get(joinTable);
+  if (!explicitTable) {
+    return;
+  }
+
+  const leftName = getTypeFullName(program, model);
+  const rightName = getTypeFullName(program, arrayTarget);
+  const key = buildRelationPairKey(joinTable, leftName, rightName);
+  if (explicitJoinConflictReported.has(key)) {
+    return;
+  }
+
+  explicitJoinConflictReported.add(key);
+  reportDiagnostic(program, {
+    code: "many-to-many-conflicting-explicit-table",
+    target: prop,
+    format: {
+      tableName: joinTable,
+      modelName: model.name,
+      propName: prop.name,
+      existingModel: explicitTable.name,
+    },
+  });
+}
+
+function buildRelationPairKey(joinTable: string, leftName: string, rightName: string): string {
+  if (leftName <= rightName) {
+    return `${joinTable}:${leftName}:${rightName}`;
+  }
+  return `${joinTable}:${rightName}:${leftName}`;
+}
+
+function getMappedByTargetModel(
+  program: Program,
+  prop: ModelProperty,
+  arrayTarget: Model | undefined,
+): Model | undefined {
+  if (arrayTarget && isTable(program, arrayTarget)) {
+    return arrayTarget;
+  }
+
+  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
+    return prop.type as Model;
+  }
+
+  return undefined;
 }
 
 function validateOwnedRelation(

@@ -147,7 +147,7 @@ function generatePydanticField(
 
   const placeholder = getPlaceholder(program, prop);
   if (placeholder)
-    fieldArgs.push(`json_schema_extra={"placeholder": "${escapePythonString(placeholder)}"}`);
+    fieldArgs.push(`json_schema_extra={"placeholder": ${toPythonStringLiteral(placeholder)}}`);
 
   pydanticImports.add("Field");
 
@@ -157,4 +157,8 @@ function generatePydanticField(
 
 function escapePythonString(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+}
+
+function toPythonStringLiteral(value: string): string {
+  return String.raw`"${escapePythonString(value)}"`;
 }

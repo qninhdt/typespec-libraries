@@ -132,7 +132,9 @@ packages = [` +
               {generateInit({
                 moduleName: info.moduleName,
                 models: info.models,
-                childPackages: [...info.childPackages].sort(),
+                childPackages: [...info.childPackages].sort((left, right) =>
+                  left.localeCompare(right),
+                ),
                 includeMetadata: info.includeMetadata,
                 importAssociations: info.importAssociations,
               })}
@@ -237,7 +239,7 @@ function buildAssociationModules(
     const topLevels = [leftInfo?.namespacePath[0], rightInfo?.namespacePath[0]].filter(
       (item): item is string => !!item,
     );
-    const topLevel = [...new Set(topLevels)].sort()[0];
+    const topLevel = [...new Set(topLevels)].sort((left, right) => left.localeCompare(right))[0];
     if (!topLevel) {
       continue;
     }
@@ -290,19 +292,35 @@ function renderAssociationModule(
 
   const allExports: string[] = [];
 
-  for (const association of associations.sort((a, b) => a.tableName.localeCompare(b.tableName))) {
+  const sortedAssociations = [...associations].sort((a, b) =>
+    a.tableName.localeCompare(b.tableName),
+  );
+  for (const association of sortedAssociations) {
     const symbol = toPythonIdentifier(association.tableName);
     allExports.push(`    "${symbol}",`);
-    lines.push(`${symbol} = Table(`);
-    lines.push(`    "${association.tableName}",`);
-    lines.push("    SQLModel.metadata,");
-    lines.push(
-      `    Column(${JSON.stringify(association.leftJoinColumn)}, ${resolveAssociationColumnType(program, association.leftKey, sqlalchemyImports)}, ForeignKey(${JSON.stringify(`${getTableName(program, association.leftModel)}.${getColumnName(program, association.leftKey)}`)}), primary_key=True),`,
+    const leftColumn = buildAssociationColumn(
+      program,
+      association.leftJoinColumn,
+      association.leftModel,
+      association.leftKey,
+      sqlalchemyImports,
+    );
+    const rightColumn = buildAssociationColumn(
+      program,
+      association.rightJoinColumn,
+      association.rightModel,
+      association.rightKey,
+      sqlalchemyImports,
     );
     lines.push(
-      `    Column(${JSON.stringify(association.rightJoinColumn)}, ${resolveAssociationColumnType(program, association.rightKey, sqlalchemyImports)}, ForeignKey(${JSON.stringify(`${getTableName(program, association.rightModel)}.${getColumnName(program, association.rightKey)}`)}), primary_key=True),`,
+      `${symbol} = Table(`,
+      `    "${association.tableName}",`,
+      "    SQLModel.metadata,",
+      `    ${leftColumn},`,
+      `    ${rightColumn},`,
+      ")",
+      "",
     );
-    lines.push(")", "");
   }
 
   lines.push("__all__ = [", ...allExports, "]");
@@ -402,6 +420,19 @@ function addRuntimeImport(
 }
 
 function toPythonIdentifier(name: string): string {
-  const normalized = name.replace(/[^a-zA-Z0-9_]/g, "_");
-  return /^[0-9]/.test(normalized) ? `_${normalized}` : normalized;
+  const normalized = name.replaceAll(/[^\w]/g, "_");
+  const startsWithDigit = /^\d/.test(normalized);
+  return startsWithDigit ? `_${normalized}` : normalized;
+}
+
+function buildAssociationColumn(
+  program: EmitContext<SqlModelEmitterOptions>["program"],
+  joinColumn: string,
+  model: Model,
+  key: ModelProperty,
+  sqlalchemyImports: Set<string>,
+): string {
+  const columnType = resolveAssociationColumnType(program, key, sqlalchemyImports);
+  const foreignKey = `${getTableName(program, model)}.${getColumnName(program, key)}`;
+  return `Column(${JSON.stringify(joinColumn)}, ${columnType}, ForeignKey(${JSON.stringify(foreignKey)}), primary_key=True)`;
 }

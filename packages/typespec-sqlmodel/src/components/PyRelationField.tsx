@@ -10,6 +10,9 @@ import { camelToSnake, getDoc } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
 import { FOUR_SPACES } from "./PyConstants.js";
 
+const CASCADE_DELETE_ORPHAN = '"cascade": "all, delete-orphan"';
+const CASCADE_SAVE_UPDATE = '"cascade": "save-update, merge"';
+
 /**
  * Generate a SQLModel Relationship() for a navigation property.
  * Returns both the field code and the target model name for imports.
@@ -71,9 +74,9 @@ export function generateRelationField(
   if (rel.kind === "many-to-many" && manyToManySecondary) {
     saRelKwArgs.push(`"secondary": ${manyToManySecondary}`);
   } else if (isMany && rel.onDelete === "CASCADE") {
-    saRelKwArgs.push('"cascade": "all, delete-orphan"');
+    saRelKwArgs.push(CASCADE_DELETE_ORPHAN);
   } else if (isMany && rel.onDelete === "SET NULL") {
-    saRelKwArgs.push('"cascade": "save-update, merge"');
+    saRelKwArgs.push(CASCADE_SAVE_UPDATE);
   }
 
   // Add any sa_relationship_kwargs to relArgs

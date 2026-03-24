@@ -110,20 +110,21 @@ export function buildImportBlock(
   imports: Set<string>,
   packageImports: GoPackageImport[] = [],
 ): string {
-  const sorted = [...imports].sort();
+  const sorted = [...imports].sort((left, right) => left.localeCompare(right));
   if (sorted.length === 0 && packageImports.length === 0) return "";
   const stdImports = sorted.filter((i) => !i.includes("."));
   const extImports = sorted.filter((i) => i.includes("."));
-  const parts: string[] = [];
-  parts.push("import (");
-  for (const imp of stdImports) parts.push(`\t"${imp}"`);
-  if (stdImports.length > 0 && (extImports.length > 0 || packageImports.length > 0)) parts.push("");
-  for (const imp of extImports) parts.push(`\t"${imp}"`);
-  if (extImports.length > 0 && packageImports.length > 0) parts.push("");
-  for (const imp of packageImports.sort((a, b) => a.alias.localeCompare(b.alias))) {
-    parts.push(`\t${imp.alias} "${imp.path}"`);
+
+  const sortedPackageImports = [...packageImports].sort((a, b) => a.alias.localeCompare(b.alias));
+  const parts: string[] = ["import (", ...stdImports.map((imp) => `\t"${imp}"`)];
+  if (stdImports.length > 0 && (extImports.length > 0 || sortedPackageImports.length > 0)) {
+    parts.push("");
   }
-  parts.push(")");
+  parts.push(...extImports.map((imp) => `\t"${imp}"`));
+  if (extImports.length > 0 && sortedPackageImports.length > 0) {
+    parts.push("");
+  }
+  parts.push(...sortedPackageImports.map((imp) => `\t${imp.alias} "${imp.path}"`), ")");
   return parts.join("\n") + "\n";
 }
 
@@ -166,16 +167,17 @@ export function buildGoEnumBlock(enumTypes: Map<string, EnumMemberInfo[]>): stri
   const lines: string[] = [];
   for (const [enumName, members] of enumTypes) {
     const goTypeName = camelToPascal(enumName);
-    lines.push(`// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`);
-    lines.push(`type ${goTypeName} string`);
-    lines.push("");
-    lines.push("const (");
+    lines.push(
+      `// ${goTypeName} represents the ${camelToSnake(enumName)} enum.`,
+      `type ${goTypeName} string`,
+      "",
+      "const (",
+    );
     for (const m of members) {
       const constName = `${goTypeName}${camelToPascal(m.name)}`;
       lines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
     }
-    lines.push(")");
-    lines.push("");
+    lines.push(")", "");
   }
   return lines;
 }

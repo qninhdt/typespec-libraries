@@ -117,20 +117,20 @@ export async function emitZodFile(
           }
           return null;
         })}
-        {dataModels.map(({ model, label }) => (
-          <ZodModelFile
-            program={program}
-            model={model}
-            label={label}
-            path={
-              typeof pathPrefix === "string"
-                ? `${pathPrefix}/${model.name}.ts`
-                : pathPrefix
-                  ? `models/${model.name}.ts`
-                  : `${model.name}.ts`
+        {dataModels.map(({ model, label }) =>
+          (() => {
+            let path: string;
+            if (typeof pathPrefix === "string") {
+              path = `${pathPrefix}/${model.name}.ts`;
+            } else if (pathPrefix) {
+              path = `models/${model.name}.ts`;
+            } else {
+              path = `${model.name}.ts`;
             }
-          />
-        ))}
+
+            return <ZodModelFile program={program} model={model} label={label} path={path} />;
+          })(),
+        )}
       </SourceDirectory>
     </Output>
   );

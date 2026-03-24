@@ -98,9 +98,10 @@ function buildSingleDocument(
   const codeParts: string[] = ["// Database Schema", ""];
   const allRefs = new Set<string>();
 
-  for (const [namespace, items] of [...groupedTables.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  )) {
+  const sortedNamespaces = [...groupedTables.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  for (const [namespace, items] of sortedNamespaces) {
     const section = renderNamespaceSection(
       program,
       namespace,
@@ -143,10 +144,7 @@ function buildNamespaceDocuments(
       );
 
       if (refs.size > 0) {
-        codeParts.push("");
-        for (const ref of [...refs].sort()) {
-          codeParts.push(ref);
-        }
+        codeParts.push("", ...getSortedRefs(refs));
       }
 
       const namespacePath = items[0].normalized.namespacePath;
@@ -204,6 +202,10 @@ function renderNamespaceSection(
   }
 
   return codeParts;
+}
+
+function getSortedRefs(refs: Set<string>): string[] {
+  return [...refs].sort((left, right) => left.localeCompare(right));
 }
 
 function groupTablesByNamespace(

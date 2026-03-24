@@ -17,7 +17,9 @@ export const refkeySym = Symbol.for("typespec-zod.refkey");
  * e.g. "foo-bar_baz" → "FooBarBaz"
  */
 export function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+  return (
+    str.charAt(0).toUpperCase() + str.slice(1).replaceAll(/[-_](.)/g, (_, c) => c.toUpperCase())
+  );
 }
 
 /**
@@ -30,8 +32,7 @@ export function isDeclaration(program: Program, type: Type): boolean {
     case "Interface":
     case "Operation":
     case "EnumMember":
-      // TODO: this should reference the enum member via
-      // target.enum.Name
+      // Enum members are emitted inline rather than as standalone declarations.
       return false;
     case "UnionVariant":
       return false;
