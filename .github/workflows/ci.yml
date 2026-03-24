@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
-  pull_request:
     branches: [main]
+  pull_request:
+    branches: [main, dev]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -14,10 +14,15 @@ jobs:
   build-and-lint:
     name: Build, Lint, Typecheck & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -74,3 +79,16 @@ jobs:
 
       - name: Verify Generated TypeScript
         run: pnpm --dir outputs/zod exec tsc -p tsconfig.json
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
