@@ -64,6 +64,9 @@ jobs:
       - name: Test
         run: pnpm run test
 
+      - name: Test Coverage
+        run: pnpm run test:coverage
+
       - name: Compile Examples
         run: pnpm run compile-examples
 
