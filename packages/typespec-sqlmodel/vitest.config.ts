@@ -7,6 +7,8 @@ export default defineConfig({
     exclude: ["test/**/*.d.ts"],
     coverage: {
       provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/testing/**"],
       reporter: ["text", "json", "html", "lcov"],
     },
     pool: "forks",

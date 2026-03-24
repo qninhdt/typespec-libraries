@@ -289,6 +289,104 @@ describe("$onValidate diagnostics", () => {
     expect(diags).toHaveLength(1);
   });
 
+  it("reports cascade decorators used on scalar fields", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @onDelete("CASCADE")
+        status: string;
+        @onUpdate("CASCADE")
+        code: string;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/cascade-without-relation",
+    );
+    expect(diags).toHaveLength(2);
+  });
+
+  it("reports many-to-many declarations without an inverse", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-missing-inverse",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports conflicting many-to-many join table names", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("role_users")
+        users: User[];
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-conflicting-table",
+    );
+    expect(diags).toHaveLength(2);
+  });
+
+  it("reports explicit join-table conflicts", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table("user_roles")
+      model UserRole {
+        @key id: uuid;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        users: User[];
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-conflicting-explicit-table",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
   it("accepts a valid non-id referenced column relation", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
