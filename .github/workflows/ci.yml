@@ -64,6 +64,9 @@ jobs:
       - name: Test Coverage
         run: pnpm run test:coverage
 
+      - name: Prepare Sonar LCOV Paths
+        run: node scripts/prepare-sonar-lcov.mjs
+
       - name: Build
         run: pnpm run build
 
