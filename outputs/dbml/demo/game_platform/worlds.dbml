@@ -1,0 +1,42 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Worlds
+
+Enum WorldVisibility {
+  private
+  unlisted
+  public
+}
+
+Enum SafetyRating {
+  general
+  teen
+  mature
+}
+
+Table worlds {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  name varchar(200) [not null, note: 'Display name of the world. Referenced by forms and collaboration models through lookup types.']
+  slug varchar(80) [not null, note: 'Stable human-readable slug used by cross-namespace references.']
+  prompt text [not null, note: 'System prompt used to guide AI generation within the world.']
+  visibility WorldVisibility [note: 'Who can discover and join this world.']
+  safety_rating SafetyRating [note: 'Content safety classification for moderation and parental controls.']
+  settings jsonb [note: 'Optional JSON settings payload for custom generation behavior.']
+  owner_id uuid [not null]
+
+  indexes {
+    (owner_id, created_at)
+    (visibility, deleted_at)
+    name
+    slug [unique]
+    visibility
+    safety_rating
+    owner_id
+  }
+}
+
+
+Ref: worlds.owner_id > users.id [delete: CASCADE, update: CASCADE]

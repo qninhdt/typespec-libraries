@@ -26,6 +26,7 @@ import {
   getMinValue as tsGetMinValue,
   getPattern as tsGetPattern,
   isKey as tsIsKey,
+  walkPropertiesInherited,
 } from "@typespec/compiler";
 import {
   TableKey,
@@ -33,10 +34,12 @@ import {
   MapKey,
   IndexKey,
   UniqueKey,
+  CheckKey,
   AutoIncrementKey,
   SoftDeleteKey,
   ForeignKeyKey,
   MappedByKey,
+  ManyToManyKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
@@ -134,6 +137,15 @@ export function getUniqueName(program: Program, prop: ModelProperty): string {
   const tableName = getTableName(program, model);
   const columnName = getColumnName(program, prop);
   return `${tableName}_${columnName}_unique`;
+}
+
+export interface CheckConstraintInfo {
+  name: string;
+  expression: string;
+}
+
+export function getCheck(program: Program, prop: ModelProperty): CheckConstraintInfo | undefined {
+  return program.stateMap(CheckKey).get(prop) as CheckConstraintInfo | undefined;
 }
 
 export function getDefaultValue(program: Program, prop: ModelProperty): string | undefined {
@@ -289,12 +301,52 @@ export const getPattern = withLookupFallback(tsGetPattern);
  */
 export const getFormat = withLookupFallback(tsGetFormat);
 
+export interface ForeignKeyConfig {
+  field: string;
+  target?: string;
+}
+
+function normalizeForeignKeyConfig(value: unknown): ForeignKeyConfig | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    return { field: value };
+  }
+  if (typeof value === "object" && value !== null) {
+    const field = (value as { field?: unknown }).field;
+    const target = (value as { target?: unknown }).target;
+    if (typeof field === "string") {
+      return {
+        field,
+        target: typeof target === "string" && target !== "" ? target : undefined,
+      };
+    }
+  }
+  return undefined;
+}
+
+export function getForeignKeyConfig(
+  program: Program,
+  prop: ModelProperty,
+): ForeignKeyConfig | undefined {
+  return normalizeForeignKeyConfig(program.stateMap(ForeignKeyKey).get(prop));
+}
+
 export function getForeignKey(program: Program, prop: ModelProperty): string | undefined {
-  return program.stateMap(ForeignKeyKey).get(prop) as string | undefined;
+  return getForeignKeyConfig(program, prop)?.field;
+}
+
+export function getForeignKeyTarget(program: Program, prop: ModelProperty): string | undefined {
+  const config = getForeignKeyConfig(program, prop);
+  if (!config) return undefined;
+  return config.target ?? "id";
 }
 
 export function getMappedBy(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(MappedByKey).get(prop) as string | undefined;
+}
+
+export function getManyToMany(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(ManyToManyKey).get(prop) as string | undefined;
 }
 
 export function getCompositeFields(program: Program, prop: ModelProperty): string[] | undefined {
@@ -401,6 +453,51 @@ export function getPlaceholder(program: Program, prop: ModelProperty): string | 
 
 export function getInputType(program: Program, scalar: Scalar): string | undefined {
   return program.stateMap(InputTypeKey).get(scalar) as string | undefined;
+}
+
+function getInputTypeForScalar(program: Program, scalar: Scalar): string | undefined {
+  let current: Scalar | undefined = scalar;
+  while (current) {
+    const inputType = getInputType(program, current);
+    if (inputType) {
+      return inputType;
+    }
+    current = current.baseScalar;
+  }
+  return undefined;
+}
+
+function inferInputTypeFromFormat(format: string | undefined): string | undefined {
+  switch (format) {
+    case "email":
+      return "email";
+    case "uri":
+    case "url":
+      return "url";
+    case "date":
+      return "date";
+    case "time":
+      return "time";
+    case "password":
+      return "password";
+    default:
+      return undefined;
+  }
+}
+
+export function getInputTypeForProperty(program: Program, prop: ModelProperty): string | undefined {
+  if (prop.type.kind === "ModelProperty") {
+    return getInputTypeForProperty(program, prop.type);
+  }
+
+  if (prop.type.kind === "Scalar") {
+    const inputType = getInputTypeForScalar(program, prop.type);
+    if (inputType) {
+      return inputType;
+    }
+  }
+
+  return inferInputTypeFromFormat(getFormat(program, prop));
 }
 
 // ─── Doc helper ──────────────────────────────────────────────────────────────
@@ -611,6 +708,10 @@ export interface ResolvedRelation {
   targetModel: Model;
   /** Table name of the target model */
   targetTable: string;
+  /** The concrete FK-bearing property involved in this relation */
+  localProperty: ModelProperty;
+  /** The referenced property on the target model */
+  targetProperty: ModelProperty;
   /** FK column name (snake_case) */
   fkColumnName: string;
   /** Column referenced in target table (default: "id") */
@@ -621,10 +722,10 @@ export interface ResolvedRelation {
   onDelete?: string;
   /** ON UPDATE action */
   onUpdate?: string;
-  /** For one-to-many: PascalCase FK field name on target (for GORM foreignKey tag) */
-  inverseFkFieldName?: string;
   /** For one-to-many/many-to-one: snake_case inverse relation name (for SQLModel back_populates) */
   backPopulates?: string;
+  /** Join table name for many-to-many shorthand */
+  joinTable?: string;
 }
 
 /**
@@ -632,8 +733,7 @@ export interface ResolvedRelation {
  * Checks for @key (TypeSpec built-in)
  */
 export function findPrimaryKey(program: Program, model: Model): ModelProperty | undefined {
-  // Check for @key decorator (TypeSpec built-in) - decorators is an array
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     if (isKey(program, prop)) return prop;
   }
   return undefined;
@@ -652,6 +752,227 @@ export function unwrapArrayType(type: Type): Model | undefined {
   return undefined;
 }
 
+export function resolvePropertyReference(
+  program: Program,
+  model: Model,
+  reference: string,
+): ModelProperty | undefined {
+  let columnMatch: ModelProperty | undefined;
+  for (const prop of walkPropertiesInherited(model)) {
+    if (prop.name === reference) {
+      return prop;
+    }
+    if (!columnMatch && getColumnName(program, prop) === reference) {
+      columnMatch = prop;
+    }
+  }
+  return columnMatch;
+}
+
+function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(model)) {
+    if (prop.name === name) return prop;
+  }
+  return undefined;
+}
+
+function getComparableTypeId(program: Program, type: Type): string | undefined {
+  if (type.kind === "ModelProperty") {
+    return getComparableTypeId(program, type.type);
+  }
+  if (type.kind === "Enum") {
+    return `enum:${getTypeFullName(program, type)}`;
+  }
+  if (type.kind === "Scalar") {
+    return `scalar:${resolveDbType(type) ?? getTypeFullName(program, type)}`;
+  }
+  return undefined;
+}
+
+export function describeComparableType(program: Program, prop: ModelProperty): string {
+  if (prop.type.kind === "ModelProperty") {
+    return describeComparableType(program, prop.type);
+  }
+  if (prop.type.kind === "Enum") {
+    return getTypeFullName(program, prop.type);
+  }
+  if ("name" in prop.type && typeof prop.type.name === "string") {
+    return (
+      resolveDbType(prop.type) ??
+      getTypeFullName(program, prop.type as { name?: string; namespace?: Namespace }) ??
+      prop.type.kind
+    );
+  }
+  return resolveDbType(prop.type) ?? prop.type.kind;
+}
+
+export function arePropertyTypesCompatible(
+  program: Program,
+  left: ModelProperty,
+  right: ModelProperty,
+): boolean {
+  return getComparableTypeId(program, left.type) === getComparableTypeId(program, right.type);
+}
+
+export function isRelationLocalKeyUnique(program: Program, prop: ModelProperty): boolean {
+  return isKey(program, prop) || isUnique(program, prop);
+}
+
+function isModelReferenceTo(type: Type, expected: Model): boolean {
+  if (type.kind === "Model") {
+    return type === expected;
+  }
+  return false;
+}
+
+function findInverseMappedBy(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  relationPropName: string,
+): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    if (getMappedBy(program, prop) !== relationPropName) continue;
+    const arrayElement = unwrapArrayType(prop.type);
+    if (arrayElement === parentModel || isModelReferenceTo(prop.type, parentModel)) {
+      return prop;
+    }
+  }
+  return undefined;
+}
+
+interface ResolvedForeignKeyReference {
+  targetModel: Model;
+  targetTable: string;
+  localProperty: ModelProperty;
+  targetProperty: ModelProperty;
+  localColumnName: string;
+  targetColumnName: string;
+  fkDbType: string | undefined;
+}
+
+export interface ManyToManyAssociation {
+  tableName: string;
+  leftModel: Model;
+  rightModel: Model;
+  leftProperty: ModelProperty;
+  rightProperty: ModelProperty;
+  leftKey: ModelProperty;
+  rightKey: ModelProperty;
+  leftJoinColumn: string;
+  rightJoinColumn: string;
+}
+
+function resolveOwnedRelationReference(
+  program: Program,
+  relationProp: ModelProperty,
+  parentModel: Model,
+  targetModel: Model,
+): ResolvedForeignKeyReference | undefined {
+  const fk = getForeignKeyConfig(program, relationProp);
+  if (!fk) return undefined;
+
+  const localProperty = resolvePropertyReference(program, parentModel, fk.field);
+  const targetProperty = resolvePropertyReference(program, targetModel, fk.target ?? "id");
+  if (!localProperty || !targetProperty) {
+    return undefined;
+  }
+
+  return {
+    targetModel,
+    targetTable: getTableName(program, targetModel),
+    localProperty,
+    targetProperty,
+    localColumnName: getColumnName(program, localProperty),
+    targetColumnName: getColumnName(program, targetProperty),
+    fkDbType: resolveDbType(targetProperty.type),
+  };
+}
+
+function findInverseManyToMany(
+  program: Program,
+  parentModel: Model,
+  targetModel: Model,
+  sourceProp: ModelProperty,
+): { prop: ModelProperty; tableName: string } | undefined {
+  const joinTable = getManyToMany(program, sourceProp);
+  if (!joinTable) return undefined;
+
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    const inverseTable = getManyToMany(program, prop);
+    if (!inverseTable) continue;
+    const inverseTarget = unwrapArrayType(prop.type);
+    if (inverseTarget !== parentModel) continue;
+    if (inverseTable !== joinTable) continue;
+    return { prop, tableName: inverseTable };
+  }
+
+  return undefined;
+}
+
+export function deriveManyToManyJoinColumnName(
+  program: Program,
+  model: Model,
+  keyProperty: ModelProperty,
+): string {
+  return `${camelToSnake(model.name)}_${getColumnName(program, keyProperty)}`;
+}
+
+export function collectManyToManyAssociations(
+  program: Program,
+  models: Iterable<Model>,
+): ManyToManyAssociation[] {
+  const associations = new Map<string, ManyToManyAssociation>();
+
+  for (const model of models) {
+    for (const prop of walkPropertiesInherited(model)) {
+      const joinTable = getManyToMany(program, prop);
+      if (!joinTable) continue;
+
+      const targetModel = unwrapArrayType(prop.type);
+      if (!targetModel || !isTable(program, targetModel)) continue;
+
+      const inverse = findInverseManyToMany(program, model, targetModel, prop);
+      if (!inverse) continue;
+
+      const leftKey = findPrimaryKey(program, model);
+      const rightKey = findPrimaryKey(program, targetModel);
+      if (!leftKey || !rightKey) continue;
+
+      const leftName = getTypeFullName(program, model);
+      const rightName = getTypeFullName(program, targetModel);
+      const pairKey =
+        leftName <= rightName
+          ? `${joinTable}:${leftName}:${rightName}`
+          : `${joinTable}:${rightName}:${leftName}`;
+
+      if (associations.has(pairKey)) continue;
+
+      const leftFirst = leftName <= rightName;
+      const leftModel = leftFirst ? model : targetModel;
+      const rightModel = leftFirst ? targetModel : model;
+      const leftProperty = leftFirst ? prop : inverse.prop;
+      const rightProperty = leftFirst ? inverse.prop : prop;
+      const leftPk = leftFirst ? leftKey : rightKey;
+      const rightPk = leftFirst ? rightKey : leftKey;
+
+      associations.set(pairKey, {
+        tableName: joinTable,
+        leftModel,
+        rightModel,
+        leftProperty,
+        rightProperty,
+        leftKey: leftPk,
+        rightKey: rightPk,
+        leftJoinColumn: deriveManyToManyJoinColumnName(program, leftModel, leftPk),
+        rightJoinColumn: deriveManyToManyJoinColumnName(program, rightModel, rightPk),
+      });
+    }
+  }
+
+  return [...associations.values()].sort((a, b) => a.tableName.localeCompare(b.tableName));
+}
+
 /**
  * Resolve a relation from a model property.
  *
@@ -668,120 +989,109 @@ export function resolveRelation(
 ): ResolvedRelation | undefined {
   const onDelete = getOnDelete(program, prop);
   const onUpdate = getOnUpdate(program, prop);
-  const explicitFk = getForeignKey(program, prop);
+  const explicitFk = getForeignKeyConfig(program, prop);
   const explicitMappedBy = getMappedBy(program, prop);
+  const explicitManyToMany = getManyToMany(program, prop);
 
   // Case 1: Singular @table Model reference → many-to-one
   if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
     const targetModel = prop.type as Model;
-    const targetTable = getTableName(program, targetModel);
-
-    // FK column name is required for many-to-one
     if (!explicitFk) {
       return undefined;
     }
 
-    const fkColumnName = explicitFk;
-    const fkTargetColumn = "id";
-
-    // Resolve FK type from target's primary key
-    const targetPk = findPrimaryKey(program, targetModel);
-    const fkDbType = targetPk ? resolveDbType(targetPk.type) : "uuid";
-
-    // Determine kind: @unique → one-to-one, otherwise → many-to-one
-    const hasUnique = isUnique(program, prop);
-    const kind = hasUnique ? "one-to-one" : "many-to-one";
-
-    // Find inverse one-to-many on target for back_populates
-    const forwardRef = findForwardReference(program, parentModel, targetModel, fkColumnName);
-
-    return {
-      kind,
-      targetModel,
-      targetTable,
-      fkColumnName,
-      fkTargetColumn,
-      fkDbType,
-      onDelete,
-      onUpdate,
-      backPopulates: forwardRef,
-    };
-  }
-
-  // Case 2: Array Model reference → one-to-many
-  const arrayElement = unwrapArrayType(prop.type);
-  if (arrayElement && isTable(program, arrayElement)) {
-    const targetModel = arrayElement;
-    const targetTable = getTableName(program, targetModel);
-
-    // mappedBy is required for one-to-many
-    if (!explicitMappedBy) {
+    const resolved = resolveOwnedRelationReference(program, prop, parentModel, targetModel);
+    if (!resolved) {
       return undefined;
     }
 
-    // Find the property on target model that has @foreignKey
-    const targetProp = targetModel.properties.get(explicitMappedBy);
+    const kind = isRelationLocalKeyUnique(program, resolved.localProperty)
+      ? "one-to-one"
+      : "many-to-one";
+    const inverseRef = findInverseMappedBy(program, parentModel, targetModel, prop.name);
+
+    return {
+      kind,
+      ...resolved,
+      fkColumnName: resolved.localColumnName,
+      fkTargetColumn: resolved.targetColumnName,
+      onDelete,
+      onUpdate,
+      backPopulates: inverseRef ? camelToSnake(inverseRef.name) : undefined,
+    };
+  }
+
+  const arrayElement = unwrapArrayType(prop.type);
+
+  // Case 2: many-to-many shorthand on array relations
+  if (arrayElement && isTable(program, arrayElement) && explicitManyToMany) {
+    const inverse = findInverseManyToMany(program, parentModel, arrayElement, prop);
+    if (!inverse) {
+      return undefined;
+    }
+
+    const localPk = findPrimaryKey(program, parentModel);
+    const targetPk = findPrimaryKey(program, arrayElement);
+    if (!localPk || !targetPk) {
+      return undefined;
+    }
+
+    return {
+      kind: "many-to-many",
+      targetModel: arrayElement,
+      targetTable: getTableName(program, arrayElement),
+      localProperty: localPk,
+      targetProperty: targetPk,
+      fkColumnName: getColumnName(program, localPk),
+      fkTargetColumn: getColumnName(program, targetPk),
+      fkDbType: resolveDbType(targetPk.type),
+      backPopulates: camelToSnake(inverse.prop.name),
+      joinTable: explicitManyToMany,
+    };
+  }
+
+  // Case 3: @mappedBy on array or singular model reference → inverse collection / has-one
+  const mappedByTarget =
+    arrayElement && isTable(program, arrayElement)
+      ? arrayElement
+      : prop.type.kind === "Model" && isTable(program, prop.type as Model)
+        ? (prop.type as Model)
+        : undefined;
+
+  if (mappedByTarget && explicitMappedBy) {
+    const targetProp = resolvePropertyByName(mappedByTarget, explicitMappedBy);
     if (!targetProp) {
       return undefined;
     }
 
-    const targetFk = getForeignKey(program, targetProp);
-    if (!targetFk) {
+    const resolved = resolveOwnedRelationReference(
+      program,
+      targetProp,
+      mappedByTarget,
+      parentModel,
+    );
+    if (!resolved) {
       return undefined;
     }
 
-    const fkColumnName = targetFk;
-    const inverseFkFieldName = camelToPascal(explicitMappedBy + "Id");
-    const backPopulates = explicitMappedBy;
-
-    // Get cascade from the inverse property
     const inverseOnDelete = getOnDelete(program, targetProp);
     const inverseOnUpdate = getOnUpdate(program, targetProp);
 
     return {
-      kind: "one-to-many",
-      targetModel,
-      targetTable,
-      fkColumnName,
-      fkTargetColumn: "id",
-      fkDbType: undefined,
+      kind: arrayElement ? "one-to-many" : "one-to-one",
+      targetModel: mappedByTarget,
+      targetTable: getTableName(program, mappedByTarget),
+      localProperty: resolved.localProperty,
+      targetProperty: resolved.targetProperty,
+      fkColumnName: resolved.localColumnName,
+      fkTargetColumn: resolved.targetColumnName,
+      fkDbType: resolved.fkDbType,
       onDelete: inverseOnDelete ?? onDelete,
       onUpdate: inverseOnUpdate ?? onUpdate,
-      inverseFkFieldName,
-      backPopulates,
+      backPopulates: explicitMappedBy,
     };
   }
 
-  return undefined;
-}
-
-/**
- * Find the forward-reference (one-to-many) on targetModel that collects parentModel.
- * Used for SQLModel back_populates on the many-to-one side.
- */
-function findForwardReference(
-  program: Program,
-  parentModel: Model,
-  targetModel: Model,
-  fkColumnName: string,
-): string | undefined {
-  // Search on targetModel for one-to-many arrays that collect parentModel
-  for (const [, prop] of targetModel.properties) {
-    const arrElement = unwrapArrayType(prop.type);
-    if (arrElement && arrElement === parentModel) {
-      // Check if this array has @mappedBy pointing to a property with matching FK column
-      const mappedBy = getMappedBy(program, prop);
-      if (mappedBy) {
-        const targetProp = parentModel.properties.get(mappedBy);
-        if (targetProp) {
-          const targetFk = getForeignKey(program, targetProp);
-          if (targetFk === fkColumnName) {
-            return camelToSnake(prop.name);
-          }
-        }
-      }
-    }
-  }
   return undefined;
 }
 

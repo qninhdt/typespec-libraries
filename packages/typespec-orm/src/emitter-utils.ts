@@ -9,6 +9,9 @@ import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
 import type { EnumMemberInfo, ResolvedRelation } from "./helpers.js";
 import {
   getCompositeFields,
+  getForeignKeyConfig,
+  getManyToMany,
+  getMappedBy,
   getPropertyEnum,
   isIgnored,
   isKey,
@@ -178,6 +181,14 @@ export function classifyProperties(program: Program, model: Model): ClassifiedPr
     const resolved = resolveRelation(program, prop, model);
     if (resolved) {
       relations.push({ prop, enumInfo, resolved });
+      continue;
+    }
+
+    if (
+      getForeignKeyConfig(program, prop) ||
+      getMappedBy(program, prop) ||
+      getManyToMany(program, prop)
+    ) {
       continue;
     }
 

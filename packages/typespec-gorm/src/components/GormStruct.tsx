@@ -32,19 +32,21 @@ import {
 } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
 import { generateRelationFieldLine } from "./GormRelationField.jsx";
+import type { GormEmitterOptions } from "../lib.js";
 
 export interface GormModelFileProps {
   readonly program: Program;
   readonly normalizedModel: NormalizedOrmModel;
   readonly modelLookup: Map<Model, NormalizedOrmModel>;
   readonly libraryName?: string;
+  readonly collectionStrategy?: GormEmitterOptions["collection-strategy"];
 }
 
 /**
  * JSX component: renders a complete Go source file for a GORM model.
  */
 export function GormModelFile(props: GormModelFileProps): Children {
-  const { program, normalizedModel, modelLookup, libraryName } = props;
+  const { program, normalizedModel, modelLookup, libraryName, collectionStrategy } = props;
   const { model, packageName } = normalizedModel;
   const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".go";
@@ -73,7 +75,7 @@ export function GormModelFile(props: GormModelFileProps): Children {
     if (isKey(program, prop)) {
       // Skip composite type fields - they are configuration only
       if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
     }
   }
 
@@ -82,7 +84,7 @@ export function GormModelFile(props: GormModelFileProps): Children {
     if (!isKey(program, prop)) {
       // Skip composite type fields - they are configuration only
       if (getCompositeFields(program, prop)) continue;
-      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports));
+      fieldLines.push(generateFieldLine(program, prop, compositeMap, imports, collectionStrategy));
     }
   }
 

@@ -16,6 +16,7 @@ import { PyModelFile } from "../src/components/PyModel.jsx";
 import { PyDataFile } from "../src/components/PyDataModel.jsx";
 import { generateInit } from "../src/components/PyConstants.js";
 import { expect } from "vitest";
+import type { SqlModelEmitterOptions } from "../src/lib.js";
 
 export async function createTestHost() {
   return coreCreateTestHost({
@@ -79,7 +80,25 @@ export async function emitPyFile(
   code: string,
   fileName: string,
   moduleName = "models",
+  emitterOptions: SqlModelEmitterOptions = {},
 ): Promise<string> {
+  const output = await renderPyOutput(code, moduleName, emitterOptions);
+
+  const file = findOutputFile(output, fileName);
+  if (!file) {
+    const available = listAllFiles(output);
+    throw new Error(
+      `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
+    );
+  }
+  return file.contents;
+}
+
+export async function renderPyOutput(
+  code: string,
+  moduleName = "models",
+  emitterOptions: SqlModelEmitterOptions = {},
+): Promise<OutputDirectory> {
   const runner = await createTestRunner();
   await runner.compile(code);
 
@@ -97,6 +116,8 @@ export async function emitPyFile(
   const tables = selection.models.filter((model) => model.kind === "table");
   const dataModels = selection.models.filter((model) => model.kind === "data");
   const namespaceGroups = [...selection.byNamespace.values()];
+  const isStandalone = emitterOptions.standalone ?? false;
+  const libraryName = emitterOptions["library-name"] ?? moduleName;
 
   const allModelNames: string[] = [];
   const moduleFiles: string[] = [];
@@ -108,16 +129,35 @@ export async function emitPyFile(
     allModelNames.push(model.model.name);
     moduleFiles.push(camelToSnake(model.model.name));
   }
-  const initContent = generateInit(allModelNames, moduleFiles, moduleName);
+  const initContent = generateInit({
+    moduleName,
+    models: allModelNames.map((name, index) => ({
+      name,
+      moduleFile: moduleFiles[index],
+    })),
+  });
 
   const tree = (
     <SourceDirectory path=".">
+      {isStandalone && (
+        <SourceFile path="pyproject.toml" filetype="toml" printWidth={9999}>
+          {`[project]
+name = "${libraryName}"
+version = "0.0.0"
+`}
+        </SourceFile>
+      )}
       {namespaceGroups.map((models) => (
         <SourceDirectory path={models[0].namespaceDir}>
           {models
             .filter((model) => model.kind === "table")
             .map((model) => (
-              <PyModelFile program={program} normalizedModel={model} modelLookup={graph.byModel} />
+              <PyModelFile
+                program={program}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                collectionStrategy={emitterOptions["collection-strategy"]}
+              />
             ))}
           {models
             .filter((model) => model.kind === "data")
@@ -132,16 +172,7 @@ export async function emitPyFile(
     </SourceDirectory>
   );
 
-  const output = render(tree);
-
-  const file = findOutputFile(output, fileName);
-  if (!file) {
-    const available = listAllFiles(output);
-    throw new Error(
-      `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
-    );
-  }
-  return file.contents;
+  return render(tree);
 }
 
 /**

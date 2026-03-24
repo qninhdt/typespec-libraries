@@ -13,6 +13,7 @@ model Subscription is Demo.GamePlatform.Shared.Timestamped {
 
   /** Monthly price stored as NUMERIC(10,2) to avoid floating-point drift. */
   @precision(10, 2)
+  @check("subscriptions_monthly_price_non_negative", "monthlyPrice >= 0")
   monthlyPrice: decimal;
 
   /** Start date of the billing period. */

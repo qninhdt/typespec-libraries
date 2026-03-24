@@ -5,9 +5,11 @@
  * Called imperatively by GormStruct for synchronous rendering.
  */
 
-import type { Enum, ModelProperty, Program } from "@typespec/compiler";
+import type { Enum, ModelProperty, Program, Type } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
+  getArrayElementType,
+  getCheck,
   getColumnName,
   getDefaultValue,
   getDoc,
@@ -19,6 +21,7 @@ import {
   getOnUpdate,
   getPrecision,
   getPropertyEnum,
+  isArrayType,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
@@ -28,9 +31,11 @@ import {
   isUnique,
   resolveDbType,
   camelToPascal,
+  camelToSnake,
   deduplicateParts,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
+import type { GormEmitterOptions } from "../lib.js";
 import {
   GO_TYPE_MAP,
   type CompositeFieldTag,
@@ -47,6 +52,7 @@ export function generateFieldLine(
   prop: ModelProperty,
   compositeMap: Map<string, CompositeFieldTag[]>,
   imports: Set<string>,
+  collectionStrategy?: GormEmitterOptions["collection-strategy"],
 ): string {
   const fieldName = camelToPascal(prop.name);
   const columnName = getColumnName(program, prop);
@@ -71,6 +77,27 @@ export function generateFieldLine(
       tagParts.push(`comment:${escapeComment(doc)}`);
     }
     return `${docComment}\t${fieldName} gorm.DeletedAt \`gorm:"${tagParts.join(";")}" json:"${prop.name}"\`\n`;
+  }
+
+  if (isArrayType(prop.type)) {
+    const { goType, gormTag, requiredImports, doc } = resolveArrayGoType(
+      program,
+      prop,
+      columnName,
+      compositeMap,
+      collectionStrategy,
+    );
+    for (const imp of requiredImports) imports.add(imp);
+
+    const finalGoType = wrapOptional(goType, prop.optional);
+    const validateTag = buildValidateTag(program, prop);
+    const jsonOmit = prop.optional ? ",omitempty" : "";
+    const docComment = buildDocComment(doc);
+    const structTag = validateTag
+      ? `gorm:"${gormTag}" validate:"${validateTag}" json:"${prop.name}${jsonOmit}"`
+      : `gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"`;
+
+    return `${docComment}\t${fieldName} ${finalGoType} \`${structTag}\`\n`;
   }
 
   // Enum check
@@ -226,6 +253,67 @@ function resolveGoType(
   };
 }
 
+function resolveArrayGoType(
+  program: Program,
+  prop: ModelProperty,
+  columnName: string,
+  compositeMap: Map<string, CompositeFieldTag[]>,
+  collectionStrategy?: GormEmitterOptions["collection-strategy"],
+): GoTypeResult {
+  const elementType = getArrayElementType(prop.type);
+  const { elementGoType, postgresElementType, requiredImports } = resolveArrayElementType(
+    program,
+    prop,
+    elementType,
+  );
+
+  let goType = "[]interface{}";
+  let gormTypeName = "";
+
+  if (!collectionStrategy) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: { typeName: "array", propName: prop.name },
+      target: prop,
+    });
+  } else if (!elementGoType) {
+    // `resolveArrayElementType` already reported a concrete diagnostic.
+  } else if (collectionStrategy === "jsonb") {
+    goType = `datatypes.JSONSlice[${elementGoType}]`;
+    gormTypeName = "jsonb";
+    requiredImports.push("gorm.io/datatypes");
+  } else if (postgresElementType) {
+    goType = `[]${elementGoType}`;
+    gormTypeName = `${postgresElementType}[]`;
+  } else {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: {
+        typeName: elementType ? describeTypeForDiagnostic(program, elementType) : "array",
+        propName: prop.name,
+      },
+      target: prop,
+    });
+  }
+
+  const tagParts: string[] = [`column:${columnName}`];
+  if (gormTypeName) {
+    tagParts.push(`type:${gormTypeName}`);
+  }
+
+  appendCommonGormTags(program, prop, columnName, compositeMap, tagParts);
+
+  const doc = getDoc(program, prop);
+  if (doc) tagParts.push(`comment:${escapeComment(doc)}`);
+
+  return {
+    goType,
+    gormTag: deduplicateParts(tagParts).join(";"),
+    requiredImports,
+    doc,
+  };
+}
+
 function resolveEnumGoType(
   program: Program,
   prop: ModelProperty,
@@ -252,6 +340,98 @@ function resolveEnumGoType(
     requiredImports: [],
     doc,
   };
+}
+
+function resolveArrayElementType(
+  program: Program,
+  prop: ModelProperty,
+  elementType: Type | undefined,
+): { elementGoType?: string; postgresElementType?: string; requiredImports: string[] } {
+  if (!elementType) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: { typeName: "array", propName: prop.name },
+      target: prop,
+    });
+    return { requiredImports: [] };
+  }
+
+  if (elementType.kind === "Enum") {
+    return {
+      elementGoType: camelToPascal(elementType.name),
+      postgresElementType: camelToSnake(elementType.name),
+      requiredImports: [],
+    };
+  }
+
+  const dbType = resolveDbType(elementType);
+  const mapping = dbType ? GO_TYPE_MAP[dbType] : undefined;
+  if (!dbType || !mapping) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: {
+        typeName: dbType ?? describeTypeForDiagnostic(program, elementType),
+        propName: prop.name,
+      },
+      target: prop,
+    });
+    return { requiredImports: [] };
+  }
+
+  return {
+    elementGoType: mapping.goType,
+    postgresElementType: resolvePostgresArrayElementType(dbType),
+    requiredImports: mapping.imports ? [...mapping.imports] : [],
+  };
+}
+
+function resolvePostgresArrayElementType(dbType: string): string | undefined {
+  switch (dbType) {
+    case "string":
+    case "text":
+      return "text";
+    case "uuid":
+      return "uuid";
+    case "boolean":
+      return "boolean";
+    case "int8":
+    case "int16":
+    case "int32":
+    case "serial":
+      return "integer";
+    case "int64":
+    case "bigserial":
+      return "bigint";
+    case "uint8":
+    case "uint16":
+    case "uint32":
+    case "uint64":
+      return "bigint";
+    case "float32":
+      return "real";
+    case "float64":
+      return "double precision";
+    case "decimal":
+      return "numeric";
+    case "date":
+      return "date";
+    case "time":
+      return "time";
+    case "utcDateTime":
+      return "timestamptz";
+    default:
+      return undefined;
+  }
+}
+
+function describeTypeForDiagnostic(_program: Program, type: Type): string {
+  if (type.kind === "ModelProperty") {
+    return describeTypeForDiagnostic(_program, type.type);
+  }
+  if ("name" in type && typeof type.name === "string") {
+    return type.name;
+  }
+  return type.kind;
 }
 
 function appendCommonGormTags(
@@ -288,5 +468,10 @@ function appendCommonGormTags(
   if (!isKey(program, prop)) {
     const defaultVal = getDefaultValue(program, prop);
     if (defaultVal) tagParts.push(`default:${defaultVal}`);
+  }
+
+  const check = getCheck(program, prop);
+  if (check) {
+    tagParts.push(`check:${check.name},${check.expression}`);
   }
 }

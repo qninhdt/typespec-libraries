@@ -15,12 +15,6 @@ export interface ZodEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
-  /** Whether to include template declarations (default: false) */
-  includeTemplateDeclaration?: boolean;
-  /** Whether to generate discriminated unions (default: true) */
-  useDiscriminatedUnions?: boolean;
-  /** Whether to emit descriptions (default: true) */
-  emitDescriptions?: boolean;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
@@ -32,9 +26,6 @@ const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
-    includeTemplateDeclaration: { type: "boolean", nullable: true },
-    useDiscriminatedUnions: { type: "boolean", nullable: true },
-    emitDescriptions: { type: "boolean", nullable: true },
   },
   required: [],
 };

@@ -9,7 +9,6 @@ import {
   type ContentOutputFile,
 } from "@alloy-js/core";
 import { Output } from "@typespec/emitter-framework";
-import type { Model } from "@typespec/compiler";
 import {
   createTestHost as coreCreateTestHost,
   createTestWrapper,
@@ -82,35 +81,12 @@ function listAllFiles(dir: OutputDirectory): string[] {
 }
 
 /**
- * Converts a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str.charAt(0).toUpperCase() + str.slice(1).replace(/[-_](.)/g, (_, c) => c.toUpperCase());
-}
-
-/**
- * Add type aliases (e.g., `export type User = z.infer<typeof UserSchema>`) to rendered output.
- * This mimics what the emitter does via writeFileSync after writeOutput.
- */
-function addTypeAliases(content: string, dataModels: { model: Model; label: string }[]): string {
-  const aliases = dataModels
-    .map(({ model }) => {
-      const name = model.name;
-      const pascalName = toPascalCase(name);
-      return `export type ${pascalName} = z.infer<typeof ${pascalName}Schema>;`;
-    })
-    .join("\n");
-
-  return content.trim() + "\n" + aliases + "\n";
-}
-
-/**
  * Compile TypeSpec, build JSX tree, render in memory, and return a specific file's content.
  */
 export async function emitZodFile(
   code: string,
   fileName: string,
-  modelsFolder = false,
+  pathPrefix: string | boolean = false,
 ): Promise<string> {
   const runner = await createTestRunner();
   await runner.compile(code);
@@ -146,7 +122,13 @@ export async function emitZodFile(
             program={program}
             model={model}
             label={label}
-            path={modelsFolder ? `models/${model.name}.ts` : `${model.name}.ts`}
+            path={
+              typeof pathPrefix === "string"
+                ? `${pathPrefix}/${model.name}.ts`
+                : pathPrefix
+                  ? `models/${model.name}.ts`
+                  : `${model.name}.ts`
+            }
           />
         ))}
       </SourceDirectory>
@@ -162,13 +144,7 @@ export async function emitZodFile(
       `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
     );
   }
-
-  let content = file.contents;
-
-  // Add type aliases (normally added by emitter via writeFileSync after writeOutput)
-  content = addTypeAliases(content, dataModels);
-
-  return content;
+  return file.contents;
 }
 
 /**

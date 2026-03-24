@@ -7,6 +7,7 @@ import {
   getDoc,
   getFormat,
   getForeignKey,
+  getForeignKeyTarget,
   getMaxLength,
   getMinLength,
   getMinValue,
@@ -167,6 +168,25 @@ describe("@foreignKey decorator", () => {
     const fk = getForeignKey(runner.program, userId);
     expect(fk).toBeDefined();
     expect(fk).toBe("user_id");
+  });
+
+  it("stores the optional referenced target field", async () => {
+    const runner = await createTestRunner();
+    const { organization } = (await runner.compile(`
+      @table
+      model Organization {
+        @key code: string;
+      }
+
+      @table
+      model User {
+        organizationCode: string;
+        @test @foreignKey("organizationCode", "code") organization: Organization;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    expect(getForeignKey(runner.program, organization)).toBe("organizationCode");
+    expect(getForeignKeyTarget(runner.program, organization)).toBe("code");
   });
 });
 

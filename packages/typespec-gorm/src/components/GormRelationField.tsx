@@ -10,15 +10,6 @@ import { camelToPascal, getDoc } from "@qninhdt/typespec-orm";
 import { buildDocComment } from "./GormConstants.js";
 
 /**
- * Convert a snake_case FK column name to PascalCase Go field name.
- * e.g., "user_id" → "UserID", "owner_id" → "OwnerID"
- */
-function snakeToPascalFieldName(snakeCol: string): string {
-  const camel = snakeCol.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
-  return camelToPascal(camel);
-}
-
-/**
  * Generate a relation navigation struct field line.
  */
 export function generateRelationFieldLine(
@@ -44,10 +35,12 @@ export function generateRelationFieldLine(
 
   // Build GORM tag parts
   const tagParts: string[] = [];
-
-  // foreignKey: Convert snake_case FK column to PascalCase Go field name
-  const fkFieldName = snakeToPascalFieldName(rel.fkColumnName);
-  tagParts.push(`foreignKey:${fkFieldName}`);
+  if (rel.kind === "many-to-many") {
+    tagParts.push(`many2many:${rel.joinTable}`);
+  } else {
+    tagParts.push(`foreignKey:${camelToPascal(rel.localProperty.name)}`);
+    tagParts.push(`references:${camelToPascal(rel.targetProperty.name)}`);
+  }
 
   // Add cascade constraints
   const constraintParts: string[] = [];
@@ -60,5 +53,5 @@ export function generateRelationFieldLine(
   const gormTag = tagParts.join(";");
   const jsonOmit = prop.optional ? ",omitempty" : "";
 
-  return `${docComment}\t${fieldName} ${goType} \`gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"\``;
+  return `${docComment}\t${fieldName} ${goType} \`gorm:"${gormTag}" json:"${prop.name}${jsonOmit}"\`\n`;
 }

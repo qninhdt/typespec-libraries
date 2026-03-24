@@ -1,0 +1,27 @@
+// Database Schema
+
+// Namespace: Demo.GamePlatform.Content.Stories
+
+Table story_nodes {
+  id uuid [pk, not null, note: 'Unique identifier shared by most persisted records.']
+  created_at timestamp [not null, default: 'now()', note: 'Timestamp when the record was created.']
+  updated_at timestamp [note: 'Timestamp of the last update.']
+  deleted_at timestamp [note: 'Soft delete marker for archival workflows.']
+  world_id uuid [not null, note: 'Foreign key to the owning world.']
+  depth integer [not null, note: 'Depth of this node in the story tree - root is 0.']
+  pool jsonb [not null, note: 'Content pool inherited from all ancestors.']
+  new_content jsonb [not null, note: 'Content introduced by this specific node.']
+  child_ids jsonb [not null, note: 'IDs of lazily-expanded child nodes.']
+  tags varchar[] [not null, note: 'Searchable labels attached to the node for branch discovery.']
+  parent_id uuid
+
+  indexes {
+    (world_id, depth)
+    world_id
+    depth
+  }
+}
+
+
+Ref: story_nodes.parent_id > story_nodes.id [delete: CASCADE]
+Ref: story_nodes.world_id > worlds.id [delete: CASCADE, update: CASCADE]

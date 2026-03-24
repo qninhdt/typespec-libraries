@@ -1,4 +1,4 @@
-"""Demo.GamePlatform.Content.Events - auto-generated models. DO NOT EDIT."""
+"""demo.game_platform.content.events - auto-generated models. DO NOT EDIT."""
 
 from .game_event import GameEvent
 

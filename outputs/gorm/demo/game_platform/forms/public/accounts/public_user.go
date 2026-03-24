@@ -7,10 +7,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// PublicUser Public user record with sensitive and operational fields removed. Demonstrates `OmitProperties` across namespaces.
+// PublicUser Public user record with sensitive and operational fields removed. Kept explicit so generated form schemas stay free of table-only relations.
 type PublicUser struct {
 	// Unique identifier shared by most persisted records.
-	ID uuid.UUID `json:"id"`
+	ID uuid.UUID `validate:"required" json:"id"`
 	// Email address used for login and invitations. Other namespaces reference this via lookup types.
 	Email string `validate:"required,max=320,email" json:"email"`
 	// Display name shown throughout the UI.

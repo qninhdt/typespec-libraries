@@ -42,6 +42,11 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
     return getDbmlType(program, type.type);
   }
 
+  if (type.kind === "Model" && type.indexer) {
+    const itemType = getDbmlType(program, type.indexer.value);
+    return itemType ? `${itemType}[]` : "jsonb";
+  }
+
   // Handle scalar types
   if (type.kind === "Scalar") {
     const dbType = resolveDbType(type);

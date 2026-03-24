@@ -81,9 +81,9 @@ export function DbmlTable(props: DbmlTableProps): string {
   }
 
   // Add single-column indexes and unique constraints
-  for (const { prop, enumInfo } of regularProps) {
-    // Skip composite type and enum properties
-    if (getCompositeFields(program, prop) || enumInfo) continue;
+  for (const { prop } of regularProps) {
+    // Skip composite type configuration properties
+    if (getCompositeFields(program, prop)) continue;
 
     const colName = camelToSnake(getColumnName(program, prop));
 

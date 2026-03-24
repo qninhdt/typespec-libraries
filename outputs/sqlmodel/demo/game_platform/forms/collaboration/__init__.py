@@ -1,4 +1,4 @@
-"""Demo.GamePlatform.Forms.Collaboration - auto-generated models. DO NOT EDIT."""
+"""demo.game_platform.forms.collaboration - auto-generated models. DO NOT EDIT."""
 
 from .create_invitation_form import CreateInvitationForm
 

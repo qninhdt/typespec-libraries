@@ -23,6 +23,7 @@ export async function emit(context: EmitContext<GormEmitterOptions>): Promise<vo
   const outputDir = options["output-dir"] ?? context.emitterOutputDir;
   const isStandalone = options.standalone ?? false;
   const libraryName = options["library-name"];
+  const collectionStrategy = options["collection-strategy"];
 
   if (isStandalone && !libraryName) {
     reportDiagnostic(program, {
@@ -120,6 +121,7 @@ ${tables.map((model) => `\t\t&${model.namespacePath.join("_")}.${model.model.nam
                 normalizedModel={model}
                 modelLookup={graph.byModel}
                 libraryName={libraryName}
+                collectionStrategy={collectionStrategy}
               />
             ))}
           {models

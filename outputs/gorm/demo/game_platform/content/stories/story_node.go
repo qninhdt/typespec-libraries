@@ -33,13 +33,17 @@ type StoryNode struct {
 	NewContent datatypes.JSON `gorm:"column:new_content;type:jsonb;not null;comment:Content introduced by this specific node." validate:"required" json:"newContent"`
 	// IDs of lazily-expanded child nodes.
 	ChildIDs datatypes.JSON `gorm:"column:child_ids;type:jsonb;not null;comment:IDs of lazily-expanded child nodes." validate:"required" json:"childIds"`
-	ParentID *uuid.UUID     `gorm:"column:parent_id;type:uuid" validate:"omitempty" json:"parentId,omitempty"`
+	// Searchable labels attached to the node for branch discovery.
+	Tags     datatypes.JSONSlice[string] `gorm:"column:tags;type:jsonb;not null;comment:Searchable labels attached to the node for branch discovery." json:"tags"`
+	ParentID *uuid.UUID                  `gorm:"column:parent_id;type:uuid" validate:"omitempty" json:"parentId,omitempty"`
 
 	// ─── Relationships ─────────────────────
 	// Owning world.
-	World    demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"` // Parent story node.
-	Parent   *StoryNode                      `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`      // Child nodes reachable from this node.
-	Children []StoryNode                     `gorm:"foreignKey:ParentID;constraint:OnDelete:CASCADE" json:"children,omitempty"`
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	// Parent story node.
+	Parent *StoryNode `gorm:"foreignKey:ParentID;references:ID;constraint:OnDelete:CASCADE" json:"parent,omitempty"`
+	// Child nodes reachable from this node.
+	Children []StoryNode `gorm:"foreignKey:ParentID;references:ID;constraint:OnDelete:CASCADE" json:"children,omitempty"`
 }
 
 // TableName returns the table name for StoryNode.

@@ -62,6 +62,9 @@ jobs:
       - name: Compile Examples
         run: pnpm run compile-examples
 
+      - name: Verify Generated Outputs Are Current
+        run: git diff --exit-code -- outputs
+
       - name: Verify Generated Go
         working-directory: outputs/gorm
         run: go build -mod=mod ./...

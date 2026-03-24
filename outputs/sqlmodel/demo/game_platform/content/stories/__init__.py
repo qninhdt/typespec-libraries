@@ -1,4 +1,4 @@
-"""Demo.GamePlatform.Content.Stories - auto-generated models. DO NOT EDIT."""
+"""demo.game_platform.content.stories - auto-generated models. DO NOT EDIT."""
 
 from .story_node import StoryNode
 

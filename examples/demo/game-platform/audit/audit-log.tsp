@@ -42,6 +42,12 @@ model AuditLog {
   /** Nullable so audit history survives account deletion. */
   actorId?: uuid;
 
+  /**
+   * Optional world slug snapshot for human-friendly correlation in logs.
+   * Demonstrates a relation that targets a non-id unique column.
+   */
+  worldSlug?: Demo.GamePlatform.Worlds.World.slug;
+
   // ─── Timestamp Fields ─────────────────
   @autoCreateTime
   @map("created_at")
@@ -55,4 +61,12 @@ model AuditLog {
   @onDelete("SET NULL")
   @onUpdate("CASCADE")
   actor?: Demo.GamePlatform.Accounts.User;
+
+  /**
+   * World context resolved through its stable slug instead of the primary key.
+   */
+  @foreignKey("worldSlug", "slug")
+  @onDelete("SET NULL")
+  @onUpdate("CASCADE")
+  worldContext?: Demo.GamePlatform.Worlds.World;
 }

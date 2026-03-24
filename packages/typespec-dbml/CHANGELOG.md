@@ -5,6 +5,24 @@ All notable changes to `@qninhdt/typespec-dbml` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- Shared selector filtering and namespace-aware DBML emission backed by the normalized ORM graph.
+- Namespace-split DBML output with one file per namespace group.
+- Referenced-column foreign keys, FK action preservation, lookup-type scalar resolution, and synthesized many-to-many join tables.
+- Better alignment with the rewritten example and checked-in namespace-based outputs.
+
+### Changed
+
+- Single-file mode now groups content by namespace sections, and split mode mirrors namespace ownership directly in the output tree.
+- DBML generation now follows the same dependency validation rules as the runtime emitters.
+
+### Removed
+
+- Older assumptions that DBML output would always be a single flat schema file.
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

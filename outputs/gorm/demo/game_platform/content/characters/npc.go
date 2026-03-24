@@ -33,7 +33,7 @@ type Npc struct {
 	Traits *datatypes.JSON `gorm:"column:traits;type:jsonb;comment:Optional structured traits used during prompt assembly." validate:"omitempty" json:"traits,omitempty"`
 
 	// ─── Relationships ─────────────────────
-	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Npc.

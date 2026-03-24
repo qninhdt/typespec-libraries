@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, UniqueConstraint, func
+from sqlalchemy import Column, DateTime, ForeignKey, UniqueConstraint, func
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -55,12 +55,12 @@ class Tag(SQLModel, table=True):
     )
     # Foreign key to the owning world.
     world_id: UUID = Field(
-        index=True,
-        foreign_key="worlds.id",
-        sa_column_kwargs={
-            "nullable": False,
-            "comment": "Foreign key to the owning world.",
-        },
+        sa_column=Column(
+            ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            comment="Foreign key to the owning world.",
+            index=True,
+        )
     )
     # Tag name - unique within a world.
     name: str = Field(

@@ -1,4 +1,5 @@
 import {
+  SourceFile,
   render,
   SourceDirectory,
   type OutputDirectory,
@@ -10,10 +11,16 @@ import {
 } from "@typespec/compiler/testing";
 import { TypeSpecOrmTestLibrary } from "@qninhdt/typespec-orm/testing";
 import { TypeSpecGormTestLibrary } from "../src/testing/index.js";
-import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
+import {
+  generatedHeader,
+  getLibraryLeafName,
+  normalizeOrmGraph,
+  selectModelsForEmitter,
+} from "@qninhdt/typespec-orm";
 import { GormModelFile } from "../src/components/GormStruct.jsx";
 import { GormDataFile } from "../src/components/GormDataStruct.jsx";
 import { expect } from "vitest";
+import type { GormEmitterOptions } from "../src/lib.js";
 
 export async function createTestHost() {
   return coreCreateTestHost({
@@ -68,7 +75,25 @@ export async function emitGoFile(
   code: string,
   fileName: string,
   packageName = "test",
+  emitterOptions: GormEmitterOptions = {},
 ): Promise<string> {
+  const output = await renderGoOutput(code, packageName, emitterOptions);
+
+  const file = findOutputFile(output, fileName);
+  if (!file) {
+    const available = listAllFiles(output);
+    throw new Error(
+      `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
+    );
+  }
+  return file.contents;
+}
+
+export async function renderGoOutput(
+  code: string,
+  packageName = "test",
+  emitterOptions: GormEmitterOptions = {},
+): Promise<OutputDirectory> {
   const runner = await createTestRunner();
   await runner.compile(code);
 
@@ -84,9 +109,48 @@ export async function emitGoFile(
     kinds: ["table", "data"],
   });
   const namespaceGroups = [...selection.byNamespace.values()];
+  const tables = selection.models.filter((model) => model.kind === "table");
+  const isStandalone = emitterOptions.standalone ?? false;
+  const libraryName = emitterOptions["library-name"] ?? "github.com/test/library";
+  const rootPackage = getLibraryLeafName(libraryName);
+  const tablePackages = [
+    ...new Map(tables.map((model) => [model.namespaceDir, model])).values(),
+  ].sort((a, b) => a.namespaceDir.localeCompare(b.namespaceDir));
 
   const tree = (
     <SourceDirectory path=".">
+      {isStandalone && (
+        <>
+          <SourceFile path="go.mod" filetype="go" printWidth={9999}>
+            {`module ${libraryName}
+
+go 1.22
+`}
+          </SourceFile>
+          {tables.length > 0 && (
+            <SourceFile path="models.go" filetype="go" printWidth={9999}>
+              {`// ${generatedHeader}
+// Source: https://github.com/qninhdt/typespec-libraries
+
+package ${rootPackage}
+
+import (
+\t"gorm.io/gorm"
+${tablePackages
+  .map((model) => `\t${model.namespacePath.join("_")} "${libraryName}/${model.namespaceDir}"`)
+  .join("\n")}
+)
+
+func Init(db *gorm.DB) error {
+\treturn db.AutoMigrate(
+${tables.map((model) => `\t\t&${model.namespacePath.join("_")}.${model.model.name}{}`).join(",\n")},
+\t)
+}
+`}
+            </SourceFile>
+          )}
+        </>
+      )}
       {namespaceGroups.map((models) => (
         <SourceDirectory path={models[0].namespaceDir}>
           {models
@@ -96,7 +160,8 @@ export async function emitGoFile(
                 program={program}
                 normalizedModel={model}
                 modelLookup={graph.byModel}
-                libraryName="github.com/test/library"
+                libraryName={libraryName}
+                collectionStrategy={emitterOptions["collection-strategy"]}
               />
             ))}
           {models
@@ -114,16 +179,7 @@ export async function emitGoFile(
     </SourceDirectory>
   );
 
-  const output = render(tree);
-
-  const file = findOutputFile(output, fileName);
-  if (!file) {
-    const available = listAllFiles(output);
-    throw new Error(
-      `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
-    );
-  }
-  return file.contents;
+  return render(tree);
 }
 
 function listAllFiles(dir: OutputDirectory): string[] {

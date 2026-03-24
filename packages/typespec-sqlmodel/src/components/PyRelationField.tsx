@@ -18,6 +18,7 @@ export function generateRelationField(
   program: Program,
   prop: ModelProperty,
   rel: ResolvedRelation,
+  manyToManySecondary?: string,
 ): { field: string; targetModel: Model } {
   const pyFieldName = camelToSnake(prop.name);
   const targetModelName = rel.targetModel.name;
@@ -54,7 +55,9 @@ export function generateRelationField(
   // 1. Use remote_side pointing to PK (id)
   // 2. Use string quotes in type annotation for forward reference
   if (isSelfRef) {
-    relArgs.push(`sa_relationship_kwargs={"remote_side": "${rel.targetModel.name}.id"}`);
+    relArgs.push(
+      `sa_relationship_kwargs={"remote_side": "${rel.targetModel.name}.${rel.targetProperty.name}"}`,
+    );
     // Use string quotes for forward reference in type annotation
     return {
       field: `${docComment}${FOUR_SPACES}${pyFieldName}: "${pyType}" = Relationship(${relArgs.join(", ")})\n`,
@@ -65,7 +68,9 @@ export function generateRelationField(
   // Track sa_relationship_kwargs for merging
   const saRelKwArgs: string[] = [];
 
-  if (isMany && rel.onDelete === "CASCADE") {
+  if (rel.kind === "many-to-many" && manyToManySecondary) {
+    saRelKwArgs.push(`"secondary": ${manyToManySecondary}`);
+  } else if (isMany && rel.onDelete === "CASCADE") {
     saRelKwArgs.push('"cascade": "all, delete-orphan"');
   } else if (isMany && rel.onDelete === "SET NULL") {
     saRelKwArgs.push('"cascade": "save-update, merge"');

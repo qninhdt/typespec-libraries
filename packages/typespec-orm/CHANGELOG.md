@@ -5,6 +5,26 @@ All notable changes to `@qninhdt/typespec-orm` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- `@tableMixin` for reusable persisted model fragments that participate in validation and dependency analysis without emitting standalone tables.
+- A normalized namespace-aware ORM graph shared by every emitter.
+- Shared `include` / `exclude` selector filtering with redundant-selector warnings and filtered-dependency diagnostics.
+- Referenced-column foreign keys, named `@check(...)` constraints, `@manyToMany(...)` shorthand, and collection-strategy-aware metadata used by downstream emitters.
+- New diagnostics for namespace requirements, mixin cycles, mixin field conflicts, selector conflicts, and many-to-many validation.
+
+### Changed
+
+- Namespaces are now required for ORM-managed declarations and required emitted dependencies.
+- Emitters now consume normalized namespace paths and dependency graphs instead of rediscovering models independently.
+- Example coverage, validation tests, and emitter integration paths were updated around the namespace-first pipeline.
+
+### Removed
+
+- Legacy assumptions that root-level ORM models or flat output layouts could be supported implicitly.
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

@@ -19,6 +19,17 @@
  * - Demo.GamePlatform.Forms.Worlds
  * - Demo.GamePlatform.Audit
  *
+ * Phase 2 features demonstrated:
+ * - `AuditLog.worldContext` references `World.slug` via `@foreignKey("worldSlug", "slug")`
+ * - `StoryNode.tags` exercises explicit collection persistence in GORM / SQLModel
+ *
+ * Phase 3 features demonstrated:
+ * - `User.credits` and `Subscription.monthlyPrice` carry named `@check(...)` constraints
+ * - `User.badges` and `Badge.users` use `@manyToMany("user_badges")`
+ * - `CreateInvitationForm` and `CreateWorldForm` export rich Zod metadata
+ * - SQLModel package roots expose `metadata = SQLModel.metadata` for Alembic
+ * - DBML can be emitted as namespace-split files
+ *
  * Useful selector experiments:
  * - include: ["Demo.GamePlatform.Forms"]
  * - include: ["Demo.GamePlatform.Content"]
@@ -27,6 +38,7 @@
  */
 import "./demo/game-platform/shared/mixins.tsp";
 import "./demo/game-platform/accounts/enums.tsp";
+import "./demo/game-platform/accounts/badge.tsp";
 import "./demo/game-platform/accounts/user.tsp";
 import "./demo/game-platform/accounts/subscription.tsp";
 import "./demo/game-platform/worlds/enums.tsp";

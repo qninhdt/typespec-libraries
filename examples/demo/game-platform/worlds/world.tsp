@@ -15,6 +15,11 @@ model World is Demo.GamePlatform.Shared.Timestamped {
   @maxLength(200)
   name: string;
 
+  /** Stable human-readable slug used by cross-namespace references. */
+  @unique
+  @maxLength(80)
+  slug: string;
+
   /** System prompt used to guide AI generation within the world. */
   prompt: text;
 

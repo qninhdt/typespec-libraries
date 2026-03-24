@@ -33,6 +33,7 @@ model User is Demo.GamePlatform.Shared.Timestamped {
   preferredLocale?: string;
 
   /** Entitlement credits or consumable balance. */
+  @check("users_credits_non_negative", "credits >= 0")
   credits: int32 = 0;
 
   /** Role used by moderation features and internal tooling. */
@@ -51,6 +52,10 @@ model User is Demo.GamePlatform.Shared.Timestamped {
   /** Billing subscriptions tied to the account. */
   @mappedBy("user")
   subscriptions?: Subscription[];
+
+  /** Profile badges granted through a shorthand join table. */
+  @manyToMany("user_badges")
+  badges?: Badge[];
 
   // ─── Composite Unique Constraints ─────────────────
   @unique

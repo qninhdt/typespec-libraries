@@ -7,7 +7,16 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, Index, Numeric, func
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Index,
+    Numeric,
+    func,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -28,6 +37,9 @@ class Subscription(SQLModel, table=True):
 
     __tablename__ = "subscriptions"  # type: ignore
     __table_args__ = (
+        CheckConstraint(
+            "monthlyPrice >= 0", name="subscriptions_monthly_price_non_negative"
+        ),
         Index("subscriptions_user_id_is_active_idx", "user_id", "is_active"),
     )
 
@@ -105,7 +117,13 @@ class Subscription(SQLModel, table=True):
             "comment": "Fast boolean used by feature gates and entitlement checks.",
         }
     )
-    user_id: UUID = Field(foreign_key="users.id", sa_column_kwargs={"nullable": False})
+    user_id: UUID = Field(
+        sa_column=Column(
+            ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            index=True,
+        )
+    )
 
     # ─── Relationships ─────────────────────
     # Owning user - cascade on delete to clean up subscriptions.

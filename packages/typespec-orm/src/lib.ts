@@ -59,6 +59,72 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Property "${"propName"}" on "${"typeName"}" uses relation-like model type "${"targetName"}" without a supported relation shape.`,
       },
     },
+    "mapped-by-missing-property": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@mappedBy("${"fieldName"}") on "${"propName"}" is invalid because "${"targetModel"}"."${"fieldName"}" does not exist.`,
+      },
+    },
+    "foreign-key-local-missing": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@foreignKey("${"localField"}"${"targetFieldSuffix"}) on "${"propName"}" is invalid because local field/column "${"localField"}" does not exist on "${"modelName"}".`,
+      },
+    },
+    "foreign-key-target-missing": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@foreignKey("${"localField"}"${"targetFieldSuffix"}) on "${"propName"}" is invalid because "${"targetModel"}"."${"targetField"}" does not exist.`,
+      },
+    },
+    "foreign-key-type-mismatch": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@foreignKey("${"localField"}"${"targetFieldSuffix"}) on "${"propName"}" is invalid because "${"modelName"}"."${"resolvedLocalField"}" and "${"targetModel"}"."${"resolvedTargetField"}" have incompatible types (${"localType"} vs ${"targetType"}).`,
+      },
+    },
+    "foreign-key-set-null-non-nullable": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@onDelete("SET NULL") on "${"propName"}" requires local FK "${"localField"}" to be optional.`,
+      },
+    },
+    "one-to-one-missing-unique": {
+      severity: "error",
+      messages: {
+        default: paramMessage`One-to-one relation "${"propName"}" on "${"modelName"}" requires local FK "${"localField"}" to be @unique or @key.`,
+      },
+    },
+    "many-to-many-not-array": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany("${"tableName"}") on "${"propName"}" requires an array of @table models.`,
+      },
+    },
+    "many-to-many-target-not-table": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany("${"tableName"}") on "${"propName"}" must target a model decorated with @table.`,
+      },
+    },
+    "many-to-many-missing-inverse": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany("${"tableName"}") on "${"modelName"}"."${"propName"}" is missing a matching inverse declaration on "${"targetModel"}".`,
+      },
+    },
+    "many-to-many-conflicting-table": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany on "${"modelName"}"."${"propName"}" uses join table "${"tableName"}", but "${"targetModel"}"."${"targetProp"}" uses "${"otherTableName"}".`,
+      },
+    },
+    "many-to-many-conflicting-explicit-table": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany("${"tableName"}") on "${"modelName"}"."${"propName"}" conflicts with explicit @table model "${"existingModel"}". Use an explicit junction model instead of shorthand.`,
+      },
+    },
     "unsupported-persistence-type": {
       severity: "error",
       messages: {
@@ -196,13 +262,18 @@ export const $lib = createTypeSpecLibrary({
     map: { description: "Maps ModelProperty → column name" },
     index: { description: "Maps ModelProperty → index name" },
     unique: { description: "Marks ModelProperty as unique" },
+    check: { description: "Maps ModelProperty → named check constraint info" },
     autoIncrement: { description: "Marks ModelProperty as auto-increment" },
     softDelete: { description: "Marks ModelProperty as soft-delete timestamp" },
     foreignKey: {
-      description: "Maps ModelProperty → field name for FK column (string)",
+      description:
+        "Maps ModelProperty → { field, target? } describing the local FK field and optional referenced target field",
     },
     mappedBy: {
       description: "Maps ModelProperty → inverse property name for collection-side relations",
+    },
+    manyToMany: {
+      description: "Maps ModelProperty → generated join table name for many-to-many shorthand",
     },
     autoCreateTime: {
       description: "Marks ModelProperty as auto-set on creation",
@@ -238,10 +309,12 @@ export const TableMixinKey = $lib.stateKeys.tableMixin;
 export const MapKey = $lib.stateKeys.map;
 export const IndexKey = $lib.stateKeys.index;
 export const UniqueKey = $lib.stateKeys.unique;
+export const CheckKey = $lib.stateKeys.check;
 export const AutoIncrementKey = $lib.stateKeys.autoIncrement;
 export const SoftDeleteKey = $lib.stateKeys.softDelete;
 export const ForeignKeyKey = $lib.stateKeys.foreignKey;
 export const MappedByKey = $lib.stateKeys.mappedBy;
+export const ManyToManyKey = $lib.stateKeys.manyToMany;
 export const AutoCreateTimeKey = $lib.stateKeys.autoCreateTime;
 export const AutoUpdateTimeKey = $lib.stateKeys.autoUpdateTime;
 export const PrecisionKey = $lib.stateKeys.precision;

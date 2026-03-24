@@ -26,3 +26,8 @@ export const UserProfileSchema = z
 
     .describe("Lightweight user profile view for public surfaces. Demonstrates a `@data` model in a nested namespace.")
 export type UserProfile = z.infer<typeof UserProfileSchema>;
+
+export const UserProfileMeta = {
+  email: { inputType: "email" },
+  avatarUrl: { inputType: "url" },
+} as const;

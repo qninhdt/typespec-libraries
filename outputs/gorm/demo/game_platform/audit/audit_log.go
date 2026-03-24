@@ -10,6 +10,7 @@ import (
 	"gorm.io/datatypes"
 
 	demo_game_platform_accounts "github.com/demo-user/demo/demo/game_platform/accounts"
+	demo_game_platform_worlds "github.com/demo-user/demo/demo/game_platform/worlds"
 )
 
 // AuditLog Immutable audit-log entry. Lives in its own namespace even though it references other bounded contexts.
@@ -25,12 +26,16 @@ type AuditLog struct {
 	// Optional JSON snapshot or diff.
 	Diff *datatypes.JSON `gorm:"column:diff;type:jsonb;comment:Optional JSON snapshot or diff." validate:"omitempty" json:"diff,omitempty"`
 	// Nullable so audit history survives account deletion.
-	ActorID   *uuid.UUID `gorm:"column:actor_id;type:uuid;index:audit_logs_actor_id_created_at_idx,priority:1;comment:Nullable so audit history survives account deletion." validate:"omitempty" json:"actorId,omitempty"`
-	CreatedAt time.Time  `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:audit_logs_actor_id_created_at_idx,priority:2" json:"createdAt"`
+	ActorID *uuid.UUID `gorm:"column:actor_id;type:uuid;index:audit_logs_actor_id_created_at_idx,priority:1;comment:Nullable so audit history survives account deletion." validate:"omitempty" json:"actorId,omitempty"`
+	// Optional world slug snapshot for human-friendly correlation in logs. Demonstrates a relation that targets a non-id unique column.
+	WorldSlug *string   `gorm:"column:world_slug;type:varchar(80);comment:Optional world slug snapshot for human-friendly correlation in logs. Demonstrates a relation that targets a non-id unique column." validate:"omitempty,max=80" json:"worldSlug,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at;type:timestamptz;autoCreateTime;not null;index:audit_logs_actor_id_created_at_idx,priority:2" json:"createdAt"`
 
 	// ─── Relationships ─────────────────────
 	// User who performed the action - SET NULL when the account is deleted.
-	Actor *demo_game_platform_accounts.User `gorm:"foreignKey:ActorID;constraint:OnDelete:SET NULL,OnUpdate:CASCADE" json:"actor,omitempty"`
+	Actor *demo_game_platform_accounts.User `gorm:"foreignKey:ActorID;references:ID;constraint:OnDelete:SET NULL,OnUpdate:CASCADE" json:"actor,omitempty"`
+	// World context resolved through its stable slug instead of the primary key.
+	WorldContext *demo_game_platform_worlds.World `gorm:"foreignKey:WorldSlug;references:Slug;constraint:OnDelete:SET NULL,OnUpdate:CASCADE" json:"worldContext,omitempty"`
 }
 
 // TableName returns the table name for AuditLog.

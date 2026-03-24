@@ -9,6 +9,8 @@ export interface DbmlEmitterOptions {
   "output-dir"?: string;
   /** Filename for the generated DBML file (default: "schema") */
   filename?: string;
+  /** Emit one DBML file per namespace group instead of a single schema file */
+  "split-by-namespace"?: boolean;
   /** Namespace selectors to include */
   include?: string[];
   /** Namespace selectors to exclude */
@@ -21,6 +23,7 @@ const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
   properties: {
     "output-dir": { type: "string", nullable: true },
     filename: { type: "string", nullable: true },
+    "split-by-namespace": { type: "boolean", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
   },

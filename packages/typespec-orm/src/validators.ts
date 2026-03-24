@@ -5,12 +5,20 @@
  * compiler calls it after all decorators have been applied.
  */
 
-import type { Model, ModelProperty, Program } from "@typespec/compiler";
+import {
+  walkPropertiesInherited,
+  type Model,
+  type ModelProperty,
+  type Program,
+} from "@typespec/compiler";
 import { reportDiagnostic, MapKey } from "./lib.js";
 import { normalizeOrmGraph } from "./normalization.js";
 import {
+  arePropertyTypesCompatible,
+  describeComparableType,
   isTable,
   getColumnName,
+  getCheck,
   isKey,
   isUnique,
   isIndex,
@@ -21,13 +29,19 @@ import {
   isIgnored,
   getPrecision,
   getForeignKey,
+  getForeignKeyConfig,
+  getManyToMany,
   getOnDelete,
   getOnUpdate,
   getMappedBy,
   getCompositeFields,
+  getTypeFullName,
   resolveDbType,
   camelToSnake,
   collectTableModels,
+  isRelationLocalKeyUnique,
+  resolvePropertyReference,
+  unwrapArrayType,
 } from "./helpers.js";
 
 // ─── Type‐check Sets (module‐level to avoid per‐call allocation) ─────────────
@@ -68,7 +82,13 @@ export function $onValidate(program: Program): void {
   // 3. @onDelete/@onUpdate on non-relation scalar props
   validateCascadeOnScalar(program, tableModels);
 
-  // 4. Namespace, mixin, and dependency-shape validations shared with emitters
+  // 4. Relation-specific validation shared by all emitters
+  validateRelations(program, tableModels);
+
+  // 5. Additional shared constraint and shorthand validations
+  validateManyToMany(program, tableModels);
+
+  // 6. Namespace, mixin, and dependency-shape validations shared with emitters
   normalizeOrmGraph(program);
 }
 
@@ -99,6 +119,7 @@ function validateModel(program: Program, model: Model): void {
   let idCount = 0;
   let softDeleteCount = 0;
   const columnNames = new Map<string, string>(); // columnName → propName
+  const constraintNames = new Map<string, string>(); // constraintName -> decorator
 
   for (const [, prop] of model.properties) {
     // Skip navigation/array properties (relations)
@@ -131,6 +152,20 @@ function validateModel(program: Program, model: Model): void {
 
     // Per-property validations
     validatePropertyDecorators(program, prop);
+
+    const check = getCheck(program, prop);
+    if (check) {
+      const existing = constraintNames.get(check.name);
+      if (existing) {
+        reportDiagnostic(program, {
+          code: "duplicate-constraint-name",
+          target: prop,
+          format: { decorator: "check", constraintName: check.name },
+        });
+      } else {
+        constraintNames.set(check.name, "check");
+      }
+    }
   }
 
   // Multiple @key
@@ -304,6 +339,258 @@ function validateCascadeOnScalar(
   }
 }
 
+function validateRelations(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  const oneToOneReported = new Set<string>();
+  for (const { model } of tableModels) {
+    for (const prop of walkPropertiesInherited(model)) {
+      validateRelationProperty(program, model, prop, oneToOneReported);
+    }
+  }
+}
+
+function validateManyToMany(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  const tableByName = new Map<string, Model>();
+  const explicitJoinConflictReported = new Set<string>();
+
+  for (const { model, tableName } of tableModels) {
+    tableByName.set(tableName, model);
+  }
+
+  for (const { model } of tableModels) {
+    for (const prop of walkPropertiesInherited(model)) {
+      const joinTable = getManyToMany(program, prop);
+      if (!joinTable) {
+        continue;
+      }
+
+      const arrayTarget = unwrapArrayType(prop.type);
+      if (!arrayTarget) {
+        reportDiagnostic(program, {
+          code: "many-to-many-not-array",
+          target: prop,
+          format: {
+            propName: prop.name,
+            tableName: joinTable,
+          },
+        });
+        continue;
+      }
+
+      if (!isTable(program, arrayTarget)) {
+        reportDiagnostic(program, {
+          code: "many-to-many-target-not-table",
+          target: prop,
+          format: {
+            propName: prop.name,
+            tableName: joinTable,
+          },
+        });
+        continue;
+      }
+
+      const inverse = findInverseManyToManyDeclaration(program, model, arrayTarget);
+      if (!inverse) {
+        reportDiagnostic(program, {
+          code: "many-to-many-missing-inverse",
+          target: prop,
+          format: {
+            tableName: joinTable,
+            modelName: model.name,
+            propName: prop.name,
+            targetModel: arrayTarget.name,
+          },
+        });
+      } else if (inverse.joinTable !== joinTable) {
+        reportDiagnostic(program, {
+          code: "many-to-many-conflicting-table",
+          target: prop,
+          format: {
+            modelName: model.name,
+            propName: prop.name,
+            tableName: joinTable,
+            targetModel: arrayTarget.name,
+            targetProp: inverse.prop.name,
+            otherTableName: inverse.joinTable,
+          },
+        });
+      }
+
+      const explicitTable = tableByName.get(joinTable);
+      if (explicitTable) {
+        const leftName = getTypeFullName(program, model);
+        const rightName = getTypeFullName(program, arrayTarget);
+        const key =
+          leftName <= rightName
+            ? `${joinTable}:${leftName}:${rightName}`
+            : `${joinTable}:${rightName}:${leftName}`;
+        if (!explicitJoinConflictReported.has(key)) {
+          explicitJoinConflictReported.add(key);
+          reportDiagnostic(program, {
+            code: "many-to-many-conflicting-explicit-table",
+            target: prop,
+            format: {
+              tableName: joinTable,
+              modelName: model.name,
+              propName: prop.name,
+              existingModel: explicitTable.name,
+            },
+          });
+        }
+      }
+    }
+  }
+}
+
+function validateRelationProperty(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+  oneToOneReported: Set<string>,
+): void {
+  const fk = getForeignKeyConfig(program, prop);
+  const mappedBy = getMappedBy(program, prop);
+
+  if (fk && prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
+    validateOwnedRelation(program, model, prop, prop.type as Model, fk, oneToOneReported);
+  }
+
+  if (!mappedBy) {
+    return;
+  }
+
+  const arrayTarget = unwrapArrayType(prop.type);
+  const targetModel =
+    arrayTarget && isTable(program, arrayTarget)
+      ? arrayTarget
+      : prop.type.kind === "Model" && isTable(program, prop.type as Model)
+        ? (prop.type as Model)
+        : undefined;
+
+  if (!targetModel) {
+    return;
+  }
+
+  const inverseProp = resolvePropertyByName(targetModel, mappedBy);
+  if (!inverseProp) {
+    reportDiagnostic(program, {
+      code: "mapped-by-missing-property",
+      target: prop,
+      format: {
+        propName: prop.name,
+        fieldName: mappedBy,
+        targetModel: targetModel.name,
+      },
+    });
+    return;
+  }
+
+  if (!arrayTarget) {
+    const inverseFk = getForeignKeyConfig(program, inverseProp);
+    if (!inverseFk) {
+      return;
+    }
+
+    const localProperty = resolvePropertyReference(program, targetModel, inverseFk.field);
+    if (localProperty && !isRelationLocalKeyUnique(program, localProperty)) {
+      reportOneToOneMissingUnique(program, prop, model.name, localProperty.name, oneToOneReported);
+    }
+  }
+}
+
+function validateOwnedRelation(
+  program: Program,
+  model: Model,
+  relationProp: ModelProperty,
+  targetModel: Model,
+  fk: { field: string; target?: string },
+  oneToOneReported: Set<string>,
+): void {
+  const localProperty = resolvePropertyReference(program, model, fk.field);
+  const targetField = fk.target ?? "id";
+  const targetProperty = resolvePropertyReference(program, targetModel, targetField);
+  const targetFieldSuffix = fk.target ? `", "${fk.target}"` : "";
+
+  if (!localProperty) {
+    reportDiagnostic(program, {
+      code: "foreign-key-local-missing",
+      target: relationProp,
+      format: {
+        propName: relationProp.name,
+        modelName: model.name,
+        localField: fk.field,
+        targetFieldSuffix,
+      },
+    });
+    return;
+  }
+
+  if (!targetProperty) {
+    reportDiagnostic(program, {
+      code: "foreign-key-target-missing",
+      target: relationProp,
+      format: {
+        propName: relationProp.name,
+        localField: fk.field,
+        targetField,
+        targetModel: targetModel.name,
+        targetFieldSuffix,
+      },
+    });
+    return;
+  }
+
+  if (!arePropertyTypesCompatible(program, localProperty, targetProperty)) {
+    reportDiagnostic(program, {
+      code: "foreign-key-type-mismatch",
+      target: relationProp,
+      format: {
+        propName: relationProp.name,
+        localField: fk.field,
+        targetFieldSuffix,
+        modelName: model.name,
+        resolvedLocalField: localProperty.name,
+        targetModel: targetModel.name,
+        resolvedTargetField: targetProperty.name,
+        localType: describeComparableType(program, localProperty),
+        targetType: describeComparableType(program, targetProperty),
+      },
+    });
+  }
+
+  if (getOnDelete(program, relationProp) === "SET NULL" && !localProperty.optional) {
+    reportDiagnostic(program, {
+      code: "foreign-key-set-null-non-nullable",
+      target: relationProp,
+      format: {
+        propName: relationProp.name,
+        localField: localProperty.name,
+      },
+    });
+  }
+
+  const inverseOneToOne = findInverseSingularMappedBy(
+    program,
+    model,
+    targetModel,
+    relationProp.name,
+  );
+  if (inverseOneToOne && !isRelationLocalKeyUnique(program, localProperty)) {
+    reportOneToOneMissingUnique(
+      program,
+      inverseOneToOne,
+      targetModel.name,
+      localProperty.name,
+      oneToOneReported,
+    );
+  }
+}
+
 // ─── Composite constraint column validation ──────────────────────────────────
 
 function validateCompositeConstraints(
@@ -397,4 +684,73 @@ function validateCompositeConstraints(
 /** Check if a property has an explicit @map() decorator (vs auto-derived name) */
 function hasExplicitMap(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(MapKey).has(prop);
+}
+
+function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(model)) {
+    if (prop.name === name) {
+      return prop;
+    }
+  }
+  return undefined;
+}
+
+function findInverseSingularMappedBy(
+  program: Program,
+  sourceModel: Model,
+  targetModel: Model,
+  relationPropName: string,
+): ModelProperty | undefined {
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    if (getMappedBy(program, prop) !== relationPropName) {
+      continue;
+    }
+    if (prop.type.kind === "Model" && prop.type === sourceModel) {
+      return prop;
+    }
+  }
+  return undefined;
+}
+
+function findInverseManyToManyDeclaration(
+  program: Program,
+  sourceModel: Model,
+  targetModel: Model,
+): { prop: ModelProperty; joinTable: string } | undefined {
+  for (const prop of walkPropertiesInherited(targetModel)) {
+    const joinTable = getManyToMany(program, prop);
+    if (!joinTable) {
+      continue;
+    }
+
+    const inverseArrayTarget = unwrapArrayType(prop.type);
+    if (inverseArrayTarget === sourceModel) {
+      return { prop, joinTable };
+    }
+  }
+
+  return undefined;
+}
+
+function reportOneToOneMissingUnique(
+  program: Program,
+  target: ModelProperty,
+  modelName: string,
+  localField: string,
+  seen: Set<string>,
+): void {
+  const key = `${modelName}:${target.name}:${localField}`;
+  if (seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+  reportDiagnostic(program, {
+    code: "one-to-one-missing-unique",
+    target,
+    format: {
+      propName: target.name,
+      modelName,
+      localField,
+    },
+  });
 }

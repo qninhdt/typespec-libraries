@@ -25,3 +25,10 @@ export const CreateInvitationFormSchema = z
 
     .describe("Form payload for creating an invitation. Uses `@data`, so no DB schema is generated.")
 export type CreateInvitationForm = z.infer<typeof CreateInvitationFormSchema>;
+
+export const CreateInvitationFormMeta = {
+  inviteeEmail: { title: "Invitee Email", placeholder: "friend@example.com", inputType: "email" },
+  worldName: { title: "World Name", placeholder: "Choose a world" },
+  worldPrompt: { title: "World Prompt", inputType: "textarea" },
+  message: { title: "Personal Message", placeholder: "Add a short note for the invitee", inputType: "textarea" },
+} as const;

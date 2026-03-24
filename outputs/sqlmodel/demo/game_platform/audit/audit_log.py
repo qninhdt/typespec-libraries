@@ -6,11 +6,12 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import Column, DateTime, Index, func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, func
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
     from ..accounts.user import User
+    from ..worlds.world import World
 
 
 class AuditLog(SQLModel, table=True):
@@ -60,10 +61,22 @@ class AuditLog(SQLModel, table=True):
     # Nullable so audit history survives account deletion.
     actor_id: UUID | None = Field(
         default=None,
-        foreign_key="users.id",
-        sa_column_kwargs={
-            "comment": "Nullable so audit history survives account deletion."
-        },
+        sa_column=Column(
+            ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"),
+            comment="Nullable so audit history survives account deletion.",
+            index=True,
+        ),
+    )
+    # Optional world slug snapshot for human-friendly correlation in logs. Demonstrates a relation that targets a non-id unique column.
+    world_slug: str | None = Field(
+        default=None,
+        max_length=80,
+        sa_column=Column(
+            String,
+            ForeignKey("worlds.slug", ondelete="SET NULL", onupdate="CASCADE"),
+            comment="Optional world slug snapshot for human-friendly correlation in logs. Demonstrates a relation that targets a non-id unique column.",
+            index=True,
+        ),
     )
     created_at: datetime = Field(
         sa_column=Column(
@@ -74,3 +87,5 @@ class AuditLog(SQLModel, table=True):
     # ─── Relationships ─────────────────────
     # User who performed the action - SET NULL when the account is deleted.
     actor: User | None = Relationship()
+    # World context resolved through its stable slug instead of the primary key.
+    world_context: World | None = Relationship()

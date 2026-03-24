@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, func
+from sqlalchemy import Column, DateTime, ForeignKey, Index, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -55,12 +55,12 @@ class StoryNode(SQLModel, table=True):
     )
     # Foreign key to the owning world.
     world_id: UUID = Field(
-        index=True,
-        foreign_key="worlds.id",
-        sa_column_kwargs={
-            "nullable": False,
-            "comment": "Foreign key to the owning world.",
-        },
+        sa_column=Column(
+            ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            comment="Foreign key to the owning world.",
+            index=True,
+        )
     )
     # Depth of this node in the story tree - root is 0.
     depth: int = Field(
@@ -89,7 +89,18 @@ class StoryNode(SQLModel, table=True):
             JSONB, nullable=False, comment="IDs of lazily-expanded child nodes."
         )
     )
-    parent_id: UUID | None = Field(default=None, foreign_key="story_nodes.id")
+    # Searchable labels attached to the node for branch discovery.
+    tags: list[str] = Field(
+        sa_column=Column(
+            JSONB,
+            nullable=False,
+            comment="Searchable labels attached to the node for branch discovery.",
+        )
+    )
+    parent_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(ForeignKey("story_nodes.id", ondelete="CASCADE"), index=True),
+    )
 
     # ─── Relationships ─────────────────────
     # Owning world.

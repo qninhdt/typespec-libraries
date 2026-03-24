@@ -11,6 +11,8 @@ export interface GormEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /** Explicit persistence strategy for collection fields */
+  "collection-strategy"?: "jsonb" | "postgres";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<GormEmitterOptions> = {
@@ -22,6 +24,7 @@ const EmitterOptionsSchema: JSONSchemaType<GormEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "collection-strategy": { type: "string", nullable: true },
   },
   required: [],
 };

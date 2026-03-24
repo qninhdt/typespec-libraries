@@ -3,10 +3,13 @@ import { DataKey, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
   getDataLabel,
+  getManyToMany,
+  getMappedBy,
   getNamespaceFullName,
   getNamespaceSegments,
   getTableName,
   getTypeFullName,
+  getForeignKeyConfig,
   isData,
   isIgnored,
   isTable,
@@ -442,7 +445,12 @@ function collectDependencies(
 
     if (normalized.kind !== "data") {
       const relationLike = relationLikeType(program, prop.type);
-      if (relationLike) {
+      if (
+        relationLike &&
+        !getForeignKeyConfig(program, prop) &&
+        !getMappedBy(program, prop) &&
+        !getManyToMany(program, prop)
+      ) {
         reportDiagnostic(program, {
           code: "unsupported-relation-shape",
           target: prop,

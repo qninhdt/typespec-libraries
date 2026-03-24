@@ -1,4 +1,4 @@
-"""Demo.GamePlatform.Content.Taxonomy - auto-generated models. DO NOT EDIT."""
+"""demo.game_platform.content.taxonomy - auto-generated models. DO NOT EDIT."""
 
 from .tag import Tag
 

@@ -7,7 +7,7 @@ from pydantic import AnyUrl, BaseModel, EmailStr, Field
 
 
 class PublicUser(BaseModel):
-    """Public user record with sensitive and operational fields removed. Demonstrates `OmitProperties` across namespaces."""
+    """Public user record with sensitive and operational fields removed. Kept explicit so generated form schemas stay free of table-only relations."""
 
     # Unique identifier shared by most persisted records.
     id: UUID = Field(

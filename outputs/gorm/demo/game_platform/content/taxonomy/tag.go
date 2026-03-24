@@ -30,7 +30,7 @@ type Tag struct {
 	Category string `gorm:"column:category;type:varchar(50);not null;index:tags_category_idx;comment:Category used to group related tags." validate:"required,max=50" json:"category"`
 
 	// ─── Relationships ─────────────────────
-	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Tag.

@@ -17,6 +17,7 @@ describe("GORM one-to-many relationships", () => {
       model Post {
         @key id: uuid;
         title: string;
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
@@ -48,6 +49,7 @@ describe("GORM one-to-many relationships", () => {
       @table
       model Post {
         @key id: uuid;
+        userId: uuid;
         @foreignKey("user_id")
         @onDelete("CASCADE") @onUpdate("CASCADE")
         user: User;
@@ -157,6 +159,32 @@ describe("GORM many-to-one relationships", () => {
     const fkLine = output.split("\n").find((l) => l.includes("UserID "));
     expect(fkLine).toBeDefined();
   });
+
+  it("uses explicit referenced columns in relation tags", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Organization {
+        @key
+        @unique
+        code: string;
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        organizationCode: string;
+        @foreignKey("organizationCode", "code")
+        organization: Organization;
+      }
+    `,
+      "user.go",
+    );
+
+    expect(output).toContain("OrganizationCode string");
+    expect(output).toContain("foreignKey:OrganizationCode");
+    expect(output).toContain("references:Code");
+  });
 });
 
 describe("GORM optional relationships", () => {
@@ -212,5 +240,43 @@ describe("GORM FK field naming", () => {
     // FK field named WorldID (explicit property name "worldId" → "WorldID")
     expect(output).toContain("WorldID uuid.UUID");
     expect(output).toContain("column:world_id");
+  });
+});
+
+describe("GORM collection strategies", () => {
+  it("persists arrays as JSONB when configured", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model StoryNode {
+        @key id: uuid;
+        tags: string[];
+      }
+    `,
+      "story_node.go",
+      "test",
+      { "collection-strategy": "jsonb" },
+    );
+
+    expect(output).toContain("Tags datatypes.JSONSlice[string]");
+    expect(output).toContain('gorm:"column:tags;type:jsonb;not null"');
+  });
+
+  it("persists arrays as PostgreSQL arrays when configured", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model StoryNode {
+        @key id: uuid;
+        tags: string[];
+      }
+    `,
+      "story_node.go",
+      "test",
+      { "collection-strategy": "postgres" },
+    );
+
+    expect(output).toContain("Tags []string");
+    expect(output).toContain('gorm:"column:tags;type:text[];not null"');
   });
 });

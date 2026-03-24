@@ -34,7 +34,7 @@ type Subscription struct {
 	// Selected plan tier.
 	Plan SubscriptionPlan `gorm:"column:plan;type:varchar(20);not null;index:subscriptions_plan_idx;comment:Selected plan tier." validate:"oneof=free,basic,premium,enterprise" json:"plan"`
 	// Monthly price stored as NUMERIC(10,2) to avoid floating-point drift.
-	MonthlyPrice decimal.Decimal `gorm:"column:monthly_price;type:numeric(10,2);not null;comment:Monthly price stored as NUMERIC(10,2) to avoid floating-point drift." validate:"required" json:"monthlyPrice"`
+	MonthlyPrice decimal.Decimal `gorm:"column:monthly_price;type:numeric(10,2);not null;check:subscriptions_monthly_price_non_negative,monthlyPrice >= 0;comment:Monthly price stored as NUMERIC(10,2) to avoid floating-point drift." validate:"required" json:"monthlyPrice"`
 	// Start date of the billing period.
 	StartDate time.Time `gorm:"column:start_date;type:timestamptz;not null;comment:Start date of the billing period." validate:"required" json:"startDate"`
 	// Optional end date - null means the subscription is open-ended.
@@ -45,7 +45,7 @@ type Subscription struct {
 
 	// ─── Relationships ─────────────────────
 	// Owning user - cascade on delete to clean up subscriptions.
-	User User `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"user"`
+	User User `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"user"`
 }
 
 // TableName returns the table name for Subscription.

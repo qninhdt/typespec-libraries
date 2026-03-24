@@ -25,6 +25,9 @@ model StoryNode is Demo.GamePlatform.Shared.WorldOwned {
   @map("child_ids")
   childIds: jsonb;
 
+  /** Searchable labels attached to the node for branch discovery. */
+  tags: string[];
+
   // ─── Composite Indexes ─────────────────
   worldIdDepth: composite<"worldId", "depth">;
 

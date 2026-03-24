@@ -40,7 +40,7 @@ type User struct {
 	// Optional locale preference for formatting and localization.
 	PreferredLocale *string `gorm:"column:preferred_locale;type:varchar(16);comment:Optional locale preference for formatting and localization." validate:"omitempty,max=16" json:"preferredLocale,omitempty"`
 	// Entitlement credits or consumable balance.
-	Credits int32 `gorm:"column:credits;type:integer;not null;default:0;comment:Entitlement credits or consumable balance." validate:"required" json:"credits"`
+	Credits int32 `gorm:"column:credits;type:integer;not null;default:0;check:users_credits_non_negative,credits >= 0;comment:Entitlement credits or consumable balance." validate:"required" json:"credits"`
 	// Role used by moderation features and internal tooling.
 	Role UserRole `gorm:"column:role;type:varchar(20);not null;index:users_role_idx;default:player;comment:Role used by moderation features and internal tooling." validate:"oneof=player,moderator,admin" json:"role"`
 	// Whether the account is currently active.
@@ -50,7 +50,9 @@ type User struct {
 
 	// ─── Relationships ─────────────────────
 	// Billing subscriptions tied to the account.
-	Subscriptions []Subscription `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"`
+	Subscriptions []Subscription `gorm:"foreignKey:UserID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"subscriptions,omitempty"`
+	// Profile badges granted through a shorthand join table.
+	Badges []Badge `gorm:"many2many:user_badges" json:"badges,omitempty"`
 }
 
 // TableName returns the table name for User.

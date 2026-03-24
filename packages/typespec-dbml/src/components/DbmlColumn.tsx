@@ -4,6 +4,7 @@
 
 import type { ModelProperty, Program, Enum } from "@typespec/compiler";
 import {
+  getCheck,
   getColumnName,
   isKey,
   isAutoIncrement,
@@ -31,11 +32,9 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
     const enumName = (prop.type as Enum).name;
     const settings: ColumnSettings = {};
 
-    // Add documentation as note
     const doc = getDoc(program, prop);
-    if (doc) {
-      settings.note = doc;
-    }
+    const check = getCheck(program, prop);
+    settings.note = joinNotes(doc, check ? `check ${check.name}: ${check.expression}` : undefined);
 
     const settingsStr = formatColumnSettings(settings);
     return `  ${columnName} ${enumName}${settingsStr}`;
@@ -97,13 +96,16 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
     settings.notNull = true;
   }
 
-  // Add documentation as note
   const doc = getDoc(program, prop);
-  if (doc) {
-    settings.note = doc;
-  }
+  const check = getCheck(program, prop);
+  settings.note = joinNotes(doc, check ? `check ${check.name}: ${check.expression}` : undefined);
 
   const settingsStr = formatColumnSettings(settings);
 
   return `  ${columnName} ${typeStr}${settingsStr}`;
+}
+
+function joinNotes(...parts: Array<string | undefined>): string | undefined {
+  const defined = parts.filter((item): item is string => !!item);
+  return defined.length > 0 ? defined.join(" | ") : undefined;
 }

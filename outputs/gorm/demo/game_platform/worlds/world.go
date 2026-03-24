@@ -43,6 +43,8 @@ type World struct {
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index;index:worlds_visibility_deleted_at_idx,priority:2;comment:Soft delete marker for archival workflows." json:"deletedAt"`
 	// Display name of the world. Referenced by forms and collaboration models through lookup types.
 	Name string `gorm:"column:name;type:varchar(200);not null;index:worlds_name_idx;comment:Display name of the world. Referenced by forms and collaboration models through lookup types." validate:"required,max=200" json:"name"`
+	// Stable human-readable slug used by cross-namespace references.
+	Slug string `gorm:"column:slug;type:varchar(80);not null;uniqueIndex:worlds_slug_unique;comment:Stable human-readable slug used by cross-namespace references." validate:"required,max=80" json:"slug"`
 	// System prompt used to guide AI generation within the world.
 	Prompt string `gorm:"column:prompt;type:text;not null;comment:System prompt used to guide AI generation within the world." validate:"required" json:"prompt"`
 	// Who can discover and join this world.
@@ -55,7 +57,7 @@ type World struct {
 
 	// ─── Relationships ─────────────────────
 	// User who owns and manages this world.
-	Owner demo_game_platform_accounts.User `gorm:"foreignKey:OwnerID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"owner"`
+	Owner demo_game_platform_accounts.User `gorm:"foreignKey:OwnerID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"owner"`
 }
 
 // TableName returns the table name for World.

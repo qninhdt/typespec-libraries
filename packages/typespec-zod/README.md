@@ -1,25 +1,41 @@
 # @qninhdt/typespec-zod
 
-[![npm version](https://img.shields.io/npm/v/@qninhdt/typespec-zod)](https://www.npmjs.com/package/@qninhdt/typespec-zod)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+TypeSpec emitter that generates namespace-grouped Zod schemas from `@data` models.
 
-TypeSpec emitter that generates **Zod validation schemas** from your TypeSpec schemas. Works with models decorated with `@data` from `@qninhdt/typespec-orm`.
+This emitter is intentionally focused on form and DTO shapes. It follows the same namespace and selector rules as the ORM-backed emitters, but it does not emit `@table` models.
 
----
+## What This Emitter Is For
+
+Use this emitter when you want:
+
+- Zod schemas generated from TypeSpec `@data`
+- inferred TypeScript types beside the schemas
+- stable namespace-derived output layout
+- rich field metadata for frontend forms
 
 ## Installation
 
-```bash
-pnpm add -D @qninhdt/typespec-zod @qninhdt/typespec-orm
-# or
-npm install --save-dev @qninhdt/typespec-zod @qninhdt/typespec-orm
+```sh
+pnpm add -D \
+  @typespec/compiler \
+  @typespec/emitter-framework \
+  @alloy-js/core \
+  @alloy-js/typescript \
+  @qninhdt/typespec-orm \
+  @qninhdt/typespec-zod \
+  zod
 ```
 
----
+## Runtime Expectations
 
-## Configuration
+Generated Zod output is intended to drop into TypeScript projects cleanly.
 
-Add the emitter to your `tspconfig.yaml`:
+- standalone mode writes `package.json`, `tsconfig.json`, and `src/index.ts`
+- generated code targets ESM-style package output
+- runtime validation depends on `zod`
+- inferred types are emitted in the same pass as the schemas, so no post-processing step is required
+
+## Configuration Reference
 
 ```yaml
 emit:
@@ -29,130 +45,241 @@ options:
   "@qninhdt/typespec-zod":
     output-dir: "./outputs/zod"
     standalone: true
-    library-name: "@acme/schemas"
+    library-name: "@acme/forms"
+    include:
+      - "Demo.Platform.Forms"
 ```
 
-### Standalone mode
+Supported options:
 
-Use `standalone: true` to generate a complete, self-contained npm package with TypeScript declarations:
+| Option         | Type       | Meaning                                           |
+| -------------- | ---------- | ------------------------------------------------- |
+| `output-dir`   | `string`   | target directory handled by the TypeSpec compiler |
+| `standalone`   | `boolean`  | write package metadata and emit under `src/`      |
+| `library-name` | `string`   | package name for standalone output                |
+| `include`      | `string[]` | namespace or declaration selectors to keep        |
+| `exclude`      | `string[]` | namespace or declaration selectors to drop        |
+
+Not supported:
+
+- `filename`
+- `package-name`
+- legacy post-write alias patching
+
+## Selector Behavior
+
+Zod uses the same selector behavior as the ORM-backed emitters.
+
+Examples:
 
 ```yaml
-options:
-  "@qninhdt/typespec-zod":
-    output-dir: "./my-schemas"
-    standalone: true
-    library-name: "my-schemas"
+include:
+  - "Demo.GamePlatform.Forms"
+exclude:
+  - "Demo.GamePlatform.Forms.Internal"
 ```
 
-This produces a `package.json`, `tsconfig.json`, a namespace-first `src/` tree, and a root `index.ts` barrel ready to publish.
+Behavior:
 
----
+- selectors are dotted names, not glob patterns
+- `exclude` wins over `include`
+- excluding a dependency required by a selected `@data` model fails emission
 
-## Example
+## Output Layout
 
-### Input - TypeSpec schema
+Given:
+
+```typescript
+namespace App.Forms.Public;
+```
+
+Standalone output looks like:
+
+```text
+outputs/zod/
+  package.json
+  tsconfig.json
+  src/
+    app/
+      forms/
+        public/
+          CreateInvitationForm.ts
+    index.ts
+```
+
+Non-standalone mode writes directly under the namespace folders and skips package metadata files.
+
+## Generated Package Contract
+
+For each emitted `@data` model, the emitter writes:
+
+- a `ModelSchema`
+- `type Model = z.infer<typeof ModelSchema>`
+- `ModelMeta` when field metadata is available
+
+Standalone output also writes:
+
+- `package.json`
+- `tsconfig.json`
+- a root `src/index.ts` barrel that re-exports every generated data model
+
+This means consumers can either import from the root barrel or from specific namespace paths.
+
+## Schema Example
 
 ```typescript
 import "@qninhdt/typespec-orm";
+
 using Qninhdt.Orm;
 
-@data("Create User Form")
-model CreateUserForm {
-  @format("email") email: string;
+namespace Demo.Accounts;
 
-  @minLength(2) @maxLength(50) username: string;
+@table
+model User {
+  @key id: uuid;
 
-  @minValue(0) age?: int32;
+  @maxLength(320)
+  @format("email")
+  email: string;
 
-  @minItems(1) @maxItems(10) tags: string[];
+  @maxLength(100)
+  displayName: string;
+}
+
+namespace Demo.Forms;
+
+@data("Create Invitation Form")
+model CreateInvitationForm {
+  @title("Invitee Email")
+  @placeholder("friend@example.com")
+  inviteeEmail: Demo.Accounts.User.email;
+
+  @title("Message")
+  message?: text;
+}
+
+@@inputType(CreateInvitationForm.message::type, "textarea");
+```
+
+## Generated Behavior
+
+For each `@data` model, the emitter generates:
+
+- `ModelSchema`
+- `type Model = z.infer<typeof ModelSchema>`
+- optional `ModelMeta`
+
+Example shape:
+
+```ts
+import { z } from "zod";
+
+export const CreateInvitationFormSchema = z.object({
+  inviteeEmail: z.string().max(320).email(),
+  message: z.string().optional(),
+});
+
+export type CreateInvitationForm = z.infer<typeof CreateInvitationFormSchema>;
+
+export const CreateInvitationFormMeta = {
+  inviteeEmail: {
+    title: "Invitee Email",
+    placeholder: "friend@example.com",
+    inputType: "email",
+  },
+  message: {
+    title: "Message",
+    inputType: "textarea",
+  },
+} as const;
+```
+
+## Form Metadata
+
+The metadata export is built from:
+
+- `@title`
+- `@placeholder`
+- `@@inputType`
+- inferred input type from some formats such as `email` and `url`
+
+This gives frontend teams a single generated source for both validation and display hints.
+
+## Lookup Types And Constraint Inheritance
+
+Zod generation works especially well with lookup types:
+
+```typescript
+@data
+model PublicUser {
+  email: Demo.GamePlatform.Accounts.User.email;
 }
 ```
 
-### Output - Zod
+That pattern lets a form or DTO model inherit scalar constraints from the source property, such as:
 
-```typescript
-// Code generated by @qninhdt/typespec-zod. DO NOT EDIT.
-// Source: https://github.com/qninhdt/typespec-libraries
+- string length bounds
+- format-derived validators like `email` and `url`
+- titles and placeholders when modeled on the `@data` field
 
-import { z } from "zod";
+If the public shape should diverge from the persistence model, define a dedicated `@data` property explicitly instead of chaining more lookup reuse.
 
-export const CreateUserFormSchema = z.object({
-  email: z.string().email(),
-  username: z.string().min(2).max(50),
-  age: z.number().nonnegative().optional(),
-  tags: z.array(z.string()).min(1).max(10),
-});
-export type CreateUserForm = z.infer<typeof CreateUserFormSchema>;
+## Frontend Integration Pattern
+
+The intended usage pattern is:
+
+1. model public-facing input shapes as `@data`
+2. reuse field constraints with lookup types where it helps
+3. generate Zod output
+4. import `ModelSchema`, `Model`, and `ModelMeta` in the frontend
+
+That keeps validation, TypeScript inference, and form hints sourced from one schema without forcing frontend code to consume table models directly.
+
+## Supported Features
+
+- namespace-first layout
+- standalone package scaffolding via `library-name`
+- root `index.ts` barrel
+- lookup-type constraint inheritance
+- inferred TypeScript aliases emitted in the same render pass
+- form metadata export
+- shared filtering with `include` and `exclude`
+
+## Important Boundaries
+
+- only `@data` models are emitted
+- relation-heavy `@table` models are not the target of this emitter
+- if a `@data` model references a shape that cannot be represented cleanly as Zod output, fix the source schema instead of expecting silent fallback behavior
+
+## Common Diagnostics And Gotchas
+
+- `standalone-requires-library-name`
+  Standalone package generation requires `library-name`.
+- filtered dependency failures
+  A selected `@data` model still needs every required dependency included by the selector set.
+- table-only shapes leaking into forms
+  If a public form model starts to mirror a full persistence model, prefer writing an explicit `@data` model rather than reusing relation-heavy table shapes directly.
+
+Practical guidance:
+
+- keep `@data` models intentionally public-facing
+- use lookup types for individual fields more often than for whole object graphs
+- treat the root barrel as a convenience export, not a forced import style
+
+## Verification
+
+The repo verifies generated Zod output with:
+
+```sh
+pnpm run compile-examples
+pnpm --dir outputs/zod exec tsc -p tsconfig.json
 ```
 
----
+## Related Docs
 
-## Supported Decorators
-
-The emitter reads `@data` models and translates these decorators to Zod schema methods:
-
-| Decorator                 | Zod method                    | Example output                    |
-| ------------------------- | ----------------------------- | --------------------------------- |
-| `@minLength(n)`           | `.min(n)`                     | `z.string().min(5)`               |
-| `@maxLength(n)`           | `.max(n)`                     | `z.string().max(255)`             |
-| `@pattern(regex)`         | `.regex()`                    | `z.string().regex(/^[A-Z]+$/)`    |
-| `@format("email")`        | `.email()`                    | `z.string().email()`              |
-| `@format("url")`          | `.url()`                      | `z.string().url()`                |
-| `@minValue(n)`            | `.nonnegative()` or `.gte(n)` | `z.number().nonnegative()`        |
-| `@maxValue(n)`            | `.lte(n)`                     | `z.number().lte(100)`             |
-| `@minValueExclusive(n)`   | `.gt(n)`                      | `z.number().gt(0)`                |
-| `@maxValueExclusive(n)`   | `.lt(n)`                      | `z.number().lt(100)`              |
-| `@minItems(n)`            | `.min(n)` on array            | `z.array(z.string()).min(1)`      |
-| `@maxItems(n)`            | `.max(n)` on array            | `z.array(z.string()).max(10)`     |
-| optional field (`?`)      | `.optional()`                 | `z.string().optional()`           |
-| default value (`= value`) | `.default(value)`             | `z.string().default("Anonymous")` |
+- [`README.md`](/home/qninh/projects/typespec-libraries/README.md)
+- [`packages/typespec-orm/README.md`](/home/qninh/projects/typespec-libraries/packages/typespec-orm/README.md)
 
 ---
 
-## Type Mapping
-
-| TypeSpec type                           | Zod schema              |
-| --------------------------------------- | ----------------------- |
-| `string`                                | `z.string()`            |
-| `boolean`                               | `z.boolean()`           |
-| `int*` / `uint*` / `float*` / `decimal` | `z.number()`            |
-| `string[]`                              | `z.array(z.string())`   |
-| `Tuple`                                 | `z.tuple([...])`        |
-| `Enum`                                  | `z.enum([...])`         |
-| `string \| null`                        | `z.string().nullable()` |
-| Literal                                 | `z.literal(...)`        |
-| `unknown`                               | `z.unknown()`           |
-| `never`                                 | `z.never()`             |
-
----
-
-## Emitter Options
-
-| Option                       | Type       | Default         | Description                                     |
-| ---------------------------- | ---------- | --------------- | ----------------------------------------------- |
-| `output-dir`                 | `string`   | `./outputs/zod` | Directory for generated `.ts` files             |
-| `standalone`                 | `boolean`  | `false`         | Generate a complete npm package in output-dir   |
-| `library-name`               | `string`   | -               | Package name (required when `standalone: true`) |
-| `include`                    | `string[]` | `[]`            | Namespace / model selectors to include          |
-| `exclude`                    | `string[]` | `[]`            | Namespace / model selectors to exclude          |
-| `includeTemplateDeclaration` | `boolean`  | `false`         | Include template type declarations              |
-| `useDiscriminatedUnions`     | `boolean`  | `true`          | Use discriminated unions for union types        |
-| `emitDescriptions`           | `boolean`  | `true`          | Include doc strings as Zod descriptions         |
-
----
-
-## Diagnostics
-
-| Code                               | Severity | Condition                                 |
-| ---------------------------------- | -------- | ----------------------------------------- |
-| `standalone-requires-library-name` | error    | `standalone: true` without `library-name` |
-
----
-
-## License
-
-[MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
-
----
-
-_Made by @qninhdt and @claude-opus-4-6_
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

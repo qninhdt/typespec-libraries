@@ -1,25 +1,47 @@
 # @qninhdt/typespec-gorm
 
-[![npm version](https://img.shields.io/npm/v/@qninhdt/typespec-gorm)](https://www.npmjs.com/package/@qninhdt/typespec-gorm)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
+TypeSpec emitter that generates namespace-grouped Go packages for GORM.
 
-TypeSpec emitter that generates **Go structs for [GORM](https://gorm.io)** from your TypeSpec schemas annotated with `@qninhdt/typespec-orm`.
+This emitter consumes `@qninhdt/typespec-orm` models and generates:
 
----
+- GORM structs for `@table`
+- DTO/form structs for `@data`
+- standalone Go module metadata when requested
+
+## What This Emitter Is For
+
+Use this emitter when your source of truth is TypeSpec and you want generated Go models that:
+
+- follow namespace structure
+- preserve relation semantics
+- preserve named checks and composite constraints
+- validate generated Go as part of CI
 
 ## Installation
 
-```bash
-pnpm add -D @qninhdt/typespec-gorm @qninhdt/typespec-orm
-# or
-npm install --save-dev @qninhdt/typespec-gorm @qninhdt/typespec-orm
+```sh
+pnpm add -D \
+  @typespec/compiler \
+  @typespec/emitter-framework \
+  @alloy-js/core \
+  @alloy-js/typescript \
+  @qninhdt/typespec-orm \
+  @qninhdt/typespec-gorm
 ```
 
----
+## Runtime Expectations
 
-## Configuration
+Generated Go code is aimed at modern GORM projects.
 
-Add the emitter to your `tspconfig.yaml`:
+- standalone mode writes a `go.mod` rooted at the configured `library-name`
+- generated models import `gorm.io/gorm`
+- UUID fields use `github.com/google/uuid`
+- decimal fields may pull in `github.com/shopspring/decimal`
+- `jsonb` collection storage uses `gorm.io/datatypes`
+
+The repo currently verifies generated output with Go `1.22`.
+
+## Configuration Reference
 
 ```yaml
 emit:
@@ -29,370 +51,262 @@ options:
   "@qninhdt/typespec-gorm":
     output-dir: "./outputs/gorm"
     standalone: true
-    library-name: "github.com/acme/demo"
+    library-name: "github.com/acme/domain-models"
+    collection-strategy: "jsonb"
+    include:
+      - "Demo.Platform"
+    exclude:
+      - "Demo.Platform.Audit"
 ```
 
-Namespaces now determine folders and Go package boundaries. Root-level ORM models are rejected.
+Supported options:
 
----
+| Option                | Type                    | Meaning                                           |
+| --------------------- | ----------------------- | ------------------------------------------------- |
+| `output-dir`          | `string`                | target directory handled by the TypeSpec compiler |
+| `standalone`          | `boolean`               | write `go.mod` and the root helper file           |
+| `library-name`        | `string`                | Go module/import root used in standalone mode     |
+| `collection-strategy` | `"jsonb" \| "postgres"` | persistence strategy for array-like fields        |
+| `include`             | `string[]`              | namespace or declaration selectors to keep        |
+| `exclude`             | `string[]`              | namespace or declaration selectors to drop        |
 
-## Example
+Not supported:
 
-### Input - TypeSpec schema
+- `package-name`
+- flat `models/` layout configuration
+
+If you want `models` in the generated path, put `Models` in the namespace.
+
+## Selector Behavior
+
+GORM uses the shared ORM selector engine. Selectors are dotted names with prefix matching and no wildcard syntax.
+
+Examples:
+
+```yaml
+include:
+  - "Demo.GamePlatform"
+exclude:
+  - "Demo.GamePlatform.Audit"
+  - "Demo.GamePlatform.Forms"
+```
+
+Behavior:
+
+- `exclude` wins over `include`
+- redundant selectors warn
+- excluding a required relation target, enum, alias, or mixin fails emission before files are written
+
+## Output Layout
+
+Given:
+
+```typescript
+namespace App.Identity;
+```
+
+Standalone output looks like:
+
+```text
+outputs/gorm/
+  go.mod
+  models.go
+  app/
+    identity/
+      user.go
+```
+
+Rules:
+
+- namespace segments are converted with `camelToSnake`
+- the final namespace segment becomes the Go package name
+- the full namespace directory becomes the import path
+
+Example import:
+
+```go
+import "github.com/acme/domain-models/app/identity"
+```
+
+### Root Helper File
+
+In standalone mode the emitter also writes a root helper file, currently `models.go`, that:
+
+- imports every emitted namespace package
+- exposes `Init(db *gorm.DB) error`
+- runs `db.AutoMigrate(...)` over the generated table models
+
+That helper is intended as a convenience entrypoint for generated model packages. It is not a replacement for a full application migration strategy.
+
+## Schema Example
 
 ```typescript
 import "@qninhdt/typespec-orm";
+
 using Qninhdt.Orm;
 
-enum PostStatus {
-  draft: "draft",
-  published: "published",
-  archived: "archived",
-}
+namespace Demo.Shared;
 
-/** A blog post authored by a user. */
-@table("posts")
-model Post {
+@tableMixin
+model Timestamped {
   @key id: uuid;
-
-  @maxLength(255) title: string;
-  body: text;
-
-  @index status: PostStatus;
-
-  @precision(10, 2) @map("view_count")
-  viewCount: decimal;
-
-  @autoCreateTime @map("created_at") createdAt: utcDateTime;
-  @autoUpdateTime @map("updated_at") updatedAt?: utcDateTime;
-  @softDelete     @map("deleted_at") deletedAt?: utcDateTime;
-
-  @foreignKey("author_id") @onDelete("CASCADE")
-  author: User;
-
-  // Use composite<> type for multi-column indexes
-  authorStatus: composite<"author_id", "status">;
-}
-```
-
-### Output - Go (GORM)
-
-```go
-// Code generated by @qninhdt/typespec-gorm. DO NOT EDIT.
-// Source: https://github.com/qninhdt/typespec-libraries
-
-package models
-
-import (
-    "time"
-
-    "github.com/google/uuid"
-    "github.com/shopspring/decimal"
-    "gorm.io/gorm"
-)
-
-// PostStatus represents the post_status enum.
-type PostStatus string
-
-const (
-    PostStatusDraft     PostStatus = "draft"
-    PostStatusPublished PostStatus = "published"
-    PostStatusArchived  PostStatus = "archived"
-)
-
-// Post A blog post authored by a user.
-type Post struct {
-    ID        uuid.UUID       `gorm:"column:id;type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-    Title     string          `gorm:"column:title;type:varchar(255);not null" validate:"required,max=255" json:"title"`
-    Body      string          `gorm:"column:body;type:text;not null" validate:"required" json:"body"`
-    Status    PostStatus      `gorm:"column:status;type:varchar(9);not null;index" validate:"required,oneof=draft published archived" json:"status"`
-    ViewCount decimal.Decimal `gorm:"column:view_count;type:numeric(10,2);not null" json:"viewCount"`
-    CreatedAt time.Time       `gorm:"column:created_at;type:timestamptz;not null;autoCreateTime" json:"createdAt"`
-    UpdatedAt *time.Time      `gorm:"column:updated_at;type:timestamptz;autoUpdateTime" json:"updatedAt,omitempty"`
-    DeletedAt gorm.DeletedAt  `gorm:"column:deleted_at;index" json:"deletedAt"`
-    AuthorID  uuid.UUID       `gorm:"column:author_id;type:uuid;not null;index;constraint:OnDelete:CASCADE" json:"authorId"`
-
-    // ─── Relationships ─────────────────────
-    Author User `gorm:"foreignKey:AuthorID;constraint:OnDelete:CASCADE" json:"author,omitempty"`
+  @autoCreateTime createdAt: utcDateTime;
+  @autoUpdateTime updatedAt?: utcDateTime;
 }
 
-// TableName returns the table name for Post.
-func (Post) TableName() string { return "posts" }
-```
+namespace Demo.Accounts;
 
----
-
-## Relations
-
-All relations must be **explicitly declared** using `@foreignKey` and `@mappedBy`.
-
-### Many-to-One
-
-```typescript
 @table
-model Post {
-  @key id: uuid;
-  title: string;
+model User is Demo.Shared.Timestamped {
+  @unique
+  @maxLength(320)
+  @format("email")
+  email: string;
 
-  @foreignKey("author_id")
-  @onDelete("CASCADE")
-  author: User;
-}
-```
+  @check("users_credits_non_negative", "credits >= 0")
+  credits: int32 = 0;
 
-### One-to-Many
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  @mappedBy("author")
-  posts: Post[];
-}
-```
-
-### One-to-One
-
-Use `owner_id` as **both primary key and foreign key** (identifying relationship):
-
-```typescript
-@table
-model User {
-  @key id: uuid;
-
-  // Inverse side - points back to Passport
-  @mappedBy("owner")
-  passport?: Passport;
+  @manyToMany("user_badges")
+  badges?: Badge[];
 }
 
 @table
-model Passport {
-  // owner_id is both PK and FK
-  @key ownerId: uuid;
+model Badge is Demo.Shared.Timestamped {
+  @unique code: string;
 
-  passportNumber: string;
-
-  @foreignKey("owner_id")
-  owner: User;
+  @manyToMany("user_badges")
+  users?: User[];
 }
-```
 
-### Cascade
-
-```typescript
 @table
-model Post {
-  @key id: uuid;
+model Subscription is Demo.Shared.Timestamped {
+  userId: uuid;
 
-  @foreignKey("author_id")
+  @foreignKey("userId")
   @onDelete("CASCADE")
   @onUpdate("CASCADE")
-  author: User;
-}
-```
-
-### Self-Referencing
-
-```typescript
-@table
-model Category {
-  @key id: uuid;
-  name: string;
-
-  // Category has many subcategories
-  @mappedBy("parent")
-  children?: Category[];
-
-  // Parent category reference
-  @foreignKey("parent_id")
-  parent?: Category;
-}
-```
-
-### Many-to-Many
-
-A many-to-many relationship requires a **junction/through table**. You need to explicitly define the through model:
-
-```typescript
-// User and Role have a many-to-many relationship via UserRole
-@table
-model User {
-  @key id: uuid;
-  name: string;
-
-  // Points to "user" property on UserRole
-  @mappedBy("user")
-  userRoles: UserRole[];
-}
-
-@table
-model Role {
-  @key id: uuid;
-  name: string;
-
-  // Points to "role" property on UserRole
-  @mappedBy("role")
-  roleUsers: UserRole[];
-}
-
-// Junction table - defines the relationship
-@table
-model UserRole {
-  @key id: uuid;
-
-  @foreignKey("user_id")
   user: User;
-
-  @foreignKey("role_id")
-  role: Role;
 }
 ```
 
----
+## Generated Behavior
 
-## Composite Indexes & Unique Constraints (`composite<>`)
+### Tables
 
-Use the `composite<>` type to define multi-column indexes and unique constraints:
+`@table` models become GORM structs with:
+
+- `column:` tags
+- type mapping from TypeSpec scalar to Go/GORM type
+- `primaryKey`, `uniqueIndex`, `index`, `default`, and precision tags as needed
+- `TableName()` methods
+
+### Data models
+
+`@data` models become plain Go structs with:
+
+- `json` tags
+- `validate` tags where applicable
+- form metadata encoded into `form` tags from `@title` and `@placeholder`
+
+### Checks
 
 ```typescript
-@table
-model Post {
-  @key id: uuid;
-  authorId: uuid;
-  status: string;
-
-  // Multi-column index
-  authorStatus: composite<"authorId", "status">;
-
-  // Unique constraint
-  @unique
-  authorStatus: composite<"authorId", "status">;
-}
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 ```
 
-**Go (GORM):**
+becomes a named `check:` tag in the emitted struct field metadata.
 
-```go
-type Post struct {
-    AuthorID uuid.UUID `gorm:"column:author_id;index;index:posts_author_status_idx,priority:1"`
-    Status   string    `gorm:"column:status;index;index:posts_author_status_idx,priority:2"`
-}
-```
-
----
-
-## Form / Data Models (`@data`)
-
-Models decorated with `@data` (instead of `@table`) are emitted as **plain Go structs** - no GORM tags, no `TableName()`. Fields get `validate`, `json`, and `form` struct tags. `@title` and `@placeholder` are included in the `form` tag.
-
-### Input
+### Many-to-many shorthand
 
 ```typescript
-@data("Create Invitation Form")
-model CreateInvitationForm {
-  /** Lookup type - inherits @maxLength(320) and @format("email") from User.email */
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: User.email;
-
-  @title("Personal Message")
-  @placeholder("Write a short note to your invitee…")
-  @maxLength(1000)
-  message?: text;
-}
-
-@@inputType(CreateInvitationForm.message::type, "textarea");
+@manyToMany("user_badges")
+badges?: Badge[];
 ```
 
-### Output
+becomes:
 
-```go
-// Code generated by @qninhdt/typespec-gorm. DO NOT EDIT.
+- a relationship field
+- `gorm:"many2many:user_badges"`
 
-package models
+For GORM, shorthand join tables are inferred from relationship metadata rather than emitted as dedicated Go structs.
 
-// CreateInvitationForm Create Invitation Form
-type CreateInvitationForm struct {
-	// Lookup type - inherits @maxLength(320) and @format("email") from User.email
-	InviteeEmail string  `validate:"required,max=320,email" json:"inviteeEmail" form:"inviteeEmail,title=Invitee Email,placeholder=friend@example.com"`
-	Message      *string `validate:"omitempty,max=1000" json:"message,omitempty" form:"message,title=Personal Message,placeholder=Write a short note to your invitee…"`
-}
+### Collections
+
+`collection-strategy` controls array persistence:
+
+- `"jsonb"`: emit `datatypes.JSONSlice[...]`
+- `"postgres"`: emit native PostgreSQL array types where supported
+
+Unsupported collection shapes fail with diagnostics.
+
+## Generated Module Contract
+
+What you should expect from standalone output:
+
+- `go.mod` using `library-name` as the module path
+- one Go package per namespace directory
+- package names derived from the final namespace segment
+- a root helper file for imports and `AutoMigrate`
+- deterministic file names derived from model names
+
+What you should expect from non-standalone output:
+
+- code only
+- no `go.mod`
+- no surprise packaging metadata outside the generated code tree
+
+## Supported Features
+
+- namespace-first output
+- standalone module generation with `go.mod`
+- `@tableMixin`
+- referenced-column foreign keys
+- one-to-one, many-to-one, and one-to-many relations
+- many-to-many shorthand
+- named checks
+- collection persistence strategies
+- DTO/form generation from `@data`
+- shared filtering with `include` and `exclude`
+
+## Limitations
+
+- many-to-many shorthand is intended for simple join tables only
+- if the join needs payload columns, use an explicit junction model
+- cross-package Go relationships can create import cycles depending on the schema; the example repo demonstrates a same-namespace many-to-many pattern for that reason
+
+## Common Diagnostics And Gotchas
+
+- `standalone-requires-library-name`
+  Standalone mode cannot write a usable Go module without `library-name`.
+- `unsupported-type`
+  The source TypeSpec field could not be mapped to a Go type or GORM field representation.
+- `missing-back-reference`
+  A one-to-many relation has no inverse many-to-one. GORM may still compile, but automatic FK behavior can be incomplete.
+- `unknown-format`
+  The field format does not have a Go validation-tag equivalent and will be ignored.
+
+Modeling guidance:
+
+- keep many-to-many shorthand within a package when possible to avoid import-cycle pressure
+- prefer explicit junction tables if the relationship needs payload fields or custom naming beyond a simple join
+- use selectors to emit bounded contexts cleanly, but keep dependency closure intact
+
+## Verification
+
+The repo verifies generated Go output with:
+
+```sh
+pnpm run compile-examples
+cd outputs/gorm
+go build -mod=mod ./...
 ```
 
----
+## Related Docs
 
-## TypeSpec → Go Type Mapping
-
-> All column types target **PostgreSQL**. Apply `@precision(p, s)` on `decimal`/`float64` to produce `numeric(p,s)`.
-
-| TypeSpec type | PostgreSQL column  | Go type           | GORM tag (`type:`) | Required import                 |
-| ------------- | ------------------ | ----------------- | ------------------ | ------------------------------- |
-| `uuid`        | `uuid`             | `uuid.UUID`       | `uuid`             | `github.com/google/uuid`        |
-| `string`      | `varchar(255)`     | `string`          | `varchar(255)`     | -                               |
-| `text`        | `text`             | `string`          | `text`             | -                               |
-| `boolean`     | `boolean`          | `bool`            | `boolean`          | -                               |
-| `int8`        | `smallint`         | `int8`            | `smallint`         | -                               |
-| `int16`       | `smallint`         | `int16`           | `smallint`         | -                               |
-| `int32`       | `integer`          | `int32`           | `integer`          | -                               |
-| `int64`       | `bigint`           | `int64`           | `bigint`           | -                               |
-| `uint8`       | `smallint`         | `uint8`           | `smallint`         | -                               |
-| `uint16`      | `integer`          | `uint16`          | `integer`          | -                               |
-| `uint32`      | `bigint`           | `uint32`          | `bigint`           | -                               |
-| `uint64`      | `bigint`           | `uint64`          | `bigint`           | -                               |
-| `float32`     | `real`             | `float32`         | `real`             | -                               |
-| `float64`     | `double precision` | `float64`         | `double precision` | -                               |
-| `decimal`     | `numeric`          | `decimal.Decimal` | `numeric`          | `github.com/shopspring/decimal` |
-| `serial`      | `serial`           | `int32`           | `serial`           | -                               |
-| `bigserial`   | `bigserial`        | `int64`           | `bigserial`        | -                               |
-| `utcDateTime` | `timestamptz`      | `time.Time`       | `timestamptz`      | `time`                          |
-| `plainDate`   | `date`             | `time.Time`       | `date`             | `time`                          |
-| `plainTime`   | `time`             | `time.Time`       | `time`             | `time`                          |
-| `duration`    | `interval`         | `time.Duration`   | `interval`         | `time`                          |
-| `bytes`       | `bytea`            | `[]byte`          | `bytea`            | -                               |
-| `jsonb`       | `jsonb`            | `datatypes.JSON`  | `jsonb`            | `gorm.io/datatypes`             |
-
-**`@format` → `validate` tag mapping:**
-
-| `@format(...)`    | Go `validate` tag value |
-| ----------------- | ----------------------- |
-| `"email"`         | `email`                 |
-| `"url"` / `"uri"` | `url`                   |
-| `"uuid"`          | `uuid`                  |
-| `"ipv4"`          | `ipv4`                  |
-| `"ipv6"`          | `ipv6`                  |
-| `"hostname"`      | `hostname`              |
+- [`README.md`](/home/qninh/projects/typespec-libraries/README.md)
+- [`packages/typespec-orm/README.md`](/home/qninh/projects/typespec-libraries/packages/typespec-orm/README.md)
 
 ---
 
-## Emitter Options
-
-| Option         | Type       | Default          | Description                                           |
-| -------------- | ---------- | ---------------- | ----------------------------------------------------- |
-| `output-dir`   | `string`   | `./outputs/gorm` | Directory for generated `.go` files                   |
-| `standalone`   | `boolean`  | `false`          | Generate a self-contained Go module                   |
-| `library-name` | `string`   | -                | Go module path used for standalone output and imports |
-| `include`      | `string[]` | `[]`             | Namespace / model selectors to include                |
-| `exclude`      | `string[]` | `[]`             | Namespace / model selectors to exclude                |
-
----
-
-## Diagnostics
-
-| Code                     | Severity | Condition                                     |
-| ------------------------ | -------- | --------------------------------------------- |
-| `gorm-unsupported-type`  | warning  | TypeSpec type has no known Go equivalent      |
-| `gorm-missing-precision` | warning  | `decimal`/`float64` used without `@precision` |
-| `gorm-unknown-format`    | warning  | `@format` value is not recognised             |
-| `gorm-unknown-on-delete` | warning  | `@onDelete` action is not a standard SQL rule |
-
----
-
-## License
-
-[MIT](../../LICENSE) © [Nguyen Quang Ninh](https://github.com/qninhdt)
-
----
-
-_Made by @qninhdt and @claude-opus-4-6_
+Made with heart by @qninhdt, with GPT-5.4 and Claude Opus 4.6.

@@ -5,6 +5,25 @@ All notable changes to `@qninhdt/typespec-gorm` will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- Namespace-first Go package generation driven by the shared normalized ORM graph.
+- `library-name`, `include`, `exclude`, and collection strategy support aligned with the shared emitter contract.
+- GORM emission for `@tableMixin`, referenced-column foreign keys, named checks, collection persistence, and `@manyToMany(...)` shorthand.
+- Standalone `go.mod` generation plus a root helper file that imports emitted namespace packages and exposes `Init(db *gorm.DB)`.
+
+### Changed
+
+- Output now maps namespaces directly to Go package directories instead of relying on a flat `models/` layout.
+- Package names now come from the last namespace segment after snake_case normalization.
+- Generated examples and CI verification now compile the namespace-based Go output.
+
+### Removed
+
+- Legacy `package-name` configuration and related flat-layout assumptions.
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

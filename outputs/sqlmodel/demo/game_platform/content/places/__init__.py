@@ -1,4 +1,4 @@
-"""Demo.GamePlatform.Content.Places - auto-generated models. DO NOT EDIT."""
+"""demo.game_platform.content.places - auto-generated models. DO NOT EDIT."""
 
 from .location import Location
 

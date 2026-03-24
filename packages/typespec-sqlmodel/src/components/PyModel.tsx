@@ -6,9 +6,10 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import type { Model, Program } from "@typespec/compiler";
+import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import {
   getColumnName,
+  getCheck,
   getCompositeFields,
   getDoc,
   classifyProperties,
@@ -24,19 +25,31 @@ import {
   buildPythonImportBlock,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
+import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
 import { generateRelationField } from "./PyRelationField.jsx";
+import type { SqlModelEmitterOptions } from "../lib.js";
 
 export interface PyModelFileProps {
   readonly program: Program;
   readonly normalizedModel: NormalizedOrmModel;
   readonly modelLookup: Map<Model, NormalizedOrmModel>;
+  readonly collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
+  readonly manyToManySecondaryByProp?: Map<ModelProperty, string>;
+  readonly runtimeImports?: Map<string, Set<string>>;
 }
 
 /**
  * JSX component: renders a complete Python source file for a SQLModel class.
  */
 export function PyModelFile(props: PyModelFileProps): Children {
-  const { program, normalizedModel, modelLookup } = props;
+  const {
+    program,
+    normalizedModel,
+    modelLookup,
+    collectionStrategy,
+    manyToManySecondaryByProp,
+    runtimeImports,
+  } = props;
   const { model } = normalizedModel;
   const tableName = normalizedModel.tableName!;
   const fileName = camelToSnake(model.name) + ".py";
@@ -58,6 +71,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
   const relationTargetModels = new Set<Model>();
+  const tableArgEntries: string[] = [];
 
   // Ignored fields → ClassVar
   for (const { prop, enumInfo } of ignored) {
@@ -69,7 +83,9 @@ export function PyModelFile(props: PyModelFileProps): Children {
     if (!sqlmodelImports.has("Relationship")) {
       sqlmodelImports.add("Relationship");
     }
-    const { field, targetModel } = generateRelationField(program, prop, resolved);
+    const secondary =
+      resolved.kind === "many-to-many" ? manyToManySecondaryByProp?.get(prop) : undefined;
+    const { field, targetModel } = generateRelationField(program, prop, resolved, secondary);
     relationDefs.push(field);
     // Add to TYPE_CHECKING imports for cross-model relations (including self-referential)
     relationTargetModels.add(targetModel);
@@ -80,11 +96,22 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
 
-  // Build a map of FK column name -> targetTable for use in field generation
-  const fkInfoMap = new Map<string, string>();
+  // Build a map of FK column name -> target table/column metadata for use in field generation
+  const fkInfoMap = new Map<string, ResolvedForeignKeyFieldInfo>();
   for (const { resolved } of relations) {
+    if (resolved.kind === "many-to-many") {
+      continue;
+    }
+    if (resolved.localProperty.model !== model) {
+      continue;
+    }
     const dbColumnName = camelToSnake(resolved.fkColumnName);
-    fkInfoMap.set(dbColumnName, resolved.targetTable);
+    fkInfoMap.set(dbColumnName, {
+      targetTable: resolved.targetTable,
+      targetColumn: resolved.fkTargetColumn,
+      onDelete: resolved.onDelete,
+      onUpdate: resolved.onUpdate,
+    });
   }
 
   // Regular DB-mapped fields
@@ -93,7 +120,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
     if (getCompositeFields(program, prop)) continue;
     const columnName = getColumnName(program, prop);
     const isPartOfCompositeUnique = compositeUniqueColumns.has(columnName);
-    const targetTable = fkInfoMap.get(columnName);
+    const relationForeignKey = fkInfoMap.get(columnName);
     fieldDefs.push(
       generateField(
         program,
@@ -104,13 +131,13 @@ export function PyModelFile(props: PyModelFileProps): Children {
         needsField,
         needsColumn,
         isPartOfCompositeUnique,
-        targetTable,
+        relationForeignKey,
+        collectionStrategy,
       ),
     );
   }
 
   // Composite indexes & unique constraints
-  const hasTableArgs = compositeTypeFields.length > 0;
   let hasIndex = false;
   let hasUniqueConstraint = false;
   if (compositeTypeFields.length > 0) {
@@ -125,6 +152,20 @@ export function PyModelFile(props: PyModelFileProps): Children {
     if (hasUniqueConstraint) saImports.add("sqlalchemy.UniqueConstraint");
   }
 
+  for (const prop of model.properties.values()) {
+    const check = getCheck(program, prop);
+    if (!check) {
+      continue;
+    }
+
+    saImports.add("sqlalchemy.CheckConstraint");
+    tableArgEntries.push(
+      `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(check.expression)}, name=${JSON.stringify(check.name)})`,
+    );
+  }
+
+  const hasTableArgs = compositeTypeFields.length > 0 || tableArgEntries.length > 0;
+
   // Enum imports
   if (enumTypes.size > 0) {
     stdImports.add("enum.Enum");
@@ -134,6 +175,15 @@ export function PyModelFile(props: PyModelFileProps): Children {
   // Build file content
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
+
+  if (runtimeImports && runtimeImports.size > 0) {
+    code += "\n";
+    for (const [moduleName, names] of [...runtimeImports.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      code += `from ${moduleName} import ${[...names].sort().join(", ")}\n`;
+    }
+  }
 
   // TYPE_CHECKING block for relation imports (avoids circular dependency)
   if (relationTargetModels.size > 0) {
@@ -163,7 +213,6 @@ export function PyModelFile(props: PyModelFileProps): Children {
 
   // Table args
   if (hasTableArgs) {
-    const tableArgEntries: string[] = [];
     for (const ct of compositeTypeFields) {
       // Convert camelCase column names to snake_case for SQL
       const cols = ct.columns.map((c) => `"${camelToSnake(c)}"`).join(", ");

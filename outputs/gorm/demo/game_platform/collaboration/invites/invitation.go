@@ -50,8 +50,9 @@ type Invitation struct {
 
 	// ─── Relationships ─────────────────────
 	// User who created the invitation.
-	Inviter demo_game_platform_accounts.User `gorm:"foreignKey:InviterID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"inviter"` // World the invite grants access to.
-	World   demo_game_platform_worlds.World  `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	Inviter demo_game_platform_accounts.User `gorm:"foreignKey:InviterID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"inviter"`
+	// World the invite grants access to.
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Invitation.

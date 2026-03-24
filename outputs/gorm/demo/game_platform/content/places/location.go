@@ -33,7 +33,7 @@ type Location struct {
 	Coordinates *datatypes.JSON `gorm:"column:coordinates;type:jsonb;comment:Bounding box or point stored as GeoJSON." validate:"omitempty" json:"coordinates,omitempty"`
 
 	// ─── Relationships ─────────────────────
-	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for Location.

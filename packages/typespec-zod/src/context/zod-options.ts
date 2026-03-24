@@ -211,7 +211,4 @@ export const defaultZodOptions: ZodEmitterOptions = {
   "library-name": undefined,
   include: undefined,
   exclude: undefined,
-  includeTemplateDeclaration: false,
-  useDiscriminatedUnions: true,
-  emitDescriptions: true,
 };

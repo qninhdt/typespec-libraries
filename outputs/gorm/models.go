@@ -21,6 +21,7 @@ import (
 // Returns a slice of all registered models for auto-migration.
 func Init(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&demo_game_platform_accounts.Badge{},
 		&demo_game_platform_accounts.Subscription{},
 		&demo_game_platform_accounts.User{},
 		&demo_game_platform_audit.AuditLog{},

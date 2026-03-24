@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID, uuid4
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -53,12 +53,12 @@ class Location(SQLModel, table=True):
     )
     # Foreign key to the owning world.
     world_id: UUID = Field(
-        index=True,
-        foreign_key="worlds.id",
-        sa_column_kwargs={
-            "nullable": False,
-            "comment": "Foreign key to the owning world.",
-        },
+        sa_column=Column(
+            ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            comment="Foreign key to the owning world.",
+            index=True,
+        )
     )
     # Name of the location - indexed for lookup.
     name: str = Field(

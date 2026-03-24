@@ -13,9 +13,12 @@ options:
     output-dir: "./outputs/gorm"
     standalone: true
     library-name: "github.com/demo-user/demo"
+    collection-strategy: "jsonb"
   "@qninhdt/typespec-sqlmodel":
     output-dir: "./outputs/sqlmodel"
     standalone: true
     library-name: "demo"
+    collection-strategy: "jsonb"
   "@qninhdt/typespec-dbml":
     output-dir: "./outputs/dbml"
+    split-by-namespace: true

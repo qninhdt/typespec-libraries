@@ -243,24 +243,61 @@ export function generateEnumClass(enumName: string, members: EnumMemberInfo[]): 
   return code;
 }
 
-/**
- * Generate __init__.py that re-exports all models.
- */
-export function generateInit(
-  modelNames: string[],
-  moduleFiles: string[],
-  moduleName: string,
-): string {
-  const imports = modelNames.map((name, i) => `from .${moduleFiles[i]} import ${name}`);
-  const allExports = modelNames.map((name) => `${FOUR_SPACES}"${name}",`);
+export interface PyInitModelExport {
+  name: string;
+  moduleFile: string;
+}
 
-  return (
-    `"""${moduleName} - auto-generated models. DO NOT EDIT."""\n\n` +
-    imports.join("\n") +
-    "\n\n__all__ = [\n" +
-    allExports.join("\n") +
-    "\n]\n"
-  );
+export interface PyInitOptions {
+  moduleName: string;
+  models?: PyInitModelExport[];
+  childPackages?: string[];
+  includeMetadata?: boolean;
+  importAssociations?: boolean;
+}
+
+/**
+ * Generate __init__.py for a generated package.
+ */
+export function generateInit(options: PyInitOptions): string {
+  const imports: string[] = [];
+  const allExports: string[] = [];
+
+  if (options.includeMetadata) {
+    imports.push("from sqlmodel import SQLModel");
+  }
+
+  if (options.importAssociations) {
+    imports.push("from . import __associations__");
+  }
+
+  for (const childPackage of options.childPackages ?? []) {
+    imports.push(`from . import ${childPackage}`);
+    allExports.push(`${FOUR_SPACES}"${childPackage}",`);
+  }
+
+  for (const model of options.models ?? []) {
+    imports.push(`from .${model.moduleFile} import ${model.name}`);
+    allExports.push(`${FOUR_SPACES}"${model.name}",`);
+  }
+
+  let code = `"""${options.moduleName} - auto-generated models. DO NOT EDIT."""\n\n`;
+
+  if (imports.length > 0) {
+    code += imports.join("\n");
+    code += "\n\n";
+  }
+
+  if (options.includeMetadata) {
+    code += "metadata = SQLModel.metadata\n\n";
+    allExports.push(`${FOUR_SPACES}"metadata",`);
+  }
+
+  code += "__all__ = [\n";
+  code += allExports.join("\n");
+  code += "\n]\n";
+
+  return code;
 }
 
 /**

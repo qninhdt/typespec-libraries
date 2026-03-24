@@ -7,10 +7,20 @@ from datetime import datetime
 from pydantic import AnyUrl, EmailStr
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    Column,
+    DateTime,
+    Enum as SAEnum,
+    UniqueConstraint,
+    func,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
+from demo.__associations__ import user_badges
+
 if TYPE_CHECKING:
+    from .badge import Badge
     from .subscription import Subscription
 
 
@@ -27,6 +37,7 @@ class User(SQLModel, table=True):
 
     __tablename__ = "users"  # type: ignore
     __table_args__ = (
+        CheckConstraint("credits >= 0", name="users_credits_non_negative"),
         UniqueConstraint("email", "deleted_at", name="users_email_deleted_at_unique"),
     )
 
@@ -136,4 +147,8 @@ class User(SQLModel, table=True):
     # Billing subscriptions tied to the account.
     subscriptions: list[Subscription] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    # Profile badges granted through a shorthand join table.
+    badges: list[Badge] = Relationship(
+        back_populates="users", sa_relationship_kwargs={"secondary": user_badges}
     )

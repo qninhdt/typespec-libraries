@@ -35,7 +35,7 @@ type GameEvent struct {
 	Effects *datatypes.JSON `gorm:"column:effects;type:jsonb;comment:Mutations applied when the event fires." validate:"omitempty" json:"effects,omitempty"`
 
 	// ─── Relationships ─────────────────────
-	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
+	World demo_game_platform_worlds.World `gorm:"foreignKey:WorldID;references:ID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE" json:"world"`
 }
 
 // TableName returns the table name for GameEvent.

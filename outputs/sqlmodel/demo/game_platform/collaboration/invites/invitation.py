@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import EmailStr
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, Index, Text, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text, func
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -114,10 +114,18 @@ class Invitation(SQLModel, table=True):
         ),
     )
     inviter_id: UUID = Field(
-        foreign_key="users.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            index=True,
+        )
     )
     world_id: UUID = Field(
-        foreign_key="worlds.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            index=True,
+        )
     )
 
     # ─── Relationships ─────────────────────

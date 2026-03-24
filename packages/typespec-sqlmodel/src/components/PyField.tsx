@@ -11,7 +11,7 @@ import {
   getCompositeFields,
   getDefaultValue,
   getDoc,
-  getForeignKey,
+  getForeignKeyConfig,
   getFormat,
   getMaxLength,
   getMaxValue,
@@ -41,6 +41,7 @@ import {
   NUMERIC_TYPES,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
+import type { SqlModelEmitterOptions } from "../lib.js";
 import {
   FOUR_SPACES,
   NEEDS_SA_COLUMN,
@@ -49,6 +50,13 @@ import {
   serializeColumnKwargs,
   resolveFormatPyType,
 } from "./PyConstants.js";
+
+export interface ResolvedForeignKeyFieldInfo {
+  targetTable: string;
+  targetColumn: string;
+  onDelete?: string;
+  onUpdate?: string;
+}
 
 /**
  * Generate a regular SQLModel field line.
@@ -62,7 +70,8 @@ export function generateField(
   needsField: { value: boolean },
   needsColumn: { value: boolean },
   isPartOfCompositeUnique?: boolean,
-  fkTargetTable?: string,
+  relationForeignKey?: ResolvedForeignKeyFieldInfo,
+  collectionStrategy?: SqlModelEmitterOptions["collection-strategy"],
 ): string {
   // Skip composite type fields - they are configuration only
   if (getCompositeFields(program, prop)) {
@@ -84,6 +93,7 @@ export function generateField(
       sqlmodelImports,
       needsField,
       needsColumn,
+      collectionStrategy,
     );
   }
 
@@ -129,7 +139,7 @@ export function generateField(
   const isUnq = isUnique(program, prop) && !isPartOfCompositeUnique;
   const maxLen = getMaxLength(program, prop);
   const defaultVal = getDefaultValue(program, prop);
-  const fk = getForeignKey(program, prop);
+  const fk = getForeignKeyConfig(program, prop);
   const prec = getPrecision(program, prop);
   const autoCreate = isAutoCreateTime(program, prop);
   const autoUpdate = isAutoUpdateTime(program, prop);
@@ -183,7 +193,7 @@ export function generateField(
   }
 
   // Index
-  if (isIndexed || fk) {
+  if (isIndexed || fk || relationForeignKey) {
     needsField.value = true;
     fieldArgs.push("index=True");
   }
@@ -275,36 +285,31 @@ export function generateField(
 
   // Foreign key with cascade constraints
   // Handle both: 1) explicit @foreignKey on this property, 2) FK field referenced by a relation
-  const hasForeignKey = fk || fkTargetTable;
+  const hasForeignKey = fk || relationForeignKey;
   if (hasForeignKey) {
     needsField.value = true;
 
     // Get FK info from either explicit @foreignKey or from relation
-    const onDel = getOnDelete(program, prop);
-    const onUpd = getOnUpdate(program, prop);
+    const onDel = relationForeignKey?.onDelete ?? getOnDelete(program, prop);
+    const onUpd = relationForeignKey?.onUpdate ?? getOnUpdate(program, prop);
 
     let targetTable: string | undefined;
     let fkColumn: string | undefined;
 
-    if (fk) {
+    if (fk && prop.type.kind === "Model") {
       // Explicit @foreignKey on this property
       const targetModel = prop.type as Model;
       targetTable =
         targetModel && targetModel.kind === "Model"
           ? getTableName(program, targetModel)
           : undefined;
-      fkColumn = fk;
-    } else if (fkTargetTable) {
-      // FK field referenced by a relation - use target table, FK is the primary key of target
-      targetTable = fkTargetTable;
-      fkColumn = "id";
+      fkColumn = fk.target ?? "id";
+    } else if (relationForeignKey) {
+      targetTable = relationForeignKey.targetTable;
+      fkColumn = relationForeignKey.targetColumn;
     }
 
     if (targetTable && fkColumn) {
-      // Always add foreign_key to Field
-      fieldArgs.push(`foreign_key="${targetTable}.${fkColumn}"`);
-
-      // If has cascade constraints, add to Column
       if (onDel || onUpd) {
         needsColumn.value = true;
         saImports.add("sqlalchemy.ForeignKey");
@@ -312,6 +317,8 @@ export function generateField(
         if (onDel) fkArgs.push(`ondelete="${onDel}"`);
         if (onUpd) fkArgs.push(`onupdate="${onUpd}"`);
         columnArgs.unshift(`ForeignKey(${fkArgs.join(", ")})`);
+      } else {
+        fieldArgs.push(`foreign_key="${targetTable}.${fkColumn}"`);
       }
     }
   }
@@ -376,6 +383,7 @@ function generateArrayField(
   sqlmodelImports: Set<string>,
   needsField: { value: boolean },
   needsColumn: { value: boolean },
+  collectionStrategy?: SqlModelEmitterOptions["collection-strategy"],
 ): string {
   // Handle both "Array" kind and Model with indexer (newer TypeSpec)
   const elementType = getArrayElementType(prop.type);
@@ -399,6 +407,34 @@ function generateArrayField(
 
   const fieldArgs: string[] = [];
   const columnArgs: string[] = [];
+  let arrayColumnType: string | undefined;
+
+  if (!collectionStrategy) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: { typeName: "array", propName: prop.name },
+      target: prop,
+    });
+  } else if (collectionStrategy === "jsonb") {
+    arrayColumnType = "JSONB";
+    saImports.add("sqlalchemy.dialects.postgresql.JSONB");
+  } else if (elementType) {
+    const postgresArrayType = resolvePostgresArrayType(elementType);
+    if (postgresArrayType) {
+      arrayColumnType = `ARRAY(${postgresArrayType.expression})`;
+      saImports.add("sqlalchemy.ARRAY");
+      for (const imp of postgresArrayType.saImports) saImports.add(imp);
+    } else {
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        format: {
+          typeName: elementDbType ?? elementType.kind,
+          propName: prop.name,
+        },
+        target: prop,
+      });
+    }
+  }
 
   // Primary key
   if (isPk) {
@@ -440,7 +476,15 @@ function generateArrayField(
     columnArgs.push(`comment="${doc.replace(/"/g, '\\"')}"`);
   }
 
-  // Build the field
+  if (arrayColumnType) {
+    needsField.value = true;
+    needsColumn.value = true;
+    saImports.add("sqlalchemy.Column");
+    const allColumnArgs = [arrayColumnType, ...columnArgs].join(", ");
+    fieldArgs.push(`sa_column=Column(${allColumnArgs})`);
+    return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
+  }
+
   if (fieldArgs.length > 0 || columnArgs.length > 0) {
     needsField.value = true;
     if (columnArgs.length > 0) {
@@ -450,6 +494,64 @@ function generateArrayField(
   }
 
   return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType}\n`;
+}
+
+function resolvePostgresArrayType(
+  type: ModelProperty["type"],
+): { expression: string; saImports: string[] } | undefined {
+  if (type.kind === "ModelProperty") {
+    return resolvePostgresArrayType(type.type);
+  }
+  if (type.kind === "Enum") {
+    return {
+      expression: `SAEnum(${type.name})`,
+      saImports: ["sqlalchemy.Enum as SAEnum"],
+    };
+  }
+
+  const dbType = resolveDbType(type);
+
+  switch (dbType) {
+    case "uuid":
+      return {
+        expression: "PGUUID(as_uuid=True)",
+        saImports: ["sqlalchemy.dialects.postgresql.UUID as PGUUID"],
+      };
+    case "string":
+      return { expression: "String", saImports: ["sqlalchemy.String"] };
+    case "text":
+      return { expression: "Text", saImports: ["sqlalchemy.Text"] };
+    case "boolean":
+      return { expression: "Boolean", saImports: ["sqlalchemy.Boolean"] };
+    case "int8":
+    case "int16":
+      return { expression: "SmallInteger", saImports: ["sqlalchemy.SmallInteger"] };
+    case "int32":
+    case "serial":
+      return { expression: "Integer", saImports: ["sqlalchemy.Integer"] };
+    case "int64":
+    case "bigserial":
+    case "uint32":
+    case "uint64":
+      return { expression: "BigInteger", saImports: ["sqlalchemy.BigInteger"] };
+    case "uint8":
+    case "uint16":
+      return { expression: "Integer", saImports: ["sqlalchemy.Integer"] };
+    case "float32":
+      return { expression: "Float", saImports: ["sqlalchemy.Float"] };
+    case "float64":
+      return { expression: "Double", saImports: ["sqlalchemy.Double"] };
+    case "decimal":
+      return { expression: "Numeric", saImports: ["sqlalchemy.Numeric"] };
+    case "date":
+      return { expression: "Date", saImports: ["sqlalchemy.Date"] };
+    case "time":
+      return { expression: "Time", saImports: ["sqlalchemy.Time"] };
+    case "utcDateTime":
+      return { expression: "DateTime(timezone=True)", saImports: ["sqlalchemy.DateTime"] };
+    default:
+      return undefined;
+  }
 }
 
 /**

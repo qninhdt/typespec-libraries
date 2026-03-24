@@ -5,6 +5,27 @@ All notable changes to this monorepo will be documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- Namespace-first release across the shared ORM core and all emitters.
+- `@tableMixin`, shared `include` / `exclude` selector filtering, referenced-column foreign keys, named `@check(...)` constraints, `@manyToMany(...)` shorthand, and configurable collection persistence strategies.
+- A rewritten end-to-end example that demonstrates deep namespace hierarchies, reusable mixins, lookup types, checks, many-to-many relations, and namespace-split outputs.
+- Expanded package documentation and generated-output verification in CI for Go, Python, TypeScript, and DBML outputs.
+
+### Changed
+
+- All emitters now consume a shared normalized ORM graph built by `@qninhdt/typespec-orm` instead of collecting models independently.
+- GORM and SQLModel outputs are now namespace-derived package trees, Zod output is namespace-derived with a root barrel, and DBML can now split by namespace.
+- Standalone package metadata now uses `library-name` consistently across emitters.
+- Checked-in example outputs now live under `outputs/gorm`, `outputs/sqlmodel`, `outputs/zod`, and `outputs/dbml`.
+
+### Removed
+
+- Legacy flat-layout assumptions such as emitter-managed `models/` output folders.
+- Legacy emitter metadata options that were replaced by the shared namespace-first configuration model.
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

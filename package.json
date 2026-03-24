@@ -1,6 +1,6 @@
 {
   "name": "typespec-libraries",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@10.31.0",
@@ -24,6 +24,7 @@
     "release": "pnpm run build && changeset publish",
     "clean:examples": "rm -rf outputs/gorm outputs/sqlmodel outputs/zod outputs/dbml",
     "compile-examples": "pnpm run clean:examples && tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
+    "verify-generated": "pnpm run compile-examples && git diff --exit-code -- outputs",
     "compile-examples:gorm": "rm -rf outputs/gorm && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
     "compile-examples:sqlmodel": "rm -rf outputs/sqlmodel && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
     "compile-examples:zod": "rm -rf outputs/zod && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",

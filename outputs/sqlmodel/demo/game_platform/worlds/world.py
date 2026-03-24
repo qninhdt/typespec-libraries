@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, Index, Text, func
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -81,6 +81,15 @@ class World(SQLModel, table=True):
             "comment": "Display name of the world. Referenced by forms and collaboration models through lookup types.",
         },
     )
+    # Stable human-readable slug used by cross-namespace references.
+    slug: str = Field(
+        unique=True,
+        max_length=80,
+        sa_column_kwargs={
+            "nullable": False,
+            "comment": "Stable human-readable slug used by cross-namespace references.",
+        },
+    )
     # System prompt used to guide AI generation within the world.
     prompt: str = Field(
         sa_column=Column(
@@ -118,7 +127,11 @@ class World(SQLModel, table=True):
         ),
     )
     owner_id: UUID = Field(
-        index=True, foreign_key="users.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
+            nullable=False,
+            index=True,
+        )
     )
 
     # ─── Relationships ─────────────────────

@@ -16,3 +16,12 @@ export const CreateWorldFormSchema = z
 
     .describe("Form payload for creating or editing a world. Demonstrates cross-namespace lookup types pulled from multiple bounded contexts.")
 export type CreateWorldForm = z.infer<typeof CreateWorldFormSchema>;
+
+export const CreateWorldFormMeta = {
+  name: { title: "World Name", placeholder: "Chronicles of Emberfall" },
+  prompt: { title: "World Prompt", inputType: "textarea" },
+  ownerEmail: { title: "Owner Email", inputType: "email" },
+  starterTag: { title: "Starter Tag" },
+  featuredNpc: { title: "Featured NPC" },
+  summary: { title: "Summary", placeholder: "Describe the setting, themes, and tone.", inputType: "textarea" },
+} as const;
