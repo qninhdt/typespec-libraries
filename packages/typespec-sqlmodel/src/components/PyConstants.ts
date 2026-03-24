@@ -180,7 +180,7 @@ export function promoteFieldArgsToColumn(
     } else if (a === "unique=True") {
       columnArgs.push("unique=True");
     } else if (a.startsWith("foreign_key=")) {
-      const match = a.match(/^foreign_key="(.+)"$/);
+      const match = /^foreign_key="(.+)"$/.exec(a);
       if (match) {
         saImports.add("sqlalchemy.ForeignKey");
         columnArgs.unshift(`ForeignKey("${match[1]}")`);

@@ -15,7 +15,7 @@ export function zodMemberParts(member?: ModelProperty) {
 }
 
 function defaultParts($: Typekit, member?: ModelProperty) {
-  if (!member || !member.defaultValue) {
+  if (!member?.defaultValue) {
     return [];
   }
 
@@ -23,7 +23,7 @@ function defaultParts($: Typekit, member?: ModelProperty) {
 }
 
 function optionalParts(member?: ModelProperty) {
-  if (!member || !member.optional) {
+  if (!member?.optional) {
     return [];
   }
 

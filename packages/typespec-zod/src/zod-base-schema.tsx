@@ -338,7 +338,7 @@ function createEnvelopeModel(
     properties: {
       [propKey]: $.modelProperty.create({
         name: propKey,
-        type: $.literal.create(variant.name as string),
+        type: $.literal.create(variant.name),
       }),
       [envKey]: $.modelProperty.create({
         name: envKey,

@@ -1,4 +1,10 @@
-import { walkPropertiesInherited, type Model, type Program, type Type } from "@typespec/compiler";
+import {
+  walkPropertiesInherited,
+  type Model,
+  type ModelProperty,
+  type Program,
+  type Type,
+} from "@typespec/compiler";
 import { DataKey, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
@@ -68,7 +74,14 @@ const ORM_NAMESPACE = "Qninhdt.Orm";
 
 export function getLibraryLeafName(libraryName: string): string {
   const trimmed = libraryName.trim();
-  const leaf = [...trimmed.split("/")].reverse().find(Boolean) ?? trimmed;
+  const segments = trimmed.split("/");
+  let leaf = trimmed;
+  for (let index = segments.length - 1; index >= 0; index--) {
+    if (segments[index]) {
+      leaf = segments[index];
+      break;
+    }
+  }
   return leaf.replaceAll(/[^\w]/g, "_");
 }
 
@@ -146,6 +159,7 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
 
     const namespaceSegments = getNamespaceSegments(model.namespace, globalNamespace);
     const namespacePath = namespaceSegments.map((segment) => camelToSnake(segment));
+    const packageName = namespacePath.at(-1) ?? camelToSnake(model.name);
     entities.set(model, {
       kind,
       model,
@@ -155,7 +169,7 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
       namespaceSegments,
       namespacePath,
       namespaceDir: namespacePath.join("/"),
-      packageName: namespacePath[namespacePath.length - 1]!,
+      packageName,
       tableName: kind === "table" ? getTableName(program, model) : undefined,
       label: kind === "data" ? getDataLabel(program, model) : undefined,
       mixins: collectMixinSources(program, model),
@@ -372,39 +386,23 @@ function collectDependencies(
   for (const prop of walkPropertiesInherited(normalized.model)) {
     if (isIgnored(program, prop)) continue;
 
-    const relation = resolveRelation(program, prop, normalized.model);
-    if (relation) {
-      const dependency = createDependencyFromRelation(program, relation.targetModel);
-      if (dependency) {
-        push(dependency);
-      }
+    if (pushRelationDependency(program, normalized, prop, push)) {
       continue;
     }
 
-    if (normalized.kind !== "data") {
-      const relationLike = relationLikeType(program, prop.type);
-      if (
-        relationLike &&
-        !getForeignKeyConfig(program, prop) &&
-        !getMappedBy(program, prop) &&
-        !getManyToMany(program, prop)
-      ) {
-        reportDiagnostic(program, {
-          code: "unsupported-relation-shape",
-          target: prop,
-          format: {
-            propName: prop.name,
-            typeName: normalized.fullName,
-            targetName: relationLike,
-          },
-        });
-      }
-    }
-
-    collectTypeDependencies(program, prop.type, push, new Set());
+    reportUnsupportedRelationShape(program, normalized, prop);
+    collectPropertyDependencies(program, prop, push);
   }
 
   return [...dependencies.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
+}
+
+function collectPropertyDependencies(
+  program: Program,
+  prop: ModelProperty,
+  push: (dependency: NormalizedDependency) => void,
+): void {
+  collectTypeDependencies(program, prop.type, push, new Set());
 }
 
 function collectTypeDependencies(
@@ -421,53 +419,15 @@ function collectTypeDependencies(
       collectTypeDependencies(program, type.type, push, visited);
       return;
     case "Enum": {
-      const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
-      if (!namespace) {
-        reportDiagnostic(program, {
-          code: "namespace-required",
-          target: type,
-          format: { kind: "enum", typeName: type.name },
-        });
-        return;
-      }
-      push({ kind: "enum", fullName: getTypeFullName(program, type), namespace });
+      pushEnumDependency(program, type, push);
       return;
     }
     case "Scalar": {
-      const fullName = getTypeFullName(program, type);
-      const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
-      if (!namespace || namespace === BUILTIN_NAMESPACE || namespace === ORM_NAMESPACE) {
-        return;
-      }
-      if (resolveDbType(type)) {
-        return;
-      }
-      push({ kind: "scalar", fullName, namespace });
+      pushScalarDependency(program, type, push);
       return;
     }
     case "Model": {
-      if (type.indexer) {
-        collectTypeDependencies(program, type.indexer.key, push, visited);
-        collectTypeDependencies(program, type.indexer.value, push, visited);
-        return;
-      }
-
-      const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
-      if (type.name && namespace) {
-        push({
-          kind: isTableMixin(program, type) ? "mixin" : "model",
-          fullName: getTypeFullName(program, type),
-          namespace,
-        });
-        return;
-      }
-
-      for (const prop of type.properties.values()) {
-        collectTypeDependencies(program, prop.type, push, visited);
-      }
-      if (type.baseModel) {
-        collectTypeDependencies(program, type.baseModel, push, visited);
-      }
+      collectModelDependencies(program, type, push, visited);
       return;
     }
     case "Tuple":
@@ -482,6 +442,72 @@ function collectTypeDependencies(
       return;
     default:
       return;
+  }
+}
+
+function pushEnumDependency(
+  program: Program,
+  type: Extract<Type, { kind: "Enum" }>,
+  push: (dependency: NormalizedDependency) => void,
+): void {
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  if (!namespace) {
+    reportDiagnostic(program, {
+      code: "namespace-required",
+      target: type,
+      format: { kind: "enum", typeName: type.name },
+    });
+    return;
+  }
+
+  push({ kind: "enum", fullName: getTypeFullName(program, type), namespace });
+}
+
+function pushScalarDependency(
+  program: Program,
+  type: Extract<Type, { kind: "Scalar" }>,
+  push: (dependency: NormalizedDependency) => void,
+): void {
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  if (
+    !namespace ||
+    namespace === BUILTIN_NAMESPACE ||
+    namespace === ORM_NAMESPACE ||
+    resolveDbType(type)
+  ) {
+    return;
+  }
+
+  push({ kind: "scalar", fullName: getTypeFullName(program, type), namespace });
+}
+
+function collectModelDependencies(
+  program: Program,
+  type: Extract<Type, { kind: "Model" }>,
+  push: (dependency: NormalizedDependency) => void,
+  visited: Set<Type>,
+): void {
+  if (type.indexer) {
+    collectTypeDependencies(program, type.indexer.key, push, visited);
+    collectTypeDependencies(program, type.indexer.value, push, visited);
+    return;
+  }
+
+  const namespace = getNamespaceFullName(type.namespace, program.getGlobalNamespaceType());
+  if (type.name && namespace) {
+    push({
+      kind: isTableMixin(program, type) ? "mixin" : "model",
+      fullName: getTypeFullName(program, type),
+      namespace,
+    });
+    return;
+  }
+
+  for (const prop of type.properties.values()) {
+    collectTypeDependencies(program, prop.type, push, visited);
+  }
+  if (type.baseModel) {
+    collectTypeDependencies(program, type.baseModel, push, visited);
   }
 }
 
@@ -599,4 +625,51 @@ function createDependencyFromRelation(
 ): NormalizedDependency | undefined {
   const kind = isTableMixin(program, targetModel) ? "mixin" : "model";
   return createDependencyFromNamespace(program, targetModel, kind);
+}
+
+function pushRelationDependency(
+  program: Program,
+  normalized: NormalizedOrmModel,
+  prop: ModelProperty,
+  push: (dependency: NormalizedDependency) => void,
+): boolean {
+  const relation = resolveRelation(program, prop, normalized.model);
+  if (!relation) {
+    return false;
+  }
+
+  const dependency = createDependencyFromRelation(program, relation.targetModel);
+  if (dependency) {
+    push(dependency);
+  }
+  return true;
+}
+
+function reportUnsupportedRelationShape(
+  program: Program,
+  normalized: NormalizedOrmModel,
+  prop: ModelProperty,
+): void {
+  if (normalized.kind === "data") {
+    return;
+  }
+
+  const relationLike = relationLikeType(program, prop.type);
+  const hasRelationDecorators =
+    !!getForeignKeyConfig(program, prop) ||
+    !!getMappedBy(program, prop) ||
+    !!getManyToMany(program, prop);
+  if (!relationLike || hasRelationDecorators) {
+    return;
+  }
+
+  reportDiagnostic(program, {
+    code: "unsupported-relation-shape",
+    target: prop,
+    format: {
+      propName: prop.name,
+      typeName: normalized.fullName,
+      targetName: relationLike,
+    },
+  });
 }

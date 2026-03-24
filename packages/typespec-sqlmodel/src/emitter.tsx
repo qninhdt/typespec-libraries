@@ -285,15 +285,13 @@ function renderAssociationModule(
     resolveAssociationColumnType(program, association.rightKey, sqlalchemyImports);
   }
 
-  lines.push(
-    buildPythonImportBlock(new Set(), sqlalchemyImports, new Set(["SQLModel"]), "sqlmodel"),
-  );
-  lines.push("");
-
   const allExports: string[] = [];
-
   const sortedAssociations = [...associations].sort((a, b) =>
     a.tableName.localeCompare(b.tableName),
+  );
+  lines.push(
+    buildPythonImportBlock(new Set(), sqlalchemyImports, new Set(["SQLModel"]), "sqlmodel"),
+    "",
   );
   for (const association of sortedAssociations) {
     const symbol = toPythonIdentifier(association.tableName);

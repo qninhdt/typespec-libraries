@@ -112,7 +112,7 @@ function buildSingleDocument(
     codeParts.push(...section, "");
   }
 
-  for (const ref of [...allRefs].sort()) {
+  for (const ref of [...allRefs].sort((left, right) => left.localeCompare(right))) {
     codeParts.push(ref);
   }
 

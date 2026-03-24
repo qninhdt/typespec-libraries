@@ -79,31 +79,94 @@ function assignStringConstraints(target: StringConstraints, source: StringConstr
 }
 
 interface NumericConstraints {
-  min?: number | bigint;
-  max?: number | bigint;
-  minExclusive?: number | bigint;
-  maxExclusive?: number | bigint;
+  min?: NumericValue;
+  max?: NumericValue;
+  minExclusive?: NumericValue;
+  maxExclusive?: NumericValue;
   safe?: boolean;
 }
 
-function maxNumeric<T extends number | bigint>(...values: (T | undefined)[]): T | undefined {
-  const definedValues = values.filter((v): v is T => v !== undefined);
+type NumericValue = number | bigint;
+type OptionalNumericValue = NumericValue | undefined;
+
+function maxNumeric(...values: (number | undefined)[]): number | undefined;
+function maxNumeric(...values: (bigint | undefined)[]): bigint | undefined;
+function maxNumeric(...values: OptionalNumericValue[]): OptionalNumericValue;
+function maxNumeric(...values: OptionalNumericValue[]): OptionalNumericValue {
+  const definedValues = values.filter((v): v is NumericValue => v !== undefined);
 
   if (definedValues.length === 0) {
     return undefined;
   }
 
-  return definedValues.reduce((max, current) => (current > max ? current : max), definedValues[0]);
+  if (typeof definedValues[0] === "bigint") {
+    const bigintValues: bigint[] = [];
+    for (const value of definedValues) {
+      if (typeof value === "bigint") {
+        bigintValues.push(value);
+      }
+    }
+    return maxBigInt(bigintValues);
+  }
+
+  const numberValues: number[] = [];
+  for (const value of definedValues) {
+    if (typeof value === "number") {
+      numberValues.push(value);
+    }
+  }
+  return Math.max(...numberValues);
 }
 
-function minNumeric<T extends number | bigint>(...values: (T | undefined)[]): T | undefined {
-  const definedValues = values.filter((v): v is T => v !== undefined);
+function minNumeric(...values: (number | undefined)[]): number | undefined;
+function minNumeric(...values: (bigint | undefined)[]): bigint | undefined;
+function minNumeric(...values: OptionalNumericValue[]): OptionalNumericValue;
+function minNumeric(...values: OptionalNumericValue[]): OptionalNumericValue {
+  const definedValues = values.filter((v): v is NumericValue => v !== undefined);
 
   if (definedValues.length === 0) {
     return undefined;
   }
 
-  return definedValues.reduce((min, current) => (current < min ? current : min), definedValues[0]);
+  if (typeof definedValues[0] === "bigint") {
+    const bigintValues: bigint[] = [];
+    for (const value of definedValues) {
+      if (typeof value === "bigint") {
+        bigintValues.push(value);
+      }
+    }
+    return minBigInt(bigintValues);
+  }
+
+  const numberValues: number[] = [];
+  for (const value of definedValues) {
+    if (typeof value === "number") {
+      numberValues.push(value);
+    }
+  }
+  return Math.min(...numberValues);
+}
+
+function maxBigInt(values: bigint[]): bigint {
+  let current = values[0];
+  for (let index = 1; index < values.length; index++) {
+    const value = values[index];
+    if (value > current) {
+      current = value;
+    }
+  }
+  return current;
+}
+
+function minBigInt(values: bigint[]): bigint {
+  let current = values[0];
+  for (let index = 1; index < values.length; index++) {
+    const value = values[index];
+    if (value < current) {
+      current = value;
+    }
+  }
+  return current;
 }
 
 /**
@@ -247,10 +310,10 @@ function unwrapLookupType(
     return { effectiveType: type, effectiveMember: member };
   }
 
-  const sourceProperty = type as ModelProperty;
+  const sourceProperty = type;
   let targetType = sourceProperty.type;
   while ($.modelProperty.is(targetType)) {
-    targetType = (targetType as ModelProperty).type;
+    targetType = targetType.type;
   }
 
   return { effectiveType: targetType, effectiveMember: sourceProperty };
@@ -307,29 +370,67 @@ function resolveIntrinsicBound(
   }
 
   const decoratorValue = decoratorConstraints[bound];
-  const exclusiveKey = bound === "min" ? "minExclusive" : "maxExclusive";
-  const exclusiveValue = decoratorConstraints[exclusiveKey];
-  const wins =
-    bound === "min"
-      ? (left: number | bigint, right: number | bigint) => left > right
-      : (left: number | bigint, right: number | bigint) => left < right;
+  const exclusiveKey = getExclusiveBoundKey(bound);
+  const wins = getIntrinsicWinner(bound);
 
-  if (decoratorValue !== undefined) {
-    if (wins(intrinsicValue, decoratorValue)) {
-      delete decoratorConstraints[bound];
-    } else {
-      delete intrinsicConstraints[bound];
-    }
+  if (
+    resolveBoundConflict(
+      bound,
+      bound,
+      intrinsicValue,
+      decoratorValue,
+      wins,
+      intrinsicConstraints,
+      decoratorConstraints,
+    )
+  ) {
     return;
   }
 
-  if (exclusiveValue !== undefined) {
-    if (wins(intrinsicValue, exclusiveValue)) {
-      delete decoratorConstraints[exclusiveKey];
-    } else {
-      delete intrinsicConstraints[bound];
-    }
+  resolveBoundConflict(
+    bound,
+    exclusiveKey,
+    intrinsicValue,
+    decoratorConstraints[exclusiveKey],
+    wins,
+    intrinsicConstraints,
+    decoratorConstraints,
+  );
+}
+
+function getIntrinsicWinner(
+  bound: "min" | "max",
+): (left: number | bigint, right: number | bigint) => boolean {
+  if (bound === "min") {
+    return (left, right) => left > right;
   }
+  return (left, right) => left < right;
+}
+
+function getExclusiveBoundKey(bound: "min" | "max"): "minExclusive" | "maxExclusive" {
+  return bound === "min" ? "minExclusive" : "maxExclusive";
+}
+
+function resolveBoundConflict(
+  intrinsicKey: "min" | "max",
+  decoratorKey: "min" | "max" | "minExclusive" | "maxExclusive",
+  intrinsicValue: number | bigint,
+  decoratorValue: number | bigint | undefined,
+  wins: (left: number | bigint, right: number | bigint) => boolean,
+  intrinsicConstraints: NumericConstraints,
+  decoratorConstraints: NumericConstraints,
+): boolean {
+  if (decoratorValue === undefined) {
+    return false;
+  }
+
+  if (wins(intrinsicValue, decoratorValue)) {
+    delete decoratorConstraints[decoratorKey];
+  } else {
+    delete intrinsicConstraints[intrinsicKey];
+  }
+
+  return true;
 }
 
 interface ArrayConstraints {
@@ -344,11 +445,11 @@ function arrayConstraints($: Typekit, type: Type, member?: ModelProperty) {
   let effectiveMember = member;
 
   if ($.modelProperty.is(type)) {
-    const sourceProperty = type as ModelProperty;
+    const sourceProperty = type;
     effectiveMember = sourceProperty;
     let targetType = sourceProperty.type;
     while ($.modelProperty.is(targetType)) {
-      targetType = (targetType as ModelProperty).type;
+      targetType = targetType.type;
     }
     effectiveType = targetType;
   }

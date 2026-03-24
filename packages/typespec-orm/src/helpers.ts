@@ -226,7 +226,10 @@ export function getValidators(program: Program, prop: ModelProperty): ValidatorI
   ];
   for (const [name, value] of validatorEntries) {
     if (value !== undefined) {
-      validators.push({ name, args: `${value}` });
+      validators.push({
+        name,
+        args: typeof value === "object" ? JSON.stringify(value) : `${value}`,
+      });
     }
   }
 
@@ -679,7 +682,7 @@ export function deriveTableName(modelName: string): string {
   if (snake.endsWith("s") || snake.endsWith("x") || snake.endsWith("z")) return snake + "es";
   if (snake.endsWith("sh") || snake.endsWith("ch")) return snake + "es";
   // Only convert trailing -y to -ies when preceded by a consonant
-  if (snake.endsWith("y") && snake.length > 1 && !/[aeiou]/.test(snake[snake.length - 2])) {
+  if (snake.endsWith("y") && snake.length > 1 && !/[aeiou]/.test(snake.at(-2) ?? "")) {
     return snake.slice(0, -1) + "ies";
   }
   return snake + "s";
