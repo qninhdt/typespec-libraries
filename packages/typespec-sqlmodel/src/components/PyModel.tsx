@@ -38,6 +38,37 @@ export interface PyModelFileProps {
   readonly runtimeImports?: Map<string, Set<string>>;
 }
 
+interface RegularFieldContext {
+  program: Program;
+  regularProps: ReturnType<typeof classifyProperties>["fields"];
+  compositeUniqueColumns: Set<string>;
+  fkInfoMap: Map<string, ResolvedForeignKeyFieldInfo>;
+  stdImports: Set<string>;
+  saImports: Set<string>;
+  sqlmodelImports: Set<string>;
+  needsField: { value: boolean };
+  needsColumn: { value: boolean };
+  fieldDefs: string[];
+  collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
+}
+
+interface PyModelRenderContext {
+  program: Program;
+  model: Model;
+  tableName: string;
+  enumTypes: ReturnType<typeof classifyProperties>["enumTypes"];
+  stdImports: Set<string>;
+  saImports: Set<string>;
+  sqlmodelImports: Set<string>;
+  runtimeImports?: Map<string, Set<string>>;
+  relationTargetModels: Set<Model>;
+  modelLookup: Map<Model, NormalizedOrmModel>;
+  namespacePath: string[];
+  tableArgEntries: string[];
+  fieldDefs: string[];
+  relationDefs: string[];
+}
+
 /**
  * JSX component: renders a complete Python source file for a SQLModel class.
  */
@@ -85,7 +116,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
     sqlmodelImports,
     manyToManySecondaryByProp,
   );
-  addRegularFields(
+  addRegularFields({
     program,
     regularProps,
     compositeUniqueColumns,
@@ -97,10 +128,10 @@ export function PyModelFile(props: PyModelFileProps): Children {
     needsColumn,
     fieldDefs,
     collectionStrategy,
-  );
+  });
   addEnumImports(enumTypes, stdImports, saImports);
 
-  const code = buildPyModelCode(
+  const code = buildPyModelCode({
     program,
     model,
     tableName,
@@ -111,11 +142,11 @@ export function PyModelFile(props: PyModelFileProps): Children {
     runtimeImports,
     relationTargetModels,
     modelLookup,
-    normalizedModel.namespacePath,
+    namespacePath: normalizedModel.namespacePath,
     tableArgEntries,
     fieldDefs,
     relationDefs,
-  );
+  });
 
   return (
     <SourceFile path={fileName} filetype="py" printWidth={9999}>
@@ -124,19 +155,20 @@ export function PyModelFile(props: PyModelFileProps): Children {
   );
 }
 
-function addRegularFields(
-  program: Program,
-  regularProps: ReturnType<typeof classifyProperties>["fields"],
-  compositeUniqueColumns: Set<string>,
-  fkInfoMap: Map<string, ResolvedForeignKeyFieldInfo>,
-  stdImports: Set<string>,
-  saImports: Set<string>,
-  sqlmodelImports: Set<string>,
-  needsField: { value: boolean },
-  needsColumn: { value: boolean },
-  fieldDefs: string[],
-  collectionStrategy: SqlModelEmitterOptions["collection-strategy"] | undefined,
-): void {
+function addRegularFields(context: RegularFieldContext): void {
+  const {
+    program,
+    regularProps,
+    compositeUniqueColumns,
+    fkInfoMap,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    needsField,
+    needsColumn,
+    fieldDefs,
+    collectionStrategy,
+  } = context;
   for (const { prop } of regularProps) {
     if (getCompositeFields(program, prop)) continue;
 
@@ -226,22 +258,23 @@ function addEnumImports(
   saImports.add("sqlalchemy.Enum as SAEnum");
 }
 
-function buildPyModelCode(
-  program: Program,
-  model: Model,
-  tableName: string,
-  enumTypes: ReturnType<typeof classifyProperties>["enumTypes"],
-  stdImports: Set<string>,
-  saImports: Set<string>,
-  sqlmodelImports: Set<string>,
-  runtimeImports: Map<string, Set<string>> | undefined,
-  relationTargetModels: Set<Model>,
-  modelLookup: Map<Model, NormalizedOrmModel>,
-  namespacePath: string[],
-  tableArgEntries: string[],
-  fieldDefs: string[],
-  relationDefs: string[],
-): string {
+function buildPyModelCode(context: PyModelRenderContext): string {
+  const {
+    program,
+    model,
+    tableName,
+    enumTypes,
+    stdImports,
+    saImports,
+    sqlmodelImports,
+    runtimeImports,
+    relationTargetModels,
+    modelLookup,
+    namespacePath,
+    tableArgEntries,
+    fieldDefs,
+    relationDefs,
+  } = context;
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
   code += buildRuntimeImportBlock(runtimeImports);

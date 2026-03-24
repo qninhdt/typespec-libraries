@@ -193,7 +193,7 @@ function pushValidationFieldArgs(program: Program, prop: ModelProperty, fieldArg
 }
 
 function escapePythonString(value: string): string {
-  return value.replaceAll(/\\/g, String.raw`\\`).replaceAll('"', String.raw`\"`);
+  return value.replaceAll("\\", "\\\\").replaceAll('"', String.raw`\"`);
 }
 
 function toPythonStringLiteral(value: string): string {

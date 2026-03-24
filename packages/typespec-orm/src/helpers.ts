@@ -5,7 +5,6 @@
 
 import type {
   Enum,
-  EnumMember,
   Model,
   ModelProperty,
   Namespace,
@@ -160,7 +159,10 @@ export function getDefaultValue(program: Program, prop: ModelProperty): string |
       case "BooleanValue":
         return String(builtin.value);
       case "EnumValue":
-        return builtin.value.value !== undefined ? String(builtin.value.value) : builtin.value.name;
+        if (builtin.value.value === undefined) {
+          return builtin.value.name;
+        }
+        return String(builtin.value.value);
       default:
         break;
     }
@@ -189,15 +191,14 @@ export function isKey(program: Program, prop: ModelProperty): boolean {
 
 export function isArrayType(type: Type): boolean {
   // In TypeSpec, arrays are Models with an indexer
-  return type.kind === "Model" && (type as Model).indexer !== undefined;
+  return type.kind === "Model" && type.indexer !== undefined;
 }
 
 export function getArrayElementType(type: Type): Type | undefined {
   // In TypeSpec, arrays are Models with an indexer
   if (type.kind === "Model") {
-    const model = type as Model;
-    if (model.indexer) {
-      return model.indexer.value;
+    if (type.indexer) {
+      return type.indexer.value;
     }
   }
   return undefined;
@@ -253,7 +254,7 @@ export function getValidators(program: Program, prop: ModelProperty): ValidatorI
  * property when the type is a lookup reference.
  */
 function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
-  return prop.type.kind === "ModelProperty" ? (prop.type as ModelProperty) : undefined;
+  return prop.type.kind === "ModelProperty" ? prop.type : undefined;
 }
 
 /**
@@ -342,37 +343,36 @@ export function getCompositeFields(program: Program, prop: ModelProperty): strin
   const type = prop.type;
 
   // Handle scalar-based composite type (composite<field1, field2>)
-  if (type.kind === "Scalar") {
-    // Get the scalar name
-    let typeName = type.name;
-    if (!typeName) {
-      typeName = (type as any).node?.id?.escapedText;
+  if (type.kind !== "Scalar" || getCompositeScalarName(type) !== "composite") {
+    return undefined;
+  }
+
+  return getCompositeTemplateColumns(type);
+}
+
+function getCompositeScalarName(type: Scalar): string | undefined {
+  return type.name || (type as any).node?.id?.escapedText;
+}
+
+function getCompositeTemplateColumns(type: Scalar): string[] | undefined {
+  const args = (type as any).templateMapper?.args;
+  if (!args || !Array.isArray(args)) {
+    return undefined;
+  }
+
+  const columns: string[] = [];
+  for (const arg of args) {
+    if (!arg || typeof arg !== "object" || !arg.type) {
+      continue;
     }
 
-    if (typeName === "composite") {
-      // For template instantiations, check templateMapper
-      const scalar = type as any;
-
-      // templateMapper.args contains the template arguments
-      const args = scalar.templateMapper?.args;
-      if (args && Array.isArray(args)) {
-        const columns: string[] = [];
-        for (const arg of args) {
-          // Template arg structure: { entityKind: "Indeterminate", type: { kind: "String", value: "columnName" } }
-          if (arg && typeof arg === "object" && arg.type) {
-            const typeObj = arg.type;
-            if (typeObj.kind === "String" && typeObj.value && typeObj.value !== "") {
-              // Keep camelCase - emitters will convert to snake_case
-              columns.push(typeObj.value);
-            }
-          }
-        }
-        if (columns.length > 0) return columns;
-      }
+    const typeObj = arg.type;
+    if (typeObj.kind === "String" && typeObj.value) {
+      columns.push(typeObj.value);
     }
   }
 
-  return undefined;
+  return columns.length > 0 ? columns : undefined;
 }
 
 // ─── Timestamp auto-fill helpers ─────────────────────────────────────────────
@@ -529,10 +529,9 @@ export function isEnum(type: Type): type is Enum {
 export function getEnumMembers(enumType: Enum): EnumMemberInfo[] {
   const members: EnumMemberInfo[] = [];
   for (const [, member] of enumType.members) {
-    const m = member as EnumMember;
     members.push({
-      name: m.name,
-      value: m.value !== undefined ? String(m.value) : m.name,
+      name: member.name,
+      value: member.value === undefined ? member.name : String(member.value),
     });
   }
   return members;
@@ -549,13 +548,15 @@ export function getPropertyEnum(
   let type = prop.type;
   // Unwrap lookup types: User.plan → plan.type (the actual Enum)
   if (type.kind === "ModelProperty") {
-    type = (type as ModelProperty).type;
+    type = type.type;
   }
-  if (!isEnum(type)) return undefined;
-  return {
-    enumType: type,
-    members: getEnumMembers(type),
-  };
+  if (isEnum(type)) {
+    return {
+      enumType: type,
+      members: getEnumMembers(type),
+    };
+  }
+  return undefined;
 }
 
 // ─── Scalar resolution ───────────────────────────────────────────────────────
@@ -613,10 +614,10 @@ const STANDARD_SCALAR_MAP: Record<string, string> = {
 export function resolveDbType(type: Type): string | undefined {
   // Unwrap lookup types: User.email → email.type (the actual Scalar)
   if (type.kind === "ModelProperty") {
-    return resolveDbType((type as ModelProperty).type);
+    return resolveDbType(type.type);
   }
   if (type.kind !== "Scalar") return undefined;
-  const chain = getScalarChain(type as Scalar);
+  const chain = getScalarChain(type);
 
   for (const name of chain) {
     if (CUSTOM_SCALARS.has(name)) return name;
@@ -634,12 +635,16 @@ export function resolveDbType(type: Type): string | undefined {
 /** Convert camelCase to snake_case */
 export function camelToSnake(name: string): string {
   return name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replaceAll(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
     .toLowerCase();
 }
 
 /** Pre-compiled Go abbreviation replacement patterns (avoids per-call RegExp construction) */
+function escapeRegExpLiteral(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 const GO_ABBREVIATION_RULES: { endPattern: RegExp; midPattern: RegExp; to: string }[] = [
   ["Id", "ID"],
   ["Ids", "IDs"],
@@ -659,8 +664,8 @@ const GO_ABBREVIATION_RULES: { endPattern: RegExp; midPattern: RegExp; to: strin
   ["Cpu", "CPU"],
   ["Json", "JSON"],
 ].map(([from, to]) => ({
-  endPattern: new RegExp(`${from}$`),
-  midPattern: new RegExp(`${from}(?=[A-Z])`, "g"),
+  endPattern: new RegExp(`${escapeRegExpLiteral(from)}$`),
+  midPattern: new RegExp(`${escapeRegExpLiteral(from)}(?=[A-Z])`, "g"),
   to,
 }));
 
@@ -737,7 +742,7 @@ export function unwrapArrayType(type: Type): Model | undefined {
   if (type.kind !== "Model") return undefined;
   if (!type.indexer) return undefined;
   const elementType = type.indexer.value;
-  if (elementType.kind === "Model") return elementType as Model;
+  if (elementType.kind === "Model") return elementType;
   return undefined;
 }
 
@@ -1018,103 +1023,160 @@ export function resolveRelation(
   const explicitMappedBy = getMappedBy(program, prop);
   const explicitManyToMany = getManyToMany(program, prop);
 
-  // Case 1: Singular @table Model reference → many-to-one
-  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
-    const targetModel = prop.type as Model;
-    if (!explicitFk) {
-      return undefined;
-    }
-
-    const resolved = resolveOwnedRelationReference(program, prop, parentModel, targetModel);
-    if (!resolved) {
-      return undefined;
-    }
-
-    const kind = isRelationLocalKeyUnique(program, resolved.localProperty)
-      ? "one-to-one"
-      : "many-to-one";
-    const inverseRef = findInverseMappedBy(program, parentModel, targetModel, prop.name);
-    const backPopulates = inverseRef ? camelToSnake(inverseRef.name) : undefined;
-
-    return {
-      kind,
-      ...resolved,
-      fkColumnName: resolved.localColumnName,
-      fkTargetColumn: resolved.targetColumnName,
-      onDelete,
-      onUpdate,
-      backPopulates,
-    };
+  const directRelation = resolveDirectRelation(
+    program,
+    prop,
+    parentModel,
+    explicitFk,
+    onDelete,
+    onUpdate,
+  );
+  if (directRelation) {
+    return directRelation;
   }
 
   const arrayElement = unwrapArrayType(prop.type);
 
-  // Case 2: many-to-many shorthand on array relations
-  if (arrayElement && isTable(program, arrayElement) && explicitManyToMany) {
-    const inverse = findInverseManyToMany(program, parentModel, arrayElement, prop);
-    if (!inverse) {
-      return undefined;
-    }
-
-    const localPk = findPrimaryKey(program, parentModel);
-    const targetPk = findPrimaryKey(program, arrayElement);
-    if (!localPk || !targetPk) {
-      return undefined;
-    }
-
-    return {
-      kind: "many-to-many",
-      targetModel: arrayElement,
-      targetTable: getTableName(program, arrayElement),
-      localProperty: localPk,
-      targetProperty: targetPk,
-      fkColumnName: getColumnName(program, localPk),
-      fkTargetColumn: getColumnName(program, targetPk),
-      fkDbType: resolveDbType(targetPk.type),
-      backPopulates: camelToSnake(inverse.prop.name),
-      joinTable: explicitManyToMany,
-    };
+  const manyToManyRelation = resolveManyToManyRelation(
+    program,
+    prop,
+    parentModel,
+    arrayElement,
+    explicitManyToMany,
+  );
+  if (manyToManyRelation) {
+    return manyToManyRelation;
   }
 
   // Case 3: @mappedBy on array or singular model reference → inverse collection / has-one
   const mappedByTarget = resolveMappedByTarget(program, prop, arrayElement);
 
-  if (mappedByTarget && explicitMappedBy) {
-    const targetProp = resolvePropertyByName(mappedByTarget, explicitMappedBy);
-    if (!targetProp) {
-      return undefined;
-    }
+  return resolveMappedByRelation({
+    program,
+    parentModel,
+    arrayElement,
+    mappedByTarget,
+    explicitMappedBy,
+    onDelete,
+    onUpdate,
+  });
+}
 
-    const resolved = resolveOwnedRelationReference(
-      program,
-      targetProp,
-      mappedByTarget,
-      parentModel,
-    );
-    if (!resolved) {
-      return undefined;
-    }
-
-    const inverseOnDelete = getOnDelete(program, targetProp);
-    const inverseOnUpdate = getOnUpdate(program, targetProp);
-
-    const kind = arrayElement ? "one-to-many" : "one-to-one";
-    return {
-      kind,
-      targetModel: mappedByTarget,
-      targetTable: getTableName(program, mappedByTarget),
-      localProperty: resolved.localProperty,
-      targetProperty: resolved.targetProperty,
-      fkColumnName: resolved.localColumnName,
-      fkTargetColumn: resolved.targetColumnName,
-      fkDbType: resolved.fkDbType,
-      onDelete: inverseOnDelete ?? onDelete,
-      onUpdate: inverseOnUpdate ?? onUpdate,
-      backPopulates: explicitMappedBy,
-    };
+function resolveDirectRelation(
+  program: Program,
+  prop: ModelProperty,
+  parentModel: Model,
+  explicitFk: ForeignKeyConfig | undefined,
+  onDelete: string | undefined,
+  onUpdate: string | undefined,
+): ResolvedRelation | undefined {
+  if (prop.type.kind !== "Model" || !isTable(program, prop.type) || !explicitFk) {
+    return undefined;
   }
 
-  return undefined;
+  const targetModel = prop.type;
+  const resolved = resolveOwnedRelationReference(program, prop, parentModel, targetModel);
+  if (!resolved) {
+    return undefined;
+  }
+
+  const kind = isRelationLocalKeyUnique(program, resolved.localProperty)
+    ? "one-to-one"
+    : "many-to-one";
+  const inverseRef = findInverseMappedBy(program, parentModel, targetModel, prop.name);
+
+  return {
+    kind,
+    ...resolved,
+    fkColumnName: resolved.localColumnName,
+    fkTargetColumn: resolved.targetColumnName,
+    onDelete,
+    onUpdate,
+    backPopulates: inverseRef ? camelToSnake(inverseRef.name) : undefined,
+  };
+}
+
+function resolveManyToManyRelation(
+  program: Program,
+  prop: ModelProperty,
+  parentModel: Model,
+  arrayElement: Model | undefined,
+  explicitManyToMany: string | undefined,
+): ResolvedRelation | undefined {
+  if (!arrayElement || !isTable(program, arrayElement) || !explicitManyToMany) {
+    return undefined;
+  }
+
+  const inverse = findInverseManyToMany(program, parentModel, arrayElement, prop);
+  if (!inverse) {
+    return undefined;
+  }
+
+  const localPk = findPrimaryKey(program, parentModel);
+  const targetPk = findPrimaryKey(program, arrayElement);
+  if (!localPk || !targetPk) {
+    return undefined;
+  }
+
+  return {
+    kind: "many-to-many",
+    targetModel: arrayElement,
+    targetTable: getTableName(program, arrayElement),
+    localProperty: localPk,
+    targetProperty: targetPk,
+    fkColumnName: getColumnName(program, localPk),
+    fkTargetColumn: getColumnName(program, targetPk),
+    fkDbType: resolveDbType(targetPk.type),
+    backPopulates: camelToSnake(inverse.prop.name),
+    joinTable: explicitManyToMany,
+  };
+}
+
+function resolveMappedByRelation(context: {
+  program: Program;
+  parentModel: Model;
+  arrayElement: Model | undefined;
+  mappedByTarget: Model | undefined;
+  explicitMappedBy: string | undefined;
+  onDelete: string | undefined;
+  onUpdate: string | undefined;
+}): ResolvedRelation | undefined {
+  const {
+    program,
+    parentModel,
+    arrayElement,
+    mappedByTarget,
+    explicitMappedBy,
+    onDelete,
+    onUpdate,
+  } = context;
+  if (!mappedByTarget || !explicitMappedBy) {
+    return undefined;
+  }
+
+  const targetProp = resolvePropertyByName(mappedByTarget, explicitMappedBy);
+  if (!targetProp) {
+    return undefined;
+  }
+
+  const resolved = resolveOwnedRelationReference(program, targetProp, mappedByTarget, parentModel);
+  if (!resolved) {
+    return undefined;
+  }
+
+  return {
+    kind: arrayElement ? "one-to-many" : "one-to-one",
+    targetModel: mappedByTarget,
+    targetTable: getTableName(program, mappedByTarget),
+    localProperty: resolved.localProperty,
+    targetProperty: resolved.targetProperty,
+    fkColumnName: resolved.localColumnName,
+    fkTargetColumn: resolved.targetColumnName,
+    fkDbType: resolved.fkDbType,
+    onDelete: getOnDelete(program, targetProp) ?? onDelete,
+    onUpdate: getOnUpdate(program, targetProp) ?? onUpdate,
+    backPopulates: explicitMappedBy,
+  };
 }
 
 function resolveMappedByTarget(
@@ -1126,8 +1188,8 @@ function resolveMappedByTarget(
     return arrayElement;
   }
 
-  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
-    return prop.type as Model;
+  if (prop.type.kind === "Model" && isTable(program, prop.type)) {
+    return prop.type;
   }
 
   return undefined;
@@ -1145,8 +1207,8 @@ export function collectTableModels(program: Program): TableModel[] {
   const tables: TableModel[] = [];
   for (const [type, name] of program.stateMap(TableKey)) {
     if (type.kind === "Model") {
-      const model = type as Model;
-      const tableName = (name as string) || deriveTableName(model.name);
+      const tableName = (name as string | undefined) || deriveTableName(type.name);
+      const model = type;
       tables.push({ model, tableName });
     }
   }
@@ -1158,7 +1220,7 @@ export function collectTableMixins(program: Program): Model[] {
   const mixins: Model[] = [];
   for (const [type] of program.stateMap(TableMixinKey)) {
     if (type.kind === "Model") {
-      mixins.push(type as Model);
+      mixins.push(type);
     }
   }
   mixins.sort((a, b) => getTypeFullName(program, a).localeCompare(getTypeFullName(program, b)));
