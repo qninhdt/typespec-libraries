@@ -6,4 +6,8 @@ describe("DBML library definition", () => {
     expect($lib.name).toBe("@qninhdt/typespec-dbml");
     expect($lib.emitter?.options).toBeDefined();
   });
+
+  it("starts with an empty diagnostics set", () => {
+    expect($lib.diagnostics).toEqual({});
+  });
 });
