@@ -5,7 +5,13 @@
  * lives here so each emitter can import it instead of duplicating it.
  */
 
-import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
+import {
+  walkPropertiesInherited,
+  type Enum,
+  type Model,
+  type ModelProperty,
+  type Program,
+} from "@typespec/compiler";
 import type { EnumMemberInfo, ResolvedRelation } from "./helpers.js";
 import {
   getCompositeFields,
@@ -86,7 +92,7 @@ export function collectCompositeTypeFields(
   tableName: string,
 ): CompositeTypeField[] {
   const result: CompositeTypeField[] = [];
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     const columns = getCompositeFields(program, prop);
     if (columns) {
       let suffix = "idx";
@@ -169,7 +175,7 @@ export function classifyProperties(program: Program, model: Model): ClassifiedPr
   const relations: ClassifiedRelation[] = [];
   const fields: ClassifiedProperty[] = [];
 
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     // Collect enum types for code generation
     const enumInfo = getPropertyEnum(prop);
     if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {

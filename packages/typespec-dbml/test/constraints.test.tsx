@@ -71,6 +71,28 @@ describe("DBML constraints", () => {
     expect(output).toContain("(email, deleted_at) [unique]");
   });
 
+  it("generates inherited composite constraints", async () => {
+    const output = await emitDbmlFile(
+      `
+      model TenantScoped {
+        tenantId: uuid;
+        code: string;
+        @unique tenantCode: composite<"tenantId", "code">;
+      }
+
+      @table
+      model Project extends TenantScoped {
+        @key id: uuid;
+      }
+    `,
+      "projects.dbml",
+    );
+
+    expect(output).toContain("tenant_id uuid [not null]");
+    expect(output).toContain("code varchar(255) [not null]");
+    expect(output).toContain("(tenant_id, code) [unique]");
+  });
+
   it("generates composite primary key via composite<> type with @key", async () => {
     const output = await emitDbmlFile(
       `@table model Membership { @key userRole: composite<"userId", "roleId">; userId: uuid; roleId: uuid; }`,

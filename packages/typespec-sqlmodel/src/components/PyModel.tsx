@@ -6,7 +6,12 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import type { Model, ModelProperty, Program } from "@typespec/compiler";
+import {
+  walkPropertiesInherited,
+  type Model,
+  type ModelProperty,
+  type Program,
+} from "@typespec/compiler";
 import {
   getColumnName,
   getCheck,
@@ -234,7 +239,7 @@ function addCheckConstraints(
   saImports: Set<string>,
   tableArgEntries: string[],
 ): void {
-  for (const prop of model.properties.values()) {
+  for (const prop of walkPropertiesInherited(model)) {
     const check = getCheck(program, prop);
     if (!check) continue;
 

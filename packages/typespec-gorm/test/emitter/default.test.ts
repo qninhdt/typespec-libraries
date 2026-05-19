@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createEmitterTestRunner, renderGoOutput } from "../utils.jsx";
+import { emitGoFile } from "../utils.jsx";
 
 describe("GORM emitter end-to-end", () => {
-  it("emits a complete model without errors", async () => {
-    const runner = await createEmitterTestRunner();
-    await runner.compile(`
+  it("emits a complete table model with scalar constraints and managed timestamps", async () => {
+    const output = await emitGoFile(
+      `
       @table
       model User {
         @key id: uuid;
@@ -14,15 +14,31 @@ describe("GORM emitter end-to-end", () => {
         @autoCreateTime createdAt: utcDateTime;
         @autoUpdateTime updatedAt: utcDateTime;
       }
-    `);
+    `,
+      "user.go",
+    );
 
-    const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toHaveLength(0);
+    expect(output).toContain("type User struct {");
+    expect(output).toContain("ID uuid.UUID");
+    expect(output).toContain("primaryKey");
+    expect(output).toContain("default:gen_random_uuid()");
+    expect(output).toContain("Name string");
+    expect(output).toContain("type:varchar(255)");
+    expect(output).toContain('validate:"required,max=255"');
+    expect(output).toContain("Email string");
+    expect(output).toContain("uniqueIndex");
+    expect(output).toContain('validate:"required,email"');
+    expect(output).toContain("Age *int32");
+    expect(output).toContain("CreatedAt time.Time");
+    expect(output).toContain("autoCreateTime");
+    expect(output).toContain("UpdatedAt time.Time");
+    expect(output).toContain("autoUpdateTime");
+    expect(output).toContain("func (User) TableName() string {");
+    expect(output).toContain('return "users"');
   });
 
-  it("emits model with relations and enums without errors", async () => {
-    const runner = await createEmitterTestRunner();
-    await runner.compile(`
+  it("emits table models with enum fields and bidirectional relationships", async () => {
+    const code = `
       enum Status {
         active: "active",
         inactive: "inactive",
@@ -47,30 +63,49 @@ describe("GORM emitter end-to-end", () => {
         @onDelete("CASCADE")
         user: User;
       }
-    `);
+    `;
 
-    const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toHaveLength(0);
+    const user = await emitGoFile(code, "user.go");
+    const post = await emitGoFile(code, "post.go");
+
+    expect(user).toContain("type Status string");
+    expect(user).toContain('StatusActive Status = "active"');
+    expect(user).toContain('StatusInactive Status = "inactive"');
+    expect(user).toContain("Status Status");
+    expect(user).toContain("Posts []Post");
+    expect(user).toContain("foreignKey:UserID;references:ID");
+    expect(post).toContain("Content string");
+    expect(post).toContain("type:text");
+    expect(post).toContain("UserID uuid.UUID");
+    expect(post).toContain("User User");
+    expect(post).toContain("constraint:OnDelete:CASCADE");
   });
 
-  it("emits @data model without errors", async () => {
-    const runner = await createEmitterTestRunner();
-    await runner.compile(`
+  it("emits @data model as a DTO with validation, json, and form tags", async () => {
+    const output = await emitGoFile(
+      `
       @data("Registration Form")
       model RegisterForm {
         @title("Full Name") @minLength(1) name: string;
         @title("Email") @format("email") email: string;
         @title("Password") @minLength(8) password: string;
       }
-    `);
+    `,
+      "register_form.go",
+    );
 
-    const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toHaveLength(0);
+    expect(output).toContain("type RegisterForm struct {");
+    expect(output).toContain('validate:"required,min=1" json:"name" form:"name,title=Full Name"');
+    expect(output).toContain('validate:"required,email" json:"email" form:"email,title=Email"');
+    expect(output).toContain(
+      'validate:"required,min=8" json:"password" form:"password,title=Password"',
+    );
+    expect(output).not.toContain("TableName()");
   });
 
-  it("emits model with composite indexes without errors", async () => {
-    const runner = await createEmitterTestRunner();
-    await runner.compile(`
+  it("emits composite index and unique tags on participating fields", async () => {
+    const output = await emitGoFile(
+      `
       @table
       model Product {
         @key id: uuid;
@@ -82,15 +117,21 @@ describe("GORM emitter end-to-end", () => {
         @unique
         unqCodeVer: composite<"code", "version">;
       }
-    `);
+    `,
+      "product.go",
+    );
 
-    const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toHaveLength(0);
+    expect(output).toContain("index:products_name_email_idx,priority:1");
+    expect(output).toContain("index:products_name_email_idx,priority:2");
+    expect(output).toContain("uniqueIndex:products_code_version_unique,priority:1");
+    expect(output).toContain("uniqueIndex:products_code_version_unique,priority:2");
+    expect(output).not.toContain("IdxNameEmail");
+    expect(output).not.toContain("UnqCodeVer");
   });
 
-  it("emits model with all decorator features without errors", async () => {
-    const runner = await createEmitterTestRunner();
-    await runner.compile(`
+  it("emits decorator-driven tags for mapped, numeric, soft delete, and timestamp fields", async () => {
+    const output = await emitGoFile(
+      `
       @table
       model User {
         @key id: uuid;
@@ -103,15 +144,26 @@ describe("GORM emitter end-to-end", () => {
         @autoCreateTime createdAt: utcDateTime;
         @autoUpdateTime updatedAt: utcDateTime;
       }
-    `);
+    `,
+      "user.go",
+    );
 
-    const errors = runner.program.diagnostics.filter((d) => d.severity === "error");
-    expect(errors).toHaveLength(0);
+    expect(output).toContain('validate:"required,max=255,min=1"');
+    expect(output).toContain('validate:"required,email"');
+    expect(output).toContain("Age *int32");
+    expect(output).toContain("lte=200");
+    expect(output).toContain("gte=0");
+    expect(output).toContain("column:user_role");
+    expect(output).toContain("index");
+    expect(output).toContain("Balance *decimal.Decimal");
+    expect(output).toContain("type:numeric(10,2)");
+    expect(output).toContain("DeletedAt gorm.DeletedAt");
+    expect(output).toContain("autoCreateTime");
+    expect(output).toContain("autoUpdateTime");
   });
 
   it("emits standalone module manifests with namespace-based imports", async () => {
-    const output = await renderGoOutput(
-      `
+    const code = `
       namespace App.Identity {
         @table
         model User {
@@ -119,17 +171,24 @@ describe("GORM emitter end-to-end", () => {
           name: string;
         }
       }
-    `,
-      "test",
-      {
-        standalone: true,
-        "library-name": "github.com/acme/domain-models",
-      },
-    );
+    `;
+    const options = {
+      standalone: true,
+      "library-name": "github.com/acme/domain-models",
+    };
 
-    const files = JSON.stringify(output);
-    expect(files).toContain("go.mod");
-    expect(files).toContain("models.go");
-    expect(files).toContain("github.com/acme/domain-models");
+    const mod = await emitGoFile(code, "go.mod", "test", options);
+    const manifest = await emitGoFile(code, "models.go", "test", options);
+    const user = await emitGoFile(code, "user.go", "test", options);
+
+    expect(mod).toContain("module github.com/acme/domain-models");
+    expect(manifest).toContain("package domain_models");
+    expect(manifest).toContain('"gorm.io/gorm"');
+    expect(manifest).toContain(
+      'test_app_identity "github.com/acme/domain-models/test/app/identity"',
+    );
+    expect(manifest).toContain("&test_app_identity.User{}");
+    expect(user).toContain("package identity");
+    expect(user).toContain("type User struct");
   });
 });

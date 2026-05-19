@@ -5,6 +5,7 @@
 import type { Model, Program } from "@typespec/compiler";
 import {
   classifyProperties,
+  collectCompositeTypeFields,
   getCompositeFields,
   isKey,
   isUnique,
@@ -48,25 +49,7 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Collect composite type fields for indexes
-  const compositeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      compositeFields.push({
-        name: prop.name,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
+  const compositeFields = collectCompositeTypeFields(program, model, tableName);
 
   indexes.push(...compositeFields.map(buildCompositeIndexLine));
 

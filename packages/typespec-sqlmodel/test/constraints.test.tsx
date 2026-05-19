@@ -226,6 +226,26 @@ describe("SQLModel field constraints", () => {
     // Field doc → sa_column_kwargs comment
     expect(output).toContain('"comment"');
   });
+
+  it("generates inherited check constraints", async () => {
+    const output = await emitPyFile(
+      `
+      model PositiveBalance {
+        @check("balance_non_negative", "balance >= 0")
+        balance: decimal;
+      }
+
+      @table
+      model Account extends PositiveBalance {
+        @key id: uuid;
+      }
+    `,
+      "account.py",
+    );
+
+    expect(output).toContain('CheckConstraint("balance >= 0", name="balance_non_negative")');
+    expect(output).toContain("from sqlalchemy import CheckConstraint");
+  });
 });
 
 describe("SQLModel primary key generation", () => {

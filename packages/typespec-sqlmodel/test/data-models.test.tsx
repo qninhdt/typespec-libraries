@@ -35,6 +35,26 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
     expect(output).toContain("max_length=100");
   });
 
+  it("generates inherited data model fields", async () => {
+    const output = await emitPyFile(
+      `
+      model BaseForm {
+        @title("Email Address") @format("email") email: string;
+      }
+
+      @data("Invite form")
+      model InviteForm extends BaseForm {
+        message?: string;
+      }
+    `,
+      "invite_form.py",
+    );
+
+    expect(output).toContain("email: EmailStr = Field(...");
+    expect(output).toContain('title="Email Address"');
+    expect(output).toContain("message: str | None = Field(None");
+  });
+
   it("generates T | None with Field(None) for optional fields", async () => {
     const output = await emitPyFile(
       `

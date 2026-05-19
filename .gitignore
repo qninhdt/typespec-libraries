@@ -20,6 +20,10 @@ node_modules/
 
 # Temp folder
 temp/
+packages/**/.tmp/
+
+# Local code index
+.codegraph/
 
 # Test
 coverage/

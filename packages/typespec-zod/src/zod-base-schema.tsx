@@ -9,7 +9,17 @@ import {
   ObjectExpression,
   ObjectProperty,
 } from "@alloy-js/typescript";
-import { Enum, LiteralType, Model, Scalar, Tuple, Type, Union } from "@typespec/compiler";
+import {
+  Enum,
+  LiteralType,
+  Model,
+  Program,
+  Scalar,
+  Tuple,
+  Type,
+  Union,
+  walkPropertiesInherited,
+} from "@typespec/compiler";
 import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
 import { ZodCustomTypeComponent } from "./components/ZodCustomTypeComponent.js";
@@ -168,10 +178,11 @@ function modelBaseType(type: Model) {
   }
 
   let memberPart: Children | undefined;
-  if (type.properties.size > 0) {
+  const properties = getModelSchemaProperties($.program, type);
+  if (properties.length > 0) {
     const members = (
       <ObjectExpression>
-        <For each={type.properties.values()} comma enderPunctuation>
+        <For each={properties} comma enderPunctuation>
           {(prop: any) => (
             <ZodCustomTypeComponent
               type={prop}
@@ -203,6 +214,14 @@ function modelBaseType(type: Model) {
   }
 
   return parts;
+}
+
+function getModelSchemaProperties(program: Program, type: Model) {
+  if (type.baseModel && shouldReference(program, type.baseModel)) {
+    return [...type.properties.values()];
+  }
+
+  return [...walkPropertiesInherited(type)];
 }
 
 function unionBaseType(type: Union) {

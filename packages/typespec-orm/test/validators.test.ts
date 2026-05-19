@@ -48,6 +48,31 @@ describe("$onValidate diagnostics", () => {
     expect(diags[0].severity).toBe("error");
   });
 
+  it("uses inherited properties for table validation", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model BaseRecord {
+        @key id: uuid;
+        email: string;
+      }
+
+      @table
+      model User extends BaseRecord {
+        @map("email") contactEmail: string;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const missingKeyDiags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/missing-key",
+    );
+    const duplicateColumnDiags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/duplicate-column-name",
+    );
+    expect(missingKeyDiags).toHaveLength(0);
+    expect(duplicateColumnDiags).toHaveLength(1);
+  });
+
   it("reports @softDelete on non-datetime type", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
@@ -307,6 +332,28 @@ describe("$onValidate diagnostics", () => {
       (d) => d.code === "@qninhdt/typespec-orm/cascade-without-relation",
     );
     expect(diags).toHaveLength(2);
+  });
+
+  it("reports cascade decorators used on inherited scalar fields", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model BaseRecord {
+        @key id: uuid;
+        @onDelete("CASCADE")
+        status: string;
+      }
+
+      @table
+      model User extends BaseRecord {
+        name: string;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/cascade-without-relation",
+    );
+    expect(diags).toHaveLength(1);
   });
 
   it("reports many-to-many declarations without an inverse", async () => {

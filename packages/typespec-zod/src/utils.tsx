@@ -5,7 +5,7 @@
 import { Refkey } from "@alloy-js/core";
 import { Children } from "@alloy-js/core/jsx-runtime";
 import { FunctionCallExpression, MemberExpression } from "@alloy-js/typescript";
-import { Program, Type } from "@typespec/compiler";
+import { Program, Type, walkPropertiesInherited } from "@typespec/compiler";
 import { $ } from "@typespec/compiler/typekit";
 import { SCCSet } from "@typespec/emitter-framework";
 import { zod } from "./external-packages/zod.js";
@@ -104,7 +104,7 @@ export function newTopologicalTypeCollector(program: Program): TypeCollector {
         return [
           ...(type.baseModel ? [type.baseModel] : []),
           ...(type.indexer ? [type.indexer.key, type.indexer.value] : []),
-          ...[...type.properties.values()].map((p) => p.type),
+          ...[...walkPropertiesInherited(type)].map((p) => p.type),
         ];
 
       case "Union":

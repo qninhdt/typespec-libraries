@@ -7,7 +7,12 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import type { Model, ModelProperty, Program } from "@typespec/compiler";
+import {
+  walkPropertiesInherited,
+  type Model,
+  type ModelProperty,
+  type Program,
+} from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getDoc,
@@ -46,7 +51,7 @@ export function GormDataFile(props: GormDataFileProps): Children {
   const fieldLineStrs: string[] = [];
   const enumTypes = new Map<string, EnumMemberInfo[]>();
 
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     const enumInfo = getPropertyEnum(prop);
     if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
       enumTypes.set(enumInfo.enumType.name, enumInfo.members);

@@ -121,7 +121,7 @@ function validateModel(program: Program, model: Model): void {
   const columnNames = new Map<string, string>(); // columnName → propName
   const constraintNames = new Map<string, string>(); // constraintName -> decorator
 
-  for (const [, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
     // Skip navigation/array properties (relations)
     if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
       continue;
@@ -336,7 +336,7 @@ function validateCascadeOnScalar(
   tableModels: { model: Model; tableName: string }[],
 ): void {
   for (const { model } of tableModels) {
-    for (const [, prop] of model.properties) {
+    for (const prop of walkPropertiesInherited(model)) {
       // Skip Model-typed (relations)
       if (prop.type.kind === "Model") continue;
 
@@ -686,7 +686,8 @@ function validateCompositeConstraints(
   >();
 
   // First, collect all composite type fields from properties
-  for (const [propName, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
+    const propName = prop.name;
     const compositeColumns = getCompositeFields(program, prop);
     if (!compositeColumns) continue;
 
@@ -716,7 +717,8 @@ function validateCompositeConstraints(
   }
 
   // Check composite type fields reference valid columns
-  for (const [propName, prop] of model.properties) {
+  for (const prop of walkPropertiesInherited(model)) {
+    const propName = prop.name;
     const compositeColumns = getCompositeFields(program, prop);
     if (!compositeColumns) continue;
 

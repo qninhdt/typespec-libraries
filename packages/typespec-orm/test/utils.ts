@@ -13,7 +13,6 @@ export async function createTestHost() {
 export async function createTestRunner() {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) =>
-      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
+    wrapper: (code) => `using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
   });
 }

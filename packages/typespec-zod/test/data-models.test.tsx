@@ -108,6 +108,29 @@ describe("Zod @data model generation", () => {
 
     expect(output).toContain(".email()");
   });
+
+  it("generates inherited schema fields and metadata", async () => {
+    const output = await emitZodFile(
+      `
+      model BaseForm {
+        @title("Email Address") @format("email") email: string;
+      }
+
+      @data("Invite form")
+      model InviteForm extends BaseForm {
+        message?: string;
+      }
+    `,
+      "InviteForm.ts",
+    );
+
+    expect(output).toContain("const BaseFormSchema = z.object(");
+    expect(output).not.toContain("export const BaseFormSchema");
+    expect(output).toContain("email: z.string().email()");
+    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.merge(");
+    expect(output).toContain("message: z.string().optional()");
+    expect(output).toContain('email: { title: "Email Address", inputType: "email" }');
+  });
 });
 
 describe("Zod model file structure", () => {

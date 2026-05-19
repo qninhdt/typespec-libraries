@@ -31,16 +31,14 @@ export async function createTestHost() {
 export async function createTestRunner() {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) =>
-      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
+    wrapper: (code) => `using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
   });
 }
 
 export async function createEmitterTestRunner(emitterOptions?: Record<string, unknown>) {
   const host = await createTestHost();
   return createTestWrapper(host, {
-    wrapper: (code) =>
-      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
+    wrapper: (code) => `using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
     compilerOptions: {
       emit: ["@qninhdt/typespec-gorm"],
       options: {

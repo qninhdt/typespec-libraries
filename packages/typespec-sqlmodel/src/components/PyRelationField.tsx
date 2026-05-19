@@ -11,7 +11,6 @@ import { reportDiagnostic } from "../lib.js";
 import { FOUR_SPACES } from "./PyConstants.js";
 
 const CASCADE_DELETE_ORPHAN = '"cascade": "all, delete-orphan"';
-const CASCADE_SAVE_UPDATE = '"cascade": "save-update, merge"';
 
 /**
  * Generate a SQLModel Relationship() for a navigation property.
@@ -75,8 +74,6 @@ export function generateRelationField(
     saRelKwArgs.push(`"secondary": ${manyToManySecondary}`);
   } else if (isMany && rel.onDelete === "CASCADE") {
     saRelKwArgs.push(CASCADE_DELETE_ORPHAN);
-  } else if (isMany && rel.onDelete === "SET NULL") {
-    saRelKwArgs.push(CASCADE_SAVE_UPDATE);
   }
 
   // Add any sa_relationship_kwargs to relArgs

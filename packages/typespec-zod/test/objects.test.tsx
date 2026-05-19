@@ -185,6 +185,27 @@ describe("Zod union schema generation", () => {
     expect(output).toContain("z.union(");
   });
 
+  it("declares named union schemas referenced by model fields", async () => {
+    const output = await emitZodFile(
+      `
+      union Contact {
+        email: string,
+        phone: string,
+      }
+
+      @data("Form")
+      model Result {
+        contact: Contact;
+      }
+    `,
+      "Result.ts",
+    );
+
+    expect(output).toContain("const ContactSchema = z.union(");
+    expect(output).toContain("contact: ContactSchema");
+    expect(output).not.toContain("export const ContactSchema");
+  });
+
   it("generates z.null() for null type", async () => {
     const output = await emitZodFile(
       `

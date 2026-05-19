@@ -47,6 +47,27 @@ describe("GORM @data model generation", () => {
     expect(bioLine).toContain("omitempty");
   });
 
+  it("generates inherited data model fields", async () => {
+    const output = await emitGoFile(
+      `
+      model BaseForm {
+        @title("Email Address") @format("email") email: string;
+      }
+
+      @data("Invite form")
+      model InviteForm extends BaseForm {
+        message?: string;
+      }
+    `,
+      "invite_form.go",
+    );
+
+    expect(output).toContain("Email string");
+    expect(output).toContain('validate:"required,email" json:"email"');
+    expect(output).toContain("title=Email Address");
+    expect(output).toContain("Message *string");
+  });
+
   it("generates form tags with @title and @placeholder", async () => {
     const output = await emitGoFile(
       `
