@@ -28,6 +28,8 @@ import {
   FOUR_SPACES,
   generateEnumClass,
   buildPythonImportBlock,
+  pythonStringLiteral,
+  pythonTripleQuotedString,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
 import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
@@ -215,17 +217,19 @@ function buildCompositeTableArgEntries(
   let hasUniqueConstraint = false;
 
   for (const ct of compositeTypeFields) {
-    const cols = ct.columns.map((column) => `"${camelToSnake(column)}"`).join(", ");
+    const cols = ct.columns.map((column) => pythonStringLiteral(column)).join(", ");
     if (ct.isPrimary || ct.isUnique) {
       hasUniqueConstraint = true;
       tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name="${camelToSnake(ct.name)}")`,
+        `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name=${pythonStringLiteral(ct.name)})`,
       );
       continue;
     }
 
     hasIndex = true;
-    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index("${camelToSnake(ct.name)}", ${cols})`);
+    tableArgEntries.push(
+      `${FOUR_SPACES}${FOUR_SPACES}Index(${pythonStringLiteral(ct.name)}, ${cols})`,
+    );
   }
 
   if (hasIndex) saImports.add("sqlalchemy.Index");
@@ -309,8 +313,8 @@ function buildModelClass(
 ): string {
   const modelDoc = getDoc(program, model) ?? `Represents the ${tableName} table.`;
   let code = `class ${model.name}(SQLModel, table=True):\n`;
-  code += `${FOUR_SPACES}"""${modelDoc}"""\n\n`;
-  code += `${FOUR_SPACES}__tablename__ = "${tableName}" # type: ignore \n`;
+  code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc)}\n\n`;
+  code += `${FOUR_SPACES}__tablename__ = ${pythonStringLiteral(tableName)} # type: ignore \n`;
 
   if (tableArgEntries.length > 0) {
     code += `${FOUR_SPACES}__table_args__ = (\n`;
@@ -370,7 +374,7 @@ function buildForeignKeyInfoMap(
       continue;
     }
 
-    fkInfoMap.set(camelToSnake(resolved.fkColumnName), {
+    fkInfoMap.set(resolved.fkColumnName, {
       targetTable: resolved.targetTable,
       targetColumn: resolved.fkTargetColumn,
       onDelete: resolved.onDelete,

@@ -62,13 +62,21 @@ function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
     parts.push(callPart("max", constraints.maxLength));
   }
   if (constraints.pattern !== undefined) {
-    parts.push(callPart("regex", `/${constraints.pattern}/`));
+    parts.push(callPart("regex", renderRegexLiteral(constraints.pattern)));
   }
   if (constraints.format !== undefined) {
     parts.push(callPart(constraints.format));
   }
 
   return parts;
+}
+
+function renderRegexLiteral(pattern: string): string {
+  if (/[\r\n\u2028\u2029]/.test(pattern)) {
+    return `new RegExp(${JSON.stringify(pattern)})`;
+  }
+
+  return `/${pattern.replaceAll("/", "\\/")}/`;
 }
 
 function assignStringConstraints(target: StringConstraints, source: StringConstraints) {

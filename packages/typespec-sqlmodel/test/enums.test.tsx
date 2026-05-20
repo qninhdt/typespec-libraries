@@ -52,6 +52,25 @@ describe("SQLModel enum generation", () => {
     expect(output).toContain("Enum as SAEnum");
   });
 
+  it("escapes enum string values", async () => {
+    const output = await emitPyFile(
+      `
+      enum Weird {
+        quoted: "a\\"b",
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        weird: Weird;
+      }
+    `,
+      "user.py",
+    );
+
+    expect(output).toContain('quoted = "a\\"b"');
+  });
+
   it("generates optional enum with | None", async () => {
     const output = await emitPyFile(
       `

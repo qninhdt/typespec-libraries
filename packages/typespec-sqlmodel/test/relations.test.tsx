@@ -86,6 +86,33 @@ describe("SQLModel one-to-many relationships", () => {
     expect(output).not.toContain("foreign_keys");
   });
 
+  it("uses exact mapped FK column names when applying relation metadata", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("user")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        @map("ownerId")
+        ownerId: uuid;
+        @foreignKey("ownerId")
+        @onDelete("CASCADE")
+        user: User;
+      }
+    `,
+      "post.py",
+    );
+
+    expect(output).toContain("ownerId: UUID = Field(");
+    expect(output).toContain('ForeignKey("users.id", ondelete="CASCADE")');
+  });
+
   it("Relationship does NOT include foreign_keys when FK is explicit", async () => {
     const output = await emitPyFile(
       `

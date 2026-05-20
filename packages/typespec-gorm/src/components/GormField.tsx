@@ -213,7 +213,7 @@ function resolveGoType(
     gormTypeName = `varchar(${maxLen})`;
   }
   const prec = getPrecision(program, prop);
-  if (prec && (dbType === "decimal" || dbType === "float64")) {
+  if (prec && (dbType === "decimal" || dbType === "float32" || dbType === "float64")) {
     gormTypeName = `numeric(${prec.precision},${prec.scale})`;
   }
   if (gormTypeName) tagParts.push(`type:${gormTypeName}`);

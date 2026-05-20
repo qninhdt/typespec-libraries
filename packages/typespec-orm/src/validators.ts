@@ -47,7 +47,7 @@ import {
 // ─── Type‐check Sets (module‐level to avoid per‐call allocation) ─────────────
 
 /** Types that accept @precision */
-const PRECISION_TYPES = new Set(["decimal", "float32", "float64", "int32", "int64"]);
+const PRECISION_TYPES = new Set(["decimal", "float32", "float64"]);
 
 /** Types that accept @autoIncrement */
 const INTEGER_TYPES = new Set([
@@ -679,7 +679,7 @@ function validateCompositeConstraints(
 ): void {
   const validColumns = new Set(columnNames.keys());
 
-  // Track all composite field columns (from composite<> type) to detect conflicts
+  // Track all resolved composite columns (from composite<> type) to detect conflicts.
   const compositeFieldColumns = new Map<
     string,
     { propName: string; isUnique: boolean; isPrimary: boolean }
@@ -695,9 +695,10 @@ function validateCompositeConstraints(
     const propIsPrimary = isKey(program, prop);
 
     for (const col of compositeColumns) {
-      const existing = compositeFieldColumns.get(col);
+      const resolvedCol = resolveCompositeColumnReference(program, model, col);
+      const existing = compositeFieldColumns.get(resolvedCol);
       if (existing) {
-        // Conflict: same column in multiple composite fields
+        // Conflict: same resolved column in multiple composite fields.
         reportDiagnostic(program, {
           code: "composite-column-conflict",
           target: prop,
@@ -708,7 +709,7 @@ function validateCompositeConstraints(
           },
         });
       }
-      compositeFieldColumns.set(col, {
+      compositeFieldColumns.set(resolvedCol, {
         propName,
         isUnique: propIsUnique,
         isPrimary: propIsPrimary,
@@ -735,17 +736,18 @@ function validateCompositeConstraints(
     // Check for duplicate columns in same composite
     const seenColumns = new Set<string>();
     for (const col of compositeColumns) {
-      if (seenColumns.has(col)) {
+      const resolvedCol = resolveCompositeColumnReference(program, model, col);
+      if (seenColumns.has(resolvedCol)) {
         reportDiagnostic(program, {
           code: "duplicate-column-in-composite",
           target: prop,
           format: { columnName: col, propName },
         });
       }
-      seenColumns.add(col);
+      seenColumns.add(resolvedCol);
 
       // Check for non-existent column
-      if (!validColumns.has(col)) {
+      if (!validColumns.has(resolvedCol)) {
         reportDiagnostic(program, {
           code: "composite-column-not-found",
           target: prop,
@@ -758,6 +760,15 @@ function validateCompositeConstraints(
       }
     }
   }
+}
+
+function resolveCompositeColumnReference(
+  program: Program,
+  model: Model,
+  reference: string,
+): string {
+  const property = resolvePropertyReference(program, model, reference);
+  return property ? getColumnName(program, property) : reference;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

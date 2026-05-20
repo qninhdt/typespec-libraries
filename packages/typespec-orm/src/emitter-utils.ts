@@ -15,10 +15,12 @@ import {
 import type { EnumMemberInfo, ResolvedRelation } from "./helpers.js";
 import {
   getCompositeFields,
+  getColumnName,
   getForeignKeyConfig,
   getManyToMany,
   getMappedBy,
   getPropertyEnum,
+  resolvePropertyReference,
   isIgnored,
   isKey,
   isUnique,
@@ -69,7 +71,7 @@ export function deduplicateParts(parts: string[]): string[] {
 export interface CompositeTypeField {
   /** Generated constraint name (e.g. "users_name_email_idx") */
   name: string;
-  /** Column names (camelCase, from TypeSpec properties) */
+  /** Database column names resolved from TypeSpec property or column references. */
   columns: string[];
   /** Whether this is a unique constraint */
   isUnique: boolean;
@@ -101,17 +103,25 @@ export function collectCompositeTypeFields(
       } else if (isUnique(program, prop)) {
         suffix = "unique";
       }
-      const snakeColumns = columns.map((c) => camelToSnake(c));
+      const resolvedColumns = columns.map((column) =>
+        resolveCompositeColumnName(program, model, column),
+      );
+      const snakeColumns = resolvedColumns.map((column) => camelToSnake(column));
       const generatedName = [tableName, ...snakeColumns, suffix].join("_");
       result.push({
         name: generatedName,
-        columns,
+        columns: resolvedColumns,
         isUnique: isUnique(program, prop),
         isPrimary: isKey(program, prop),
       });
     }
   }
   return result;
+}
+
+function resolveCompositeColumnName(program: Program, model: Model, reference: string): string {
+  const property = resolvePropertyReference(program, model, reference);
+  return property ? getColumnName(program, property) : reference;
 }
 
 /**
@@ -125,7 +135,7 @@ export function buildCompositeUniqueColumns(
   for (const ct of compositeTypeFields) {
     if (ct.isUnique) {
       for (const col of ct.columns) {
-        result.add(camelToSnake(col));
+        result.add(col);
       }
     }
   }

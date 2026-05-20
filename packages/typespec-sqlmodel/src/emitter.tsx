@@ -105,7 +105,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
       {isStandalone && (
         <SourceFile path="pyproject.toml" filetype="toml" printWidth={9999}>
           {`[project]
-name = "${libraryName}"
+name = ${JSON.stringify(libraryName)}
 version = "0.0.0"
 description = "Generated SQLModel classes"
 requires-python = ">=3.10"

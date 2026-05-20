@@ -91,6 +91,24 @@ describe("$onValidate diagnostics", () => {
     expect(diags[0].severity).toBe("error");
   });
 
+  it("reports @precision on integer types", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @precision(10, 2) count: int32;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/precision-on-non-numeric",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+  });
+
   it("reports multiple @softDelete on same model", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
@@ -461,5 +479,26 @@ describe("$onValidate diagnostics", () => {
         !d.code.endsWith("namespace-required"),
     );
     expect(ormErrors).toHaveLength(0);
+  });
+
+  it("accepts composite references to mapped property names", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @map("tenantId") tenantId: uuid;
+        code: string;
+        @unique tenantCode: composite<"tenantId", "code">;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const compositeErrors = runner.program.diagnostics.filter(
+      (d) =>
+        d.code === "@qninhdt/typespec-orm/composite-column-not-found" ||
+        d.code === "@qninhdt/typespec-orm/duplicate-column-in-composite",
+    );
+    expect(compositeErrors).toHaveLength(0);
   });
 });

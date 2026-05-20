@@ -71,18 +71,18 @@ describe("collectCompositeTypeFields", () => {
     expect(collectCompositeTypeFields(runner.program, project, "projects")).toEqual([
       {
         name: "projects_tenant_id_code_unique",
-        columns: ["tenantId", "code"],
+        columns: ["tenant_id", "code"],
         isUnique: true,
         isPrimary: false,
       },
     ]);
   });
 
-  it("builds composite unique column set in snake_case", () => {
+  it("builds composite unique column set from resolved columns", () => {
     const result = buildCompositeUniqueColumns([
       {
         name: "users_email_deleted_at_unique",
-        columns: ["email", "deletedAt"],
+        columns: ["email", "deleted_at"],
         isUnique: true,
         isPrimary: false,
       },

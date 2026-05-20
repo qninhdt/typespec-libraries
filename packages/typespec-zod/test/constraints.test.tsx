@@ -45,6 +45,20 @@ describe("Zod string constraints", () => {
     expect(output).toContain("^[A-Za-z]+$");
   });
 
+  it("escapes slashes in regex literals", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        @pattern("^a/b$") code: string;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain(".regex(/^a\\/b$/)");
+  });
+
   it("generates .email() for @format email", async () => {
     const output = await emitZodFile(
       `

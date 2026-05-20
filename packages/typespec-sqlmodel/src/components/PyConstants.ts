@@ -151,6 +151,20 @@ export function getPythonTypeMap(dbType: string): PythonTypeMapping {
 }
 
 /**
+ * Render a Python double-quoted string literal.
+ */
+export function pythonStringLiteral(value: string): string {
+  return JSON.stringify(value);
+}
+
+/**
+ * Render a Python docstring while preserving the existing triple-quote style.
+ */
+export function pythonTripleQuotedString(value: string): string {
+  return `"""${value.replaceAll("\\", "\\\\").replaceAll('"""', '\\"\\"\\"')}"""`;
+}
+
+/**
  * Convert an array of column-level arguments into a Python dict literal for `sa_column_kwargs={...}`.
  */
 export function serializeColumnKwargs(columnArgs: string[]): string {
@@ -234,9 +248,9 @@ export function groupImports(imports: Set<string>): Map<string, Set<string>> {
  */
 export function generateEnumClass(enumName: string, members: EnumMemberInfo[]): string {
   let code = `class ${enumName}(str, Enum):\n`;
-  code += `${FOUR_SPACES}"""Auto-generated enum for ${camelToSnake(enumName)}."""\n\n`;
+  code += `${FOUR_SPACES}${pythonTripleQuotedString(`Auto-generated enum for ${camelToSnake(enumName)}.`)}\n\n`;
   for (const m of members) {
-    code += `${FOUR_SPACES}${camelToSnake(m.name)} = "${m.value}"\n`;
+    code += `${FOUR_SPACES}${camelToSnake(m.name)} = ${pythonStringLiteral(m.value)}\n`;
   }
   return code;
 }
@@ -279,7 +293,7 @@ export function generateInit(options: PyInitOptions): string {
     allExports.push(`${FOUR_SPACES}"${model.name}",`);
   }
 
-  let code = `"""${options.moduleName} - auto-generated models. DO NOT EDIT."""\n\n`;
+  let code = `${pythonTripleQuotedString(`${options.moduleName} - auto-generated models. DO NOT EDIT.`)}\n\n`;
 
   if (imports.length > 0) {
     code += imports.join("\n");

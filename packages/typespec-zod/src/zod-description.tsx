@@ -36,8 +36,8 @@ export function zodDescriptionParts(type: Type, member?: ModelProperty) {
   }
 
   if (doc) {
-    const escapedDoc = doc.replaceAll(/\n+/g, " ").replaceAll('"', String.raw`\"`);
-    return [callPart("describe", String.raw`"${escapedDoc}"`)];
+    const escapedDoc = doc.replaceAll(/\n+/g, " ");
+    return [callPart("describe", JSON.stringify(escapedDoc))];
   }
 
   return [];

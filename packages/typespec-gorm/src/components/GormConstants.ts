@@ -92,6 +92,13 @@ export function escapeComment(doc: string): string {
 }
 
 /**
+ * Render a quoted Go interpreted string literal.
+ */
+export function goStringLiteral(value: string): string {
+  return JSON.stringify(value);
+}
+
+/**
  * Build a doc comment line from documentation text.
  */
 export function buildDocComment(doc: string | undefined): string {
@@ -149,10 +156,10 @@ export function buildCompositeMap(
     }
 
     for (let i = 0; i < ct.columns.length; i++) {
-      const snakeCol = camelToSnake(ct.columns[i]);
-      const tags = map.get(snakeCol) ?? [];
+      const column = ct.columns[i];
+      const tags = map.get(column) ?? [];
       tags.push({ kind, name: ct.name, priority: i + 1 });
-      map.set(snakeCol, tags);
+      map.set(column, tags);
     }
   }
 
@@ -175,7 +182,7 @@ export function buildGoEnumBlock(enumTypes: Map<string, EnumMemberInfo[]>): stri
     );
     for (const m of members) {
       const constName = `${goTypeName}${camelToPascal(m.name)}`;
-      lines.push(`\t${constName} ${goTypeName} = "${m.value}"`);
+      lines.push(`\t${constName} ${goTypeName} = ${goStringLiteral(m.value)}`);
     }
     lines.push(")", "");
   }

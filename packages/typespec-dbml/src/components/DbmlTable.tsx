@@ -10,7 +10,6 @@ import {
   isKey,
   isUnique,
   isIndex,
-  camelToSnake,
   getColumnName,
   getDoc,
 } from "@qninhdt/typespec-orm";
@@ -58,7 +57,7 @@ export function DbmlTable(props: DbmlTableProps): string {
     // Skip composite type configuration properties
     if (getCompositeFields(program, prop)) continue;
 
-    const colName = camelToSnake(getColumnName(program, prop));
+    const colName = getColumnName(program, prop);
 
     if (isIndex(program, prop) && !isUnique(program, prop)) {
       indexes.push(`    ${colName}`);
@@ -81,12 +80,11 @@ function buildCompositeIndexLine(ct: {
   isUnique: boolean;
   isPrimary: boolean;
 }): string {
-  const snakeColumns = ct.columns.map((column) => camelToSnake(column));
   let suffix = "";
   if (ct.isPrimary) {
     suffix = " [pk]";
   } else if (ct.isUnique) {
     suffix = " [unique]";
   }
-  return `    (${snakeColumns.join(", ")})${suffix}`;
+  return `    (${ct.columns.join(", ")})${suffix}`;
 }

@@ -4,7 +4,6 @@
 
 import type { ModelProperty, Program } from "@typespec/compiler";
 import type { ResolvedRelation } from "@qninhdt/typespec-orm";
-import { camelToSnake } from "@qninhdt/typespec-orm";
 
 export function generateRelationField(
   program: Program,
@@ -12,10 +11,10 @@ export function generateRelationField(
   rel: ResolvedRelation,
   sourceTableName: string,
 ): string {
-  // Get the FK column and convert to snake_case
-  const fromColumn = camelToSnake(rel.fkColumnName);
+  // Use the already-resolved database column names.
+  const fromColumn = rel.fkColumnName;
   const toTable = rel.targetTable;
-  const toColumn = camelToSnake(rel.fkTargetColumn || "id");
+  const toColumn = rel.fkTargetColumn || "id";
 
   // Determine relationship type based on relation kind
   // DBML uses: > (many-to-one), < (one-to-many), - (one-to-one)

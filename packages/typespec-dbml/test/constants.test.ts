@@ -34,4 +34,8 @@ describe("DBML constants helpers", () => {
     ).toBe(" [pk, increment, not null, unique, default: 'pending', note: 'line one line two']");
     expect(formatColumnSettings({})).toBe("");
   });
+
+  it("escapes single quotes in default settings", () => {
+    expect(formatColumnSettings({ default: "O'Reilly" })).toBe(" [default: 'O\\'Reilly']");
+  });
 });

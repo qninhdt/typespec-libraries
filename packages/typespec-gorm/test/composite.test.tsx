@@ -38,6 +38,26 @@ describe("GORM composite type", () => {
     expect(output).toContain("uniqueIndex:users_organization_id_email_unique,priority:2");
   });
 
+  it("applies composite tags to exact @map column names", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @map("tenantId") tenantId: uuid;
+        code: string;
+        @unique
+        tenantCode: composite<"tenantId", "code">;
+      }
+    `,
+      "user.go",
+    );
+
+    const tenantLine = output.split("\n").find((line) => line.includes("TenantID "));
+    expect(tenantLine).toContain("column:tenantId");
+    expect(tenantLine).toContain("uniqueIndex:users_tenant_id_code_unique,priority:1");
+  });
+
   it("generates composite primary key from composite<> type with @key", async () => {
     const output = await emitGoFile(
       `

@@ -28,6 +28,7 @@ import {
   buildCompositeMap,
   buildImportBlock,
   buildGoEnumBlock,
+  goStringLiteral,
   type GoPackageImport,
 } from "./GormConstants.js";
 import { generateFieldLine, generateIgnoredFieldLine } from "./GormField.jsx";
@@ -138,7 +139,7 @@ export function GormModelFile(props: GormModelFileProps): Children {
   lines.push("");
   lines.push(`// TableName returns the table name for ${structName}.`);
   lines.push(`func (${structName}) TableName() string {`);
-  lines.push(`\treturn "${tableName}"`);
+  lines.push(`\treturn ${goStringLiteral(tableName)}`);
   lines.push("}");
   lines.push("");
 

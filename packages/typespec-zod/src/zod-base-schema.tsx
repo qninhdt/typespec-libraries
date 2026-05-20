@@ -72,7 +72,7 @@ export function zodBaseSchemaParts(type: Type) {
 function literalBaseType($: Typekit, type: LiteralType) {
   switch (type.kind) {
     case "String":
-      return zodMemberExpr(callPart("literal", `"${type.value}"`));
+      return zodMemberExpr(callPart("literal", JSON.stringify(type.value)));
     case "Number":
     case "Boolean":
       return zodMemberExpr(callPart("literal", `${type.value}`));
@@ -247,7 +247,7 @@ function unionBaseType(type: Union) {
   const propKey = discriminated.options.discriminatorPropertyName;
   const envKey = discriminated.options.envelopePropertyName;
   const unionArgs = [
-    `"${propKey}"`,
+    JSON.stringify(propKey),
     <ArrayExpression>
       <For each={Array.from(type.variants.values())} comma line>
         {(variant: any) => {

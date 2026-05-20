@@ -46,6 +46,7 @@ import {
   FOUR_SPACES,
   NEEDS_SA_COLUMN,
   getPythonTypeMap,
+  pythonStringLiteral,
   promoteFieldArgsToColumn,
   serializeColumnKwargs,
   resolveFormatPyType,
@@ -249,7 +250,7 @@ export function generateField(
 
   // Precision override
   let overrideSaColumnType: string | undefined;
-  if (prec && (dbType === "decimal" || dbType === "float64")) {
+  if (prec && (dbType === "decimal" || dbType === "float32" || dbType === "float64")) {
     overrideSaColumnType = `Numeric(${prec.precision}, ${prec.scale})`;
     saImports.add("sqlalchemy.Numeric");
   }
@@ -258,8 +259,7 @@ export function generateField(
   const pattern = getPattern(program, prop);
   if (pattern) {
     needsField.value = true;
-    const escaped = pattern.replace(/\\/g, "\\\\");
-    fieldArgs.push(`pattern=r"${escaped}"`);
+    fieldArgs.push(`pattern=${pythonStringLiteral(pattern)}`);
   }
 
   // Server defaults
@@ -280,7 +280,7 @@ export function generateField(
   // Default value (non-auto-timestamp)
   if (defaultVal && !isPk && !autoCreate && !autoUpdate) {
     needsColumn.value = true;
-    columnArgs.push(`server_default="${defaultVal}"`);
+    columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
   }
 
   // Foreign key with cascade constraints
@@ -310,15 +310,16 @@ export function generateField(
     }
 
     if (targetTable && fkColumn) {
+      const foreignKeyRef = pythonStringLiteral(`${targetTable}.${fkColumn}`);
       if (onDel || onUpd) {
         needsColumn.value = true;
         saImports.add("sqlalchemy.ForeignKey");
-        const fkArgs: string[] = [`"${targetTable}.${fkColumn}"`];
-        if (onDel) fkArgs.push(`ondelete="${onDel}"`);
-        if (onUpd) fkArgs.push(`onupdate="${onUpd}"`);
+        const fkArgs: string[] = [foreignKeyRef];
+        if (onDel) fkArgs.push(`ondelete=${pythonStringLiteral(onDel)}`);
+        if (onUpd) fkArgs.push(`onupdate=${pythonStringLiteral(onUpd)}`);
         columnArgs.unshift(`ForeignKey(${fkArgs.join(", ")})`);
       } else {
-        fieldArgs.push(`foreign_key="${targetTable}.${fkColumn}"`);
+        fieldArgs.push(`foreign_key=${foreignKeyRef}`);
       }
     }
   }
@@ -335,7 +336,7 @@ export function generateField(
   const doc = getDoc(program, prop);
   if (doc) {
     needsColumn.value = true;
-    columnArgs.push(`comment="${doc.replace(/"/g, '\\"')}"`);
+    columnArgs.push(`comment=${pythonStringLiteral(doc)}`);
   }
 
   const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
@@ -467,13 +468,13 @@ function generateArrayField(
   const defaultVal = getDefaultValue(program, prop);
   if (defaultVal && !isPk) {
     needsColumn.value = true;
-    columnArgs.push(`server_default="${defaultVal}"`);
+    columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
   }
 
   // Doc comment
   if (doc) {
     needsColumn.value = true;
-    columnArgs.push(`comment="${doc.replace(/"/g, '\\"')}"`);
+    columnArgs.push(`comment=${pythonStringLiteral(doc)}`);
   }
 
   if (arrayColumnType) {
@@ -590,10 +591,10 @@ function generateEnumField(
   if (isUnique(program, prop) && !isPartOfCompositeUnique) columnArgs.push("unique=True");
 
   const defaultVal = getDefaultValue(program, prop);
-  if (defaultVal) columnArgs.push(`server_default="${defaultVal}"`);
+  if (defaultVal) columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
 
   const doc = getDoc(program, prop);
-  if (doc) columnArgs.push(`comment="${doc.replace(/"/g, '\\"')}"`);
+  if (doc) columnArgs.push(`comment=${pythonStringLiteral(doc)}`);
 
   const fieldArgs: string[] = [];
   if (isOptional) fieldArgs.push("default=None");

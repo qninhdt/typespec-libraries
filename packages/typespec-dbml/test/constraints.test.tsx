@@ -62,6 +62,15 @@ describe("DBML constraints", () => {
     expect(output).toContain("(author_id, status)");
   });
 
+  it("resolves composite indexes through mapped property names", async () => {
+    const output = await emitDbmlFile(
+      `@table model Post { @key id: uuid; @map("authorId") authorId: uuid; status: string; authorStatus: composite<"authorId", "status">; }`,
+      "posts.dbml",
+    );
+    expect(output).toContain("authorId uuid [not null]");
+    expect(output).toContain("(authorId, status)");
+  });
+
   it("generates composite unique constraint via composite<> type", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; email: string; deletedAt?: utcDateTime; @unique emailDeletedAt: composite<"email", "deletedAt">; }`,

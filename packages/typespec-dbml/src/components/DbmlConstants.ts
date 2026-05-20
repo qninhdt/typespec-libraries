@@ -84,12 +84,16 @@ export function formatColumnSettings(settings: ColumnSettings): string {
   if (settings.increment) parts.push("increment");
   if (settings.notNull) parts.push("not null");
   if (settings.unique) parts.push("unique");
-  if (settings.default) parts.push(`default: '${settings.default}'`);
+  if (settings.default) parts.push(`default: '${escapeDbmlSetting(settings.default)}'`);
   if (settings.note) {
     // Sanitize: strip quotes/backticks and collapse newlines to spaces
-    const sanitized = settings.note.replaceAll(/['"`]/g, "").replaceAll("\n", " ");
+    const sanitized = settings.note.replaceAll(/['"`]/g, "").replaceAll(/\r?\n/g, " ");
     parts.push(`note: '${sanitized}'`);
   }
 
   return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
+}
+
+function escapeDbmlSetting(value: string): string {
+  return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
 }

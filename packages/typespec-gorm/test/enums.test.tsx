@@ -75,6 +75,25 @@ describe("GORM enum generation", () => {
     expect(output).toContain("oneof=free,premium");
   });
 
+  it("escapes enum string values in Go constants", async () => {
+    const output = await emitGoFile(
+      `
+      enum Weird {
+        quoted: "a\\"b",
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        weird: Weird;
+      }
+    `,
+      "user.go",
+    );
+
+    expect(output).toContain('\tWeirdQuoted Weird = "a\\"b"');
+  });
+
   it("generates optional enum with pointer type", async () => {
     const output = await emitGoFile(
       `

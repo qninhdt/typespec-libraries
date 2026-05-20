@@ -34,6 +34,8 @@ import {
   getPythonTypeMap,
   generateEnumClass,
   buildPythonImportBlock,
+  pythonStringLiteral,
+  pythonTripleQuotedString,
   resolveFormatPyType,
 } from "./PyConstants.js";
 
@@ -75,7 +77,7 @@ export function PyDataFile(props: PyDataFileProps): Children {
 
   const modelDoc = getDoc(program, model);
   code += `class ${model.name}(BaseModel):\n`;
-  code += `${FOUR_SPACES}"""${modelDoc ?? label}"""\n`;
+  code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc ?? label)}\n`;
   code += "\n";
 
   for (const field of fieldDefs) {
@@ -169,15 +171,15 @@ function buildPydanticFieldArgs(program: Program, prop: ModelProperty, doc?: str
 
   const titleVal = getTitle(program, prop);
   if (titleVal) {
-    fieldArgs.push(`title="${escapePythonString(titleVal)}"`);
+    fieldArgs.push(`title=${pythonStringLiteral(titleVal)}`);
   }
   if (doc) {
-    fieldArgs.push(`description="${escapePythonString(doc)}"`);
+    fieldArgs.push(`description=${pythonStringLiteral(doc)}`);
   }
 
   const placeholder = getPlaceholder(program, prop);
   if (placeholder) {
-    fieldArgs.push(`json_schema_extra={"placeholder": ${toPythonStringLiteral(placeholder)}}`);
+    fieldArgs.push(`json_schema_extra={"placeholder": ${pythonStringLiteral(placeholder)}}`);
   }
 
   return fieldArgs;
@@ -194,13 +196,5 @@ function pushValidationFieldArgs(program: Program, prop: ModelProperty, fieldArg
   if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);
   if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
   if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
-  if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
-}
-
-function escapePythonString(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', String.raw`\"`);
-}
-
-function toPythonStringLiteral(value: string): string {
-  return String.raw`"${escapePythonString(value)}"`;
+  if (pattern !== undefined) fieldArgs.push(`pattern=${pythonStringLiteral(pattern)}`);
 }

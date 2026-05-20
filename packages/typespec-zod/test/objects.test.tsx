@@ -91,6 +91,20 @@ describe("Zod object schema generation", () => {
 
     expect(output).toContain(".default(");
   });
+
+  it("escapes string literal schemas", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        value: "a\\"b";
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain('z.literal("a\\"b")');
+  });
 });
 
 describe("Zod array schema generation", () => {
