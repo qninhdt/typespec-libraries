@@ -60,7 +60,10 @@ function renderNumericDefault(
 }
 
 function usesBigIntSchema($: Typekit, member: ModelProperty): boolean {
-  const type = member.type.kind === "ModelProperty" ? member.type.type : member.type;
+  let type = member.type;
+  while (type.kind === "ModelProperty") {
+    type = type.type;
+  }
 
   if (type.kind !== "Scalar") {
     return false;

@@ -8,7 +8,11 @@ import {
   getTypeFullName,
 } from "@qninhdt/typespec-orm";
 import { buildPythonImportBlock } from "./PyConstants.js";
-import { collectAliasableCustomScalars, generateScalarAlias } from "./py-field-utils.js";
+import {
+  collectAliasableCustomScalars,
+  generateScalarAlias,
+  toPythonIdentifier,
+} from "./py-field-utils.js";
 
 export interface PyScalarsFileProps {
   readonly program: Program;
@@ -81,9 +85,4 @@ function getQualifiedAliasName(program: Program, scalar: Scalar): string {
     .map(camelToPascal)
     .join("");
   return toPythonIdentifier(`${namespace}${camelToPascal(scalar.name)}`);
-}
-
-function toPythonIdentifier(value: string): string {
-  const identifier = value.replaceAll(/\W/g, "_");
-  return /^\d/.test(identifier) ? `_${identifier}` : identifier;
 }

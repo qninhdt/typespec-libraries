@@ -12,11 +12,16 @@ export interface ProtoEnumMember {
   value: number;
 }
 
+function camelToSeparated(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/([A-Z])([A-Z][a-z])/g, "$1_$2");
+}
+
 export function camelToUpperSnake(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
-    .toUpperCase();
+  return camelToSeparated(name).toUpperCase();
+}
+
+export function camelToSnakeCase(name: string): string {
+  return camelToSeparated(name).toLowerCase();
 }
 
 export function resolveProtoEnum(program: Program, enumType: Enum): ProtoEnum {

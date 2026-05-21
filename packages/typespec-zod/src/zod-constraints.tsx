@@ -6,7 +6,7 @@ import { Children } from "@alloy-js/core/jsx-runtime";
 import { getPattern, ModelProperty, Scalar, Type } from "@typespec/compiler";
 import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
-import { callPart, shouldReference } from "./utils.js";
+import { callPart, shouldReference, ZOD_NATIVE_SCALARS } from "./utils.js";
 
 export function zodConstraintsParts(type: Type, member?: ModelProperty) {
   const { $ } = useTsp();
@@ -37,28 +37,6 @@ interface StringConstraints {
   pattern?: string;
   doc?: string;
 }
-
-/**
- * Custom scalars that have native Zod validation methods.
- * For these, we skip the @pattern from the scalar definition in main.tsp
- * since Zod's native method (e.g. .email()) already handles validation.
- */
-const ZOD_NATIVE_SCALARS = new Set([
-  "uuid",
-  "email",
-  "url",
-  "ipv4",
-  "ipv6",
-  "ip",
-  "cidr",
-  "base64",
-  "cuid",
-  "cuid2",
-  "ulid",
-  "nanoid",
-  "jwt",
-  "emoji",
-]);
 
 function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
   const sources = getDecoratorSources($, type, member);

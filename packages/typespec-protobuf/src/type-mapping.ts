@@ -6,9 +6,6 @@ export interface ProtoTypeRef {
   import?: string;
   isRepeated?: boolean;
   isOptional?: boolean;
-  isMap?: boolean;
-  mapKey?: ProtoTypeRef;
-  mapValue?: ProtoTypeRef;
 }
 
 const SCALAR_TO_PROTO: Record<string, ProtoTypeRef> = {
@@ -122,11 +119,10 @@ function resolveModelType(program: Program, model: Model): ProtoTypeRef {
 }
 
 function resolvePropertyType(program: Program, prop: ModelProperty): ProtoTypeRef {
-  const isOptional = prop.optional;
   const result = resolveProtoType(program, prop.type);
 
-  if (isOptional && !result.isRepeated) {
-    result.isOptional = true;
+  if (prop.optional && !result.isRepeated) {
+    return { ...result, isOptional: true };
   }
 
   return result;

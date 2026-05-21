@@ -32,6 +32,8 @@ import {
   type ResolvedRelation,
 } from "@qninhdt/typespec-orm";
 import { goStringLiteral } from "./EntConstants.js";
+import { resolvePostgresArrayElementType } from "./ent-postgres-types.js";
+import { buildImportBlock } from "./ent-imports.js";
 import type { EntEmitterOptions } from "../lib.js";
 
 export interface EntModelFileProps {
@@ -466,22 +468,6 @@ function indentEntBuilder(line: string): string {
   );
 }
 
-function buildImportBlock(imports: Set<string>): string {
-  const sorted = [...imports].sort((left, right) => left.localeCompare(right));
-  if (sorted.length === 0) {
-    return "";
-  }
-  return ["import (", ...sorted.map((item) => `\t${goImportLine(item)}`), ")"].join("\n");
-}
-
-function goImportLine(value: string): string {
-  if (value.includes(" ")) {
-    const [alias, path] = value.split(" ");
-    return `${alias} ${goStringLiteral(path.replaceAll('"', ""))}`;
-  }
-  return goStringLiteral(value);
-}
-
 function formatEntDefault(value: string, type: Type): string | undefined {
   if (type.kind === "ModelProperty") {
     return formatEntDefault(value, type.type);
@@ -546,38 +532,6 @@ function resolveGoArrayElementType(type: Type | undefined): string {
     case "text":
     default:
       return "string";
-  }
-}
-
-function resolvePostgresArrayElementType(dbType: string): string | undefined {
-  switch (dbType) {
-    case "uuid":
-      return "uuid";
-    case "boolean":
-      return "boolean";
-    case "int8":
-    case "int16":
-    case "int32":
-    case "serial":
-      return "integer";
-    case "int64":
-    case "bigserial":
-    case "uint8":
-    case "uint16":
-    case "uint32":
-    case "uint64":
-      return "bigint";
-    case "float32":
-      return "real";
-    case "float64":
-      return "double precision";
-    case "decimal":
-      return "numeric";
-    case "string":
-    case "text":
-      return "text";
-    default:
-      return undefined;
   }
 }
 

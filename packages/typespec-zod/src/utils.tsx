@@ -14,7 +14,7 @@ import { zod } from "./external-packages/zod.js";
 
 export const refkeySym = Symbol.for("typespec-zod.refkey");
 
-const ZOD_NATIVE_SCALARS = new Set([
+export const ZOD_NATIVE_SCALARS = new Set([
   "uuid",
   "email",
   "url",

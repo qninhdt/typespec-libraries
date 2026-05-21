@@ -22,6 +22,11 @@ export function pythonTripleQuotedString(value: string): string {
   return `"""${value.replaceAll("\\", "\\\\").replaceAll('"""', '\\"\\"\\"')}"""`;
 }
 
+export function toPythonIdentifier(name: string): string {
+  const normalized = name.replaceAll(/[^\w]/g, "_");
+  return /^\d/.test(normalized) ? `_${normalized}` : normalized;
+}
+
 export function serializeColumnKwargs(columnArgs: string[]): string {
   const pairs = columnArgs.map((a) => {
     const eqIdx = a.indexOf("=");

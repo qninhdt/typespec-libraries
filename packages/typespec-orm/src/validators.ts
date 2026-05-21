@@ -13,6 +13,7 @@ import {
 } from "@typespec/compiler";
 import { reportDiagnostic, MapKey } from "./lib.js";
 import { normalizeOrmGraph } from "./normalization.js";
+import { resolveCompositeColumnName } from "./emitter-utils.js";
 import {
   arePropertyTypesCompatible,
   describeComparableType,
@@ -41,6 +42,7 @@ import {
   collectTableModels,
   isRelationLocalKeyUnique,
   resolvePropertyReference,
+  resolvePropertyByName,
   unwrapArrayType,
 } from "./helpers.js";
 
@@ -695,7 +697,7 @@ function validateCompositeConstraints(
     const propIsPrimary = isKey(program, prop);
 
     for (const col of compositeColumns) {
-      const resolvedCol = resolveCompositeColumnReference(program, model, col);
+      const resolvedCol = resolveCompositeColumnName(program, model, col);
       const existing = compositeFieldColumns.get(resolvedCol);
       if (existing) {
         // Conflict: same resolved column in multiple composite fields.
@@ -736,7 +738,7 @@ function validateCompositeConstraints(
     // Check for duplicate columns in same composite
     const seenColumns = new Set<string>();
     for (const col of compositeColumns) {
-      const resolvedCol = resolveCompositeColumnReference(program, model, col);
+      const resolvedCol = resolveCompositeColumnName(program, model, col);
       if (seenColumns.has(resolvedCol)) {
         reportDiagnostic(program, {
           code: "duplicate-column-in-composite",
@@ -762,29 +764,11 @@ function validateCompositeConstraints(
   }
 }
 
-function resolveCompositeColumnReference(
-  program: Program,
-  model: Model,
-  reference: string,
-): string {
-  const property = resolvePropertyReference(program, model, reference);
-  return property ? getColumnName(program, property) : reference;
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Check if a property has an explicit @map() decorator (vs auto-derived name) */
 function hasExplicitMap(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(MapKey).has(prop);
-}
-
-function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
-  for (const prop of walkPropertiesInherited(model)) {
-    if (prop.name === name) {
-      return prop;
-    }
-  }
-  return undefined;
 }
 
 function findInverseSingularMappedBy(

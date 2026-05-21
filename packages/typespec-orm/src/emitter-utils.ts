@@ -120,7 +120,11 @@ export function collectCompositeTypeFields(
   return result;
 }
 
-function resolveCompositeColumnName(program: Program, model: Model, reference: string): string {
+export function resolveCompositeColumnName(
+  program: Program,
+  model: Model,
+  reference: string,
+): string {
   const property = resolvePropertyReference(program, model, reference);
   return property ? getColumnName(program, property) : reference;
 }

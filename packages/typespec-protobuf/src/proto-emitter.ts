@@ -3,7 +3,7 @@ import { isTable, isTableMixin } from "@qninhdt/typespec-orm";
 import { ProtoPackageKey, ProtoFieldKey, ProtoImportKey, ProtoMapKey } from "./lib.js";
 import type { ProtoEmitterOptions } from "./lib.js";
 import { resolveProtoType, collectImports, type ProtoTypeRef } from "./type-mapping.js";
-import { resolveProtoEnum, type ProtoEnum } from "./enum-mapping.js";
+import { resolveProtoEnum, camelToSnakeCase, type ProtoEnum } from "./enum-mapping.js";
 import { isProtoService, resolveProtoService, type ProtoService } from "./proto-service.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
@@ -123,16 +123,25 @@ function buildMessage(program: Program, model: Model): ProtoMessage | null {
   const fields: ProtoMessageField[] = [];
   let fieldNumber = 1;
   const protoFieldState = program.stateMap(ProtoFieldKey);
+  const usedNumbers = new Set<number>();
 
   for (const prop of model.properties.values()) {
     const explicitNumber = protoFieldState.get(prop) as number | undefined;
-    const currentNumber = explicitNumber ?? fieldNumber;
     const typeRef = resolveProtoType(program, prop.type);
+
+    if (!explicitNumber) {
+      while (usedNumbers.has(fieldNumber)) {
+        fieldNumber++;
+      }
+    }
+
+    const assignedNumber = explicitNumber ?? fieldNumber;
+    usedNumbers.add(assignedNumber);
 
     fields.push({
       name: camelToSnakeCase(prop.name),
       type: typeRef,
-      number: currentNumber,
+      number: assignedNumber,
       isOptional: prop.optional && !typeRef.isRepeated,
       isRepeated: typeRef.isRepeated ?? false,
     });
@@ -140,7 +149,7 @@ function buildMessage(program: Program, model: Model): ProtoMessage | null {
     if (!explicitNumber) {
       fieldNumber++;
     } else {
-      fieldNumber = Math.max(fieldNumber, currentNumber + 1);
+      fieldNumber = Math.max(fieldNumber, assignedNumber + 1);
     }
   }
 
@@ -245,11 +254,4 @@ function packageNameToPath(packageName: string): string {
   const parts = packageName.split(".");
   const fileName = parts[parts.length - 1] + ".proto";
   return join(...parts.slice(0, -1), fileName);
-}
-
-function camelToSnakeCase(name: string): string {
-  return name
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/([A-Z])([A-Z][a-z])/g, "$1_$2")
-    .toLowerCase();
 }

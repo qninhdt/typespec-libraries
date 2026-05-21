@@ -204,11 +204,3 @@ export function getZodOptions(program: any): ZodEmitterOptions {
     ? (program.getCompilerOptions()?.emitterOutput?.["@qninhdt/typespec-zod"] ?? {})
     : {};
 }
-
-export const defaultZodOptions: ZodEmitterOptions = {
-  "output-dir": undefined,
-  standalone: false,
-  "library-name": undefined,
-  include: undefined,
-  exclude: undefined,
-};

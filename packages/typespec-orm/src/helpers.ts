@@ -960,7 +960,7 @@ export function resolvePropertyReference(
   return undefined;
 }
 
-function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
+export function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
   for (const prop of walkPropertiesInherited(model)) {
     if (prop.name === name) return prop;
   }

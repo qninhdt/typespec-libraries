@@ -16,6 +16,5 @@ export type { CompositeFieldTag } from "./EntConstants.js";
 
 export { buildValidateTag } from "./EntValidateTag.js";
 export { generateFieldLine, generateIgnoredFieldLine } from "./EntField.jsx";
-export { generateRelationFieldLine } from "./EntRelationField.jsx";
 export { EntModelFile } from "./EntSchema.jsx";
 export { EntDataFile } from "./EntDataStruct.jsx";

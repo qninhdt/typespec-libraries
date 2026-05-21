@@ -17,6 +17,7 @@ import {
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import { buildPythonImportBlock, generateInit } from "./components/PyConstants.js";
+import { toPythonIdentifier } from "./components/py-field-utils.js";
 import { PyDataFile } from "./components/PyDataModel.jsx";
 import { PyModelFile } from "./components/PyModel.jsx";
 import {
@@ -503,12 +504,6 @@ function addRuntimeImport(
   names.add(symbol);
   byModule.set(moduleName, names);
   runtimeImportsByModel.set(model, byModule);
-}
-
-function toPythonIdentifier(name: string): string {
-  const normalized = name.replaceAll(/[^\w]/g, "_");
-  const startsWithDigit = /^\d/.test(normalized);
-  return startsWithDigit ? `_${normalized}` : normalized;
 }
 
 function buildAssociationColumn(
