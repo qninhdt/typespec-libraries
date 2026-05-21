@@ -4,8 +4,8 @@ import {
   collectTableModels,
   collectDataModels,
   getColumnName,
+  getOrmScalarName,
   getDoc,
-  getFormat,
   getForeignKey,
   getForeignKeyTarget,
   getMaxLength,
@@ -465,16 +465,16 @@ describe("TypeSpec built-in decorators with ORM", () => {
     expect(getPattern(runner.program, code)).toBe("[A-Z]{3}-[0-9]{4}");
   });
 
-  it("reads @format", async () => {
+  it("resolves ORM semantic scalar", async () => {
     const runner = await createTestRunner();
     const { email } = (await runner.compile(`
       @table
       model User {
         @test @key id: uuid;
-        @test @format("email") email: string;
+        @test email: email;
       }
     `)) as Record<string, ModelProperty>;
 
-    expect(getFormat(runner.program, email)).toBe("email");
+    expect(getOrmScalarName(email.type)).toBe("email");
   });
 });

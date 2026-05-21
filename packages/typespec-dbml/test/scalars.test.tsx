@@ -19,14 +19,6 @@ describe("DBML scalars", () => {
     expect(output).toContain("name varchar(255)");
   });
 
-  it("maps string to varchar with default length", async () => {
-    const output = await emitDbmlFile(
-      `@table model User { @key id: uuid; name: string; }`,
-      "users.dbml",
-    );
-    expect(output).toContain("name varchar(255) [not null]");
-  });
-
   it("maps text to text", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; bio: text; }`,
@@ -129,5 +121,26 @@ describe("DBML scalars", () => {
       "counters.dbml",
     );
     expect(output).toContain("id bigserial");
+  });
+
+  it("emits TypeSpec default values", async () => {
+    const output = await emitDbmlFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        credits: int32 = 0;
+        enabled: boolean = false;
+        status: string = "active";
+        displayName: string = "";
+      }
+    `,
+      "users.dbml",
+    );
+
+    expect(output).toContain("credits integer [not null, default: `0`]");
+    expect(output).toContain("enabled boolean [not null, default: `false`]");
+    expect(output).toContain("status varchar(255) [not null, default: 'active']");
+    expect(output).toContain("display_name varchar(255) [not null, default: '']");
   });
 });

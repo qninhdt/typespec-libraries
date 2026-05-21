@@ -24,14 +24,14 @@ describe("Zod emitter entrypoint", () => {
     ).toBe(true);
   });
 
-  it("emits no files when there are no data models", async () => {
+  it("emits no files when no data models are selected", async () => {
     const runner = await createTestRunner();
     await runner.compile(`model Placeholder {}`);
     const outDir = await mkdtemp(join(tmpdir(), "zod-emitter-empty-"));
 
     await $onEmit({
       program: runner.program,
-      options: {},
+      options: { include: ["Missing.Namespace"] },
       emitterOutputDir: outDir,
     } as never);
 

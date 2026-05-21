@@ -31,7 +31,7 @@ describe("SQLModel emitter entrypoint", () => {
 
     await emit({
       program: runner.program,
-      options: {},
+      options: { include: ["Missing.Namespace"] },
       emitterOutputDir: outDir,
     } as never);
 
@@ -70,10 +70,15 @@ describe("SQLModel emitter entrypoint", () => {
     } as never);
 
     const pyproject = await readFile(join(outDir, "pyproject.toml"), "utf8");
+    const atlas = await readFile(join(outDir, "atlas.hcl"), "utf8");
     const initFile = await readFile(join(outDir, "test/demo/accounts/__init__.py"), "utf8");
     const user = await readFile(join(outDir, "test/demo/accounts/user.py"), "utf8");
 
     expect(pyproject).toContain('name = "demo-sqlmodel"');
+    expect(pyproject).toContain('"atlas-provider-sqlalchemy>=0.3.0"');
+    expect(atlas).toContain('data "external_schema" "sqlmodel"');
+    expect(atlas).toContain('"atlas-provider-sqlalchemy"');
+    expect(atlas).toContain("docker://postgres/16/dev?search_path=public");
     expect(initFile).toContain("from .user import User");
     expect(user).toContain("class User");
   });

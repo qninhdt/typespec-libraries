@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package filevault.audit.v1;
+
+enum AuditSeverity {
+  INFO = 0;
+  WARNING = 1;
+  CRITICAL = 2;
+}
+
+enum AuditSeverityCode {
+  UNSPECIFIED = 0;
+  DEBUG = 1;
+  INFO = 2;
+  WARNING = 3;
+  ERROR = 4;
+  CRITICAL = 5;
+}
+
+message AuditEventView {
+  string id = 1;
+  optional string actor_id = 2;
+  string action = 3;
+  string resource_type = 4;
+  optional string resource_id = 5;
+  AuditSeverityCode severity = 6;
+  string created_at_iso = 7;
+  repeated StringPair metadata = 8;
+}
+
+message RecordAuditEventRequest {
+  optional string actor_id = 1;
+  string action = 2;
+  string resource_type = 3;
+  optional string resource_id = 4;
+  AuditSeverityCode severity = 5;
+  optional string request_id = 6;
+  repeated StringPair metadata = 7;
+}
+
+message QueryAuditEventsRequest {
+  optional string actor_id = 1;
+  optional string resource_type = 2;
+  optional string resource_id = 3;
+  optional string action_prefix = 4;
+  PageRequest page = 5;
+}
+
+message QueryAuditEventsResponse {
+  repeated AuditEventView events = 1;
+  PageInfo page = 2;
+}
+
+service AuditService {
+  rpc RecordEvent(RecordAuditEventRequest) returns (AuditEventView);
+  rpc QueryEvents(QueryAuditEventsRequest) returns (QueryAuditEventsResponse);
+}

@@ -7,27 +7,37 @@
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import {
-  walkPropertiesInherited,
+  getMaxLength as tsGetMaxLength,
+  getMaxValue as tsGetMaxValue,
+  getMinLength as tsGetMinLength,
+  getMinValue as tsGetMinValue,
+  getPattern as tsGetPattern,
   type Model,
   type ModelProperty,
   type Program,
+  type Scalar,
+  type Type,
 } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getDoc,
-  getFormat,
+  getOrmScalarName,
   getMaxLength,
   getMaxValue,
   getMinLength,
   getMinValue,
   getPattern,
   getPlaceholder,
-  getPropertyEnum,
+  getEnumMembers,
   getTitle,
+  getModelOwnProperties,
+  isArrayType,
+  getArrayElementType,
   resolveDbType,
   camelToSnake,
+  isCustomScalar,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
-import { reportDiagnostic } from "../lib.js";
 import {
   FILE_HEADER,
   FOUR_SPACES,
@@ -36,38 +46,65 @@ import {
   buildPythonImportBlock,
   pythonStringLiteral,
   pythonTripleQuotedString,
-  resolveFormatPyType,
+  toPythonRelativeImport,
 } from "./PyConstants.js";
+import { getNativePydanticType, collectAliasableCustomScalars } from "./py-field-utils.js";
 
 export interface PyDataFileProps {
   readonly program: Program;
   readonly model: Model;
   readonly label: string;
+  readonly normalizedModel?: NormalizedOrmModel;
+  readonly modelLookup?: Map<Model, NormalizedOrmModel>;
+  readonly scalarAliasNames?: ReadonlyMap<Scalar, string>;
 }
 
 /**
  * JSX component: renders a complete Python source file for a Pydantic BaseModel.
  */
 export function PyDataFile(props: PyDataFileProps): Children {
-  const { program, model, label } = props;
+  const { program, model, label, normalizedModel, modelLookup, scalarAliasNames } = props;
   const fileName = camelToSnake(model.name) + ".py";
+  const namespacePath = normalizedModel?.namespacePath ?? getModelNamespacePath(model);
+  const sourceModels = normalizedModel?.mixins ?? [];
 
   const stdImports = new Set<string>();
-  const pydanticImports = new Set<string>(["BaseModel"]);
+  const pydanticImports = new Set<string>();
+  if (sourceModels.length === 0) {
+    pydanticImports.add("BaseModel");
+  }
   const enumTypes = new Map<string, EnumMemberInfo[]>();
   const fieldDefs: string[] = [];
+  const referencedModels = new Set<Model>();
 
-  for (const prop of walkPropertiesInherited(model)) {
-    const enumInfo = getPropertyEnum(prop);
-    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
-      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
-      stdImports.add("enum.Enum");
-    }
-    fieldDefs.push(generatePydanticField(program, prop, stdImports, pydanticImports));
+  const allCustomScalars = collectAliasableCustomScalars(program, model);
+  const scalarNames = Array.from(allCustomScalars)
+    .map((s) => scalarAliasNames?.get(s) ?? s.name)
+    .sort((left, right) => left.localeCompare(right));
+
+  for (const prop of getModelOwnProperties(model)) {
+    collectEnumTypes(prop.type, enumTypes);
+    fieldDefs.push(
+      generatePydanticField(
+        program,
+        prop,
+        model,
+        referencedModels,
+        stdImports,
+        pydanticImports,
+        scalarAliasNames,
+      ),
+    );
   }
+  if (enumTypes.size > 0) stdImports.add("enum.Enum");
 
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, new Set(), pydanticImports, "pydantic");
+  code += buildReferencedModelImportBlock(new Set(sourceModels), modelLookup, namespacePath);
+  code += buildReferencedModelImportBlock(referencedModels, modelLookup, namespacePath);
+  if (scalarNames.length > 0) {
+    code += `from ${".".repeat(Math.max(namespacePath.length, 1))}_scalars import ${[...new Set(scalarNames)].join(", ")}\n`;
+  }
   code += "\n\n";
 
   for (const [enumName, members] of enumTypes) {
@@ -76,7 +113,14 @@ export function PyDataFile(props: PyDataFileProps): Children {
   }
 
   const modelDoc = getDoc(program, model);
-  code += `class ${model.name}(BaseModel):\n`;
+  const baseList =
+    sourceModels.length > 0
+      ? sourceModels
+          .map((source) => source.name)
+          .sort((a, b) => a.localeCompare(b))
+          .join(", ")
+      : "BaseModel";
+  code += `class ${model.name}(${baseList}):\n`;
   code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc ?? label)}\n`;
   code += "\n";
 
@@ -96,17 +140,29 @@ export function PyDataFile(props: PyDataFileProps): Children {
 interface PydanticFieldContext {
   pyType: string;
   doc?: string;
+  usesScalarAlias: boolean;
 }
 
 function generatePydanticField(
   program: Program,
   prop: ModelProperty,
+  currentModel: Model,
+  referencedModels: Set<Model>,
   stdImports: Set<string>,
   pydanticImports: Set<string>,
+  scalarAliasNames?: ReadonlyMap<Scalar, string>,
 ): string {
   const pyFieldName = camelToSnake(prop.name);
-  const { pyType, doc } = resolvePydanticFieldContext(program, prop, stdImports, pydanticImports);
-  const fieldArgs = buildPydanticFieldArgs(program, prop, doc);
+  const { pyType, doc, usesScalarAlias } = resolvePydanticFieldContext(
+    program,
+    prop,
+    currentModel,
+    referencedModels,
+    stdImports,
+    pydanticImports,
+    scalarAliasNames,
+  );
+  const fieldArgs = buildPydanticFieldArgs(program, prop, doc, usesScalarAlias);
   pydanticImports.add("Field");
   const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
   return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
@@ -115,59 +171,156 @@ function generatePydanticField(
 function resolvePydanticFieldContext(
   program: Program,
   prop: ModelProperty,
+  currentModel: Model,
+  referencedModels: Set<Model>,
   stdImports: Set<string>,
   pydanticImports: Set<string>,
+  scalarAliasNames?: ReadonlyMap<Scalar, string>,
 ): PydanticFieldContext {
-  const dbType = resolveDbType(prop.type);
-  const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
-  const enumInfo = getPropertyEnum(prop);
-  const baseType = enumInfo?.enumType.name ?? mapping.pyType;
-
-  if (!enumInfo) {
-    for (const imp of mapping.imports) {
-      stdImports.add(imp);
-    }
-  }
+  const resolvedType = resolvePydanticType(
+    program,
+    prop,
+    prop.type,
+    currentModel,
+    referencedModels,
+    stdImports,
+    pydanticImports,
+    scalarAliasNames,
+  );
 
   return {
-    pyType: prop.optional
-      ? `${resolvePydanticFormatType(program, prop, baseType, pydanticImports)} | None`
-      : resolvePydanticFormatType(program, prop, baseType, pydanticImports),
+    pyType: prop.optional ? `${resolvedType} | None` : resolvedType,
     doc: getDoc(program, prop),
+    usesScalarAlias: prop.type.kind === "Scalar" && isCustomScalar(program, prop.type),
   };
 }
 
-function resolvePydanticFormatType(
+function resolvePydanticType(
   program: Program,
   prop: ModelProperty,
-  pyType: string,
+  type: Type,
+  currentModel: Model,
+  referencedModels: Set<Model>,
+  stdImports: Set<string>,
   pydanticImports: Set<string>,
+  scalarAliasNames?: ReadonlyMap<Scalar, string>,
 ): string {
-  const format = getFormat(program, prop);
-  if (!format) {
-    return pyType;
+  if (type.kind === "ModelProperty") {
+    return resolvePydanticType(
+      program,
+      prop,
+      type.type,
+      currentModel,
+      referencedModels,
+      stdImports,
+      pydanticImports,
+      scalarAliasNames,
+    );
   }
 
-  const formatType = resolveFormatPyType(format);
-  if (formatType) {
-    pydanticImports.add(formatType);
-    return formatType;
+  if (isArrayType(type)) {
+    const elementType = getArrayElementType(type);
+    const elementPyType = elementType
+      ? resolvePydanticType(
+          program,
+          prop,
+          elementType,
+          currentModel,
+          referencedModels,
+          stdImports,
+          pydanticImports,
+          scalarAliasNames,
+        )
+      : "Any";
+    if (!elementType) stdImports.add("typing.Any");
+    return `list[${elementPyType}]`;
   }
 
-  if (format !== "") {
-    reportDiagnostic(program, {
-      code: "unknown-format",
-      target: prop,
-      format: { format, propName: prop.name },
-    });
+  if (type.kind === "Model") {
+    if (type === currentModel) {
+      return `"${type.name}"`;
+    }
+    referencedModels.add(type);
+    return type.name;
   }
 
-  return pyType;
+  if (type.kind === "Enum") {
+    return type.name;
+  }
+
+  const dbType = resolveDbType(type);
+  const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
+  for (const imp of mapping.imports) {
+    stdImports.add(imp);
+  }
+
+  if (type.kind === "Scalar" && isCustomScalar(program, type)) {
+    const semanticScalarName = getOrmScalarName(type);
+    const nativeType = getNativePydanticType(semanticScalarName ?? type.name);
+    if (nativeType) {
+      pydanticImports.add(nativeType);
+      return nativeType;
+    }
+    return scalarAliasNames?.get(type) ?? type.name;
+  }
+
+  return mapping.pyType;
 }
 
-function buildPydanticFieldArgs(program: Program, prop: ModelProperty, doc?: string): string[] {
+function getModelNamespacePath(model: Model): string[] {
+  const segments: string[] = [];
+  let current = model.namespace;
+  while (current && current.name !== "") {
+    segments.push(camelToSnake(current.name));
+    current = current.namespace;
+  }
+  return segments.reverse();
+}
+
+function collectEnumTypes(type: Type, enumTypes: Map<string, EnumMemberInfo[]>): void {
+  if (type.kind === "ModelProperty") {
+    collectEnumTypes(type.type, enumTypes);
+    return;
+  }
+  if (isArrayType(type)) {
+    const elementType = getArrayElementType(type);
+    if (elementType) collectEnumTypes(elementType, enumTypes);
+    return;
+  }
+  if (type.kind === "Enum") {
+    if (!enumTypes.has(type.name)) {
+      enumTypes.set(type.name, getEnumMembers(type));
+    }
+  }
+}
+
+function buildReferencedModelImportBlock(
+  referencedModels: Set<Model>,
+  modelLookup: Map<Model, NormalizedOrmModel> | undefined,
+  namespacePath: string[],
+): string {
+  if (referencedModels.size === 0) {
+    return "";
+  }
+
+  let code = "";
+  for (const targetModel of [...referencedModels].sort((a, b) => a.name.localeCompare(b.name))) {
+    const targetInfo = modelLookup?.get(targetModel);
+    if (!targetInfo) continue;
+    code += `from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
+  }
+  if (code) code += "\n";
+  return code;
+}
+
+function buildPydanticFieldArgs(
+  program: Program,
+  prop: ModelProperty,
+  doc: string | undefined,
+  usesScalarAlias: boolean,
+): string[] {
   const fieldArgs: string[] = [prop.optional ? "None" : "..."];
-  pushValidationFieldArgs(program, prop, fieldArgs);
+  pushValidationFieldArgs(program, prop, fieldArgs, usesScalarAlias);
 
   const titleVal = getTitle(program, prop);
   if (titleVal) {
@@ -185,12 +338,20 @@ function buildPydanticFieldArgs(program: Program, prop: ModelProperty, doc?: str
   return fieldArgs;
 }
 
-function pushValidationFieldArgs(program: Program, prop: ModelProperty, fieldArgs: string[]): void {
-  const maxLen = getMaxLength(program, prop);
-  const minLen = getMinLength(program, prop);
-  const minVal = getMinValue(program, prop);
-  const maxVal = getMaxValue(program, prop);
-  const pattern = getPattern(program, prop);
+function pushValidationFieldArgs(
+  program: Program,
+  prop: ModelProperty,
+  fieldArgs: string[],
+  usesScalarAlias: boolean,
+): void {
+  // When using a scalar alias, only read constraints directly applied on the
+  // property itself (raw TypeSpec getters). Constraints inherited from the scalar
+  // definition are already in _scalars.py — don't duplicate them.
+  const maxLen = usesScalarAlias ? tsGetMaxLength(program, prop) : getMaxLength(program, prop);
+  const minLen = usesScalarAlias ? tsGetMinLength(program, prop) : getMinLength(program, prop);
+  const minVal = usesScalarAlias ? tsGetMinValue(program, prop) : getMinValue(program, prop);
+  const maxVal = usesScalarAlias ? tsGetMaxValue(program, prop) : getMaxValue(program, prop);
+  const pattern = usesScalarAlias ? tsGetPattern(program, prop) : getPattern(program, prop);
 
   if (maxLen !== undefined) fieldArgs.push(`max_length=${maxLen}`);
   if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);

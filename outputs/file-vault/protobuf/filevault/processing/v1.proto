@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package filevault.processing.v1;
+
+enum ProcessingKind {
+  CLASSIFY = 0;
+  EXTRACT_TEXT = 1;
+  SUMMARIZE = 2;
+  GENERATE_PREVIEW = 3;
+  SCAN_MALWARE = 4;
+}
+
+enum ProcessingStatus {
+  QUEUED = 0;
+  RUNNING = 1;
+  SUCCEEDED = 2;
+  FAILED = 3;
+  CANCELED = 4;
+}
+
+enum ArtifactKind {
+  EXTRACTED_TEXT = 0;
+  SUMMARY = 1;
+  PREVIEW_IMAGE = 2;
+  THUMBNAIL = 3;
+  CLASSIFICATION = 4;
+}
+
+enum ProcessingKindCode {
+  UNSPECIFIED = 0;
+  CLASSIFY_FILE = 1;
+  EXTRACT_TEXT = 2;
+  GENERATE_SUMMARY = 3;
+  GENERATE_PREVIEW = 4;
+  EMBED_CONTENT = 5;
+}
+
+enum ProcessingStatusCode {
+  UNSPECIFIED = 0;
+  QUEUED = 1;
+  RUNNING = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+  CANCELED = 5;
+}
+
+enum ArtifactKindCode {
+  UNSPECIFIED = 0;
+  TEXT_EXTRACTION = 1;
+  SUMMARY = 2;
+  PREVIEW_IMAGE = 3;
+  EMBEDDING = 4;
+}
+
+message ProcessingJobView {
+  string id = 1;
+  string file_id = 2;
+  optional string version_id = 3;
+  ProcessingKindCode kind = 4;
+  ProcessingStatusCode status = 5;
+  optional string started_at_iso = 6;
+  optional string finished_at_iso = 7;
+  optional string error_message = 8;
+}
+
+message SubmitProcessingJobRequest {
+  string file_id = 1;
+  optional string version_id = 2;
+  ProcessingKindCode kind = 3;
+  string requested_by = 4;
+  repeated StringPair parameters = 5;
+}
+
+message GetProcessingJobRequest {
+  string job_id = 1;
+}
+
+message ListProcessingJobsRequest {
+  string file_id = 1;
+  PageRequest page = 2;
+}
+
+message ListProcessingJobsResponse {
+  repeated ProcessingJobView jobs = 1;
+  PageInfo page = 2;
+}
+
+message ProcessingArtifactView {
+  string id = 1;
+  string job_id = 2;
+  string file_id = 3;
+  ArtifactKindCode kind = 4;
+  optional string storage_object_id = 5;
+  optional string text_value = 6;
+}
+
+message ProcessingEvent {
+  ProcessingJobView job = 1;
+  repeated ProcessingArtifactView artifacts = 2;
+}
+
+service ProcessingService {
+  rpc SubmitJob(SubmitProcessingJobRequest) returns (ProcessingJobView);
+  rpc GetJob(GetProcessingJobRequest) returns (ProcessingJobView);
+  rpc ListJobs(ListProcessingJobsRequest) returns (ListProcessingJobsResponse);
+  rpc WatchJob(GetProcessingJobRequest) returns (stream ProcessingEvent);
+}

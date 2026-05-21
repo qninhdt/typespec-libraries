@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package filevault.identity.v1;
+
+enum AccountStatus {
+  ACTIVE = 0;
+  DISABLED = 1;
+  PENDING_VERIFICATION = 2;
+}
+
+enum ExternalAuthProvider {
+  GOOGLE = 0;
+  GITHUB = 1;
+  APPLE = 2;
+  MICROSOFT = 3;
+}
+
+enum MfaFactorKind {
+  TOTP = 0;
+  WEBAUTHN = 1;
+  RECOVERY_CODE = 2;
+}
+
+enum AccountStatusCode {
+  UNSPECIFIED = 0;
+  ACTIVE = 1;
+  DISABLED = 2;
+  PENDING_VERIFICATION = 3;
+}
+
+message AccountView {
+  string id = 1;
+  string email = 2;
+  string display_name = 3;
+  optional string avatar_url = 4;
+  optional string locale = 5;
+  AccountStatusCode status = 6;
+}
+
+message SessionView {
+  string id = 1;
+  string account_id = 2;
+  optional string device_label = 3;
+  string expires_at_iso = 4;
+  optional string revoked_at_iso = 5;
+}
+
+message SignInRequest {
+  string email = 1;
+  string password = 2;
+  optional string device_label = 3;
+}
+
+message SignInResponse {
+  AccountView account = 1;
+  SessionView session = 2;
+  string access_token = 3;
+  string refresh_token = 4;
+}
+
+message RefreshSessionRequest {
+  string refresh_token = 1;
+}
+
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+message RevokeSessionRequest {
+  string session_id = 1;
+  string account_id = 2;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message ListSessionsRequest {
+  string account_id = 1;
+  PageRequest page = 2;
+}
+
+message ListSessionsResponse {
+  repeated SessionView sessions = 1;
+  PageInfo page = 2;
+}
+
+service AuthService {
+  rpc SignIn(SignInRequest) returns (SignInResponse);
+  rpc RefreshSession(RefreshSessionRequest) returns (TokenPair);
+  rpc RevokeSession(RevokeSessionRequest) returns (Ack);
+}
+
+service AccountService {
+  rpc GetAccount(GetAccountRequest) returns (AccountView);
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse);
+}

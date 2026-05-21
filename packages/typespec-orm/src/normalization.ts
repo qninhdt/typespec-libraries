@@ -8,6 +8,7 @@ import {
 import { DataKey, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
+  collectOrmManagedModels,
   getDataLabel,
   getManyToMany,
   getMappedBy,
@@ -17,6 +18,7 @@ import {
   getTypeFullName,
   getForeignKeyConfig,
   isData,
+  isOrmManagedModel,
   isIgnored,
   isTable,
   isTableMixin,
@@ -71,6 +73,12 @@ interface SelectionOptions {
 
 const BUILTIN_NAMESPACE = "TypeSpec";
 const ORM_NAMESPACE = "Qninhdt.Orm";
+
+const MODEL_KIND_PRIORITY: Record<NormalizedOrmModel["kind"], number> = {
+  data: 0,
+  mixin: 1,
+  table: 2,
+};
 
 export function getLibraryLeafName(libraryName: string): string {
   const trimmed = libraryName.trim();
@@ -133,11 +141,18 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
   const register = (model: Model, kind: NormalizedOrmModel["kind"]) => {
     if (entities.has(model)) {
       const existing = entities.get(model)!;
-      if (existing.kind !== kind) {
-        const nextKind = existing.kind === "table" ? "table" : kind;
+      if (
+        existing.kind !== kind &&
+        MODEL_KIND_PRIORITY[kind] > MODEL_KIND_PRIORITY[existing.kind]
+      ) {
+        const tableName = kind === "table" ? getTableName(program, model) : undefined;
+        const label = kind === "data" ? (getDataLabel(program, model) ?? model.name) : undefined;
         entities.set(model, {
           ...existing,
-          kind: nextKind,
+          kind,
+          tableName,
+          label,
+          mixins: collectMixinSources(program, model, kind),
         });
       }
       return;
@@ -171,8 +186,8 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
       namespaceDir: namespacePath.join("/"),
       packageName,
       tableName: kind === "table" ? getTableName(program, model) : undefined,
-      label: kind === "data" ? getDataLabel(program, model) : undefined,
-      mixins: collectMixinSources(program, model),
+      label: kind === "data" ? (getDataLabel(program, model) ?? model.name) : undefined,
+      mixins: collectMixinSources(program, model, kind),
       dependencies: [],
     });
   };
@@ -190,6 +205,11 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
   for (const [node] of program.stateMap(TableMixinKey)) {
     if ((node as { kind?: string }).kind === "Model") {
       register(node as Model, "mixin");
+    }
+  }
+  for (const model of collectOrmManagedModels(program)) {
+    if (!isTable(program, model) && !isTableMixin(program, model)) {
+      register(model, "data");
     }
   }
 
@@ -312,19 +332,37 @@ function isDeclarationSelected(
   return !exclude.some((selector) => selectorMatchesName(selector.raw, fullName, namespace));
 }
 
-function collectMixinSources(program: Program, model: Model): Model[] {
+function collectMixinSources(
+  program: Program,
+  model: Model,
+  kind: NormalizedOrmModel["kind"],
+): Model[] {
   const mixins = new Map<string, Model>();
-  for (const source of model.sourceModels) {
-    if (isTableMixin(program, source.model)) {
-      mixins.set(getTypeFullName(program, source.model), source.model);
+  for (const source of getModelSourceCandidates(model)) {
+    if (!isOrmManagedModel(program, source)) {
+      continue;
     }
-  }
-  if (model.baseModel && isTableMixin(program, model.baseModel)) {
-    mixins.set(getTypeFullName(program, model.baseModel), model.baseModel);
+    if (kind === "table" || kind === "mixin") {
+      if (!isTableMixin(program, source)) {
+        continue;
+      }
+    } else if (isTable(program, source) || isTableMixin(program, source)) {
+      continue;
+    }
+
+    mixins.set(getTypeFullName(program, source), source);
   }
   return [...mixins.values()].sort((a, b) =>
     getTypeFullName(program, a).localeCompare(getTypeFullName(program, b)),
   );
+}
+
+function getModelSourceCandidates(model: Model): Model[] {
+  const sources = model.sourceModels.map((source) => source.model);
+  if (model.baseModel) {
+    sources.push(model.baseModel);
+  }
+  return sources;
 }
 
 function validateMixinChain(program: Program, model: Model): void {
@@ -377,7 +415,11 @@ function collectDependencies(
   const push = createDependencyCollector(normalized, dependencies);
 
   for (const mixin of normalized.mixins) {
-    const dependency = createDependencyFromNamespace(program, mixin, "mixin");
+    const dependency = createDependencyFromNamespace(
+      program,
+      mixin,
+      isTableMixin(program, mixin) ? "mixin" : "model",
+    );
     if (dependency) {
       push(dependency);
     }

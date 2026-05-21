@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package filevault.assistant.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum ConversationState {
+  ACTIVE = 0;
+  ARCHIVED = 1;
+}
+
+enum MessageRole {
+  USER = 0;
+  ASSISTANT = 1;
+  SYSTEM = 2;
+}
+
+enum AssistantTaskStatus {
+  QUEUED = 0;
+  RUNNING = 1;
+  WAITING_FOR_APPROVAL = 2;
+  COMPLETED = 3;
+  FAILED = 4;
+  CANCELED = 5;
+}
+
+enum ApprovalDecision {
+  PENDING = 0;
+  APPROVED = 1;
+  REJECTED = 2;
+}
+
+enum ConversationStateCode {
+  UNSPECIFIED = 0;
+  ACTIVE = 1;
+  ARCHIVED = 2;
+}
+
+enum MessageRoleCode {
+  UNSPECIFIED = 0;
+  USER = 1;
+  ASSISTANT = 2;
+  SYSTEM = 3;
+}
+
+enum AssistantTaskStatusCode {
+  UNSPECIFIED = 0;
+  QUEUED = 1;
+  RUNNING = 2;
+  WAITING_FOR_APPROVAL = 3;
+  COMPLETED = 4;
+  FAILED = 5;
+  CANCELED = 6;
+}
+
+enum ApprovalDecisionCode {
+  UNSPECIFIED = 0;
+  PENDING = 1;
+  APPROVED = 2;
+  REJECTED = 3;
+}
+
+message ConversationView {
+  string id = 1;
+  string owner_id = 2;
+  string title = 3;
+  ConversationStateCode state = 4;
+  optional string last_message_at_iso = 5;
+}
+
+message MessageView {
+  string id = 1;
+  string conversation_id = 2;
+  MessageRoleCode role = 3;
+  string content = 4;
+  string created_at_iso = 5;
+}
+
+message StartConversationRequest {
+  string owner_id = 1;
+  optional string title = 2;
+  optional string initial_message = 3;
+}
+
+message SendMessageRequest {
+  string conversation_id = 1;
+  string sender_id = 2;
+  string content = 3;
+}
+
+message AssistantReply {
+  ConversationView conversation = 1;
+  repeated MessageView messages = 2;
+}
+
+message StartAssistantTaskRequest {
+  string conversation_id = 1;
+  string requested_by = 2;
+  string task_type = 3;
+  string objective = 4;
+  optional string target_node_id = 5;
+}
+
+message AssistantTaskView {
+  string id = 1;
+  string conversation_id = 2;
+  string task_type = 3;
+  string objective = 4;
+  AssistantTaskStatusCode status = 5;
+  optional string target_node_id = 6;
+  optional string result_summary = 7;
+}
+
+message ApprovalRequestView {
+  string id = 1;
+  string task_id = 2;
+  string action = 3;
+  string resource_type = 4;
+  string resource_id = 5;
+  string proposal_json = 6;
+  ApprovalDecisionCode decision = 7;
+}
+
+message SubmitApprovalDecisionRequest {
+  string approval_id = 1;
+  string decided_by = 2;
+  ApprovalDecisionCode decision = 3;
+}
+
+message WatchConversationRequest {
+  string conversation_id = 1;
+  string requester_id = 2;
+}
+
+message AssistantEvent {
+  string conversation_id = 1;
+  optional AssistantTaskView task = 2;
+  optional MessageView message = 3;
+  optional ApprovalRequestView approval = 4;
+}
+
+message WatchConversationEvent {
+  google.protobuf.Timestamp occurred_at = 1;
+  AssistantEvent event = 2;
+}
+
+service AssistantService {
+  rpc StartConversation(StartConversationRequest) returns (AssistantReply);
+  rpc SendMessage(SendMessageRequest) returns (AssistantReply);
+  rpc StartTask(StartAssistantTaskRequest) returns (AssistantTaskView);
+  rpc SubmitApprovalDecision(SubmitApprovalDecisionRequest) returns (AssistantTaskView);
+  rpc WatchConversation(WatchConversationRequest) returns (stream WatchConversationEvent);
+}

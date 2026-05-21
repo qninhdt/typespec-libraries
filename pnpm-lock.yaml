@@ -10,12 +10,15 @@ importers:
       "@qninhdt/typespec-dbml":
         specifier: workspace:*
         version: link:packages/typespec-dbml
-      "@qninhdt/typespec-gorm":
+      "@qninhdt/typespec-ent":
         specifier: workspace:*
-        version: link:packages/typespec-gorm
+        version: link:packages/typespec-ent
       "@qninhdt/typespec-orm":
         specifier: workspace:*
         version: link:packages/typespec-orm
+      "@qninhdt/typespec-protobuf":
+        specifier: workspace:*
+        version: link:packages/typespec-protobuf
       "@qninhdt/typespec-sqlmodel":
         specifier: workspace:*
         version: link:packages/typespec-sqlmodel
@@ -25,6 +28,9 @@ importers:
       "@typespec/compiler":
         specifier: ^1.12.0
         version: 1.12.0(@types/node@25.9.1)
+      "@typespec/protobuf":
+        specifier: ^0.82.0
+        version: 0.82.0(@typespec/compiler@1.12.0(@types/node@25.9.1))
     devDependencies:
       "@changesets/cli":
         specifier: ^2.31.0
@@ -88,7 +94,7 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@types/node@25.9.1)(@vitest/coverage-v8@4.1.6)(vite@7.3.2(@types/node@25.9.1)(yaml@2.9.0))
 
-  packages/typespec-gorm:
+  packages/typespec-ent:
     dependencies:
       "@qninhdt/typespec-orm":
         specifier: workspace:*
@@ -123,6 +129,28 @@ importers:
         version: 4.1.6(@types/node@25.9.1)(@vitest/coverage-v8@4.1.6)(vite@7.3.2(@types/node@25.9.1)(yaml@2.9.0))
 
   packages/typespec-orm:
+    devDependencies:
+      "@alloy-js/core":
+        specifier: ^0.22.0
+        version: 0.22.0
+      "@typespec/compiler":
+        specifier: ^1.12.0
+        version: 1.12.0(@types/node@25.9.1)
+      "@vitest/coverage-v8":
+        specifier: ^4.1.6
+        version: 4.1.6(vitest@4.1.6)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@types/node@25.9.1)(@vitest/coverage-v8@4.1.6)(vite@7.3.2(@types/node@25.9.1)(yaml@2.9.0))
+
+  packages/typespec-protobuf:
+    dependencies:
+      "@qninhdt/typespec-orm":
+        specifier: workspace:*
+        version: link:../typespec-orm
     devDependencies:
       "@typespec/compiler":
         specifier: ^1.12.0
@@ -1630,6 +1658,14 @@ packages:
       "@alloy-js/python": ^0.3.0
       "@alloy-js/typescript": ^0.22.0
       "@typespec/compiler": ^1.10.0
+
+  "@typespec/protobuf@0.82.0":
+    resolution:
+      {
+        integrity: sha512-t8iZx0cgH/VhXpFk9vwLhYVDPjX6Basp8xJHSuIppotKKn4UxZtPHW2P/xyEsS9CJJhI6Y4wpuPlyWA8QjrycA==,
+      }
+    peerDependencies:
+      "@typespec/compiler": ^1.12.0
 
   "@vitest/coverage-v8@4.1.6":
     resolution:
@@ -4427,6 +4463,10 @@ snapshots:
       "@alloy-js/csharp": 0.22.0
       "@alloy-js/python": 0.3.0
       "@alloy-js/typescript": 0.22.0
+      "@typespec/compiler": 1.12.0(@types/node@25.9.1)
+
+  "@typespec/protobuf@0.82.0(@typespec/compiler@1.12.0(@types/node@25.9.1))":
+    dependencies:
       "@typespec/compiler": 1.12.0(@types/node@25.9.1)
 
   "@vitest/coverage-v8@4.1.6(vitest@4.1.6)":

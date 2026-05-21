@@ -8,9 +8,28 @@ import { FunctionCallExpression, MemberExpression } from "@alloy-js/typescript";
 import { Program, Type, walkPropertiesInherited } from "@typespec/compiler";
 import { $ } from "@typespec/compiler/typekit";
 import { SCCSet } from "@typespec/emitter-framework";
+import { isBuiltIn, isCustomScalar } from "@qninhdt/typespec-orm";
+export { isBuiltIn };
 import { zod } from "./external-packages/zod.js";
 
 export const refkeySym = Symbol.for("typespec-zod.refkey");
+
+const ZOD_NATIVE_SCALARS = new Set([
+  "uuid",
+  "email",
+  "url",
+  "ipv4",
+  "ipv6",
+  "ip",
+  "cidr",
+  "base64",
+  "cuid",
+  "cuid2",
+  "ulid",
+  "nanoid",
+  "jwt",
+  "emoji",
+]);
 
 /**
  * Converts a string to PascalCase.
@@ -46,7 +65,7 @@ export function isDeclaration(program: Program, type: Type): boolean {
     case "Union":
       return Boolean(type.name);
     case "Enum":
-      return true;
+      return false;
     case "Scalar":
       return true;
     default:
@@ -61,33 +80,10 @@ export function isRecord(program: Program, type: Type): boolean {
 }
 
 export function shouldReference(program: Program, type: Type): boolean {
-  // Don't reference scalars - inline them to their base zod types
   if (type.kind === "Scalar") {
-    return false;
+    return isCustomScalar(program, type) && !ZOD_NATIVE_SCALARS.has(type.name);
   }
   return isDeclaration(program, type) && !isBuiltIn(program, type);
-}
-
-export function isBuiltIn(program: Program, type: Type) {
-  if (type.kind === "ModelProperty" && type.model) {
-    type = type.model;
-  }
-
-  if (!("namespace" in type) || type.namespace === undefined) {
-    return false;
-  }
-
-  const globalNs = program.getGlobalNamespaceType();
-  let tln = type.namespace;
-  if (tln === globalNs) {
-    return false;
-  }
-
-  while (tln.namespace !== globalNs) {
-    tln = tln.namespace!;
-  }
-
-  return tln === globalNs.namespaces.get("TypeSpec");
 }
 
 interface TypeCollector {
@@ -171,7 +167,7 @@ export function callPart(target: string | Refkey, ...args: Children[]) {
   return (
     <MemberExpression>
       {typeof target === "string" ? idPart(target) : refkeyPart(target)}
-      <MemberExpression.Part args={args} />;
+      <MemberExpression.Part args={args} />
     </MemberExpression>
   );
 }

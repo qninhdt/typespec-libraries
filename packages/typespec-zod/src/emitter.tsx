@@ -1,13 +1,10 @@
-/**
- * Main Zod emitter - generates namespace-grouped Zod schemas from TypeSpec data models.
- */
-
 import { render, writeOutput, SourceDirectory, SourceFile } from "@alloy-js/core";
-import type { EmitContext } from "@typespec/compiler";
+import { type EmitContext } from "@typespec/compiler";
 import { Output } from "@typespec/emitter-framework";
-import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
+import { bootstrapEmitter, isBootstrapSuccess } from "@qninhdt/typespec-orm";
 import { zod } from "./external-packages/zod.js";
 import { ZodModelFile } from "./components/ZodModelFile.js";
+import { collectScalarsForModels, ZodScalarsFile } from "./components/ZodScalarsFile.js";
 import { reportDiagnostic, type ZodEmitterOptions } from "./lib.js";
 
 export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
@@ -16,28 +13,25 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   const isStandalone = options.standalone ?? false;
   const libraryName = options["library-name"];
 
-  if (isStandalone && !libraryName) {
-    reportDiagnostic(context.program, {
-      code: "standalone-requires-library-name",
-      target: context.program.getGlobalNamespaceType(),
-    });
-    return;
-  }
-
-  const graph = normalizeOrmGraph(context.program);
-  const selection = selectModelsForEmitter(context.program, graph, {
+  const result = bootstrapEmitter(context, {
+    kinds: ["mixin", "data"],
     include: options.include,
     exclude: options.exclude,
-    kinds: ["data"],
+    standalone: options.standalone,
+    libraryName,
   });
 
-  if (selection.models.length === 0) {
+  if (!isBootstrapSuccess(result)) {
+    if (result.reason === "standalone-requires-library-name") {
+      reportDiagnostic(context.program, {
+        code: "standalone-requires-library-name",
+        target: context.program.getGlobalNamespaceType(),
+      });
+    }
     return;
   }
 
-  const namespaceGroups = [...selection.byNamespace.values()].sort((a, b) =>
-    a[0].namespace.localeCompare(b[0].namespace),
-  );
+  const { selection, namespaceGroups } = result;
   const basePath = isStandalone ? "src" : ".";
 
   const tree = (
@@ -64,7 +58,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                     },
                   },
                   dependencies: {
-                    zod: "^3.23.0",
+                    zod: "^4.4.3",
                   },
                   devDependencies: {
                     typescript: "^5.0.0",
@@ -100,6 +94,13 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
           </>
         )}
         <SourceDirectory path={basePath}>
+          <ZodScalarsFile
+            program={context.program}
+            scalars={collectScalarsForModels(
+              context.program,
+              selection.models.map((model) => model.model),
+            )}
+          />
           {namespaceGroups.map((models) => (
             <SourceDirectory path={models[0].namespaceDir}>
               {models.map((model) => (

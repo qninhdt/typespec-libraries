@@ -4,15 +4,28 @@
  * Returns plain strings. Called imperatively by PyModel.
  */
 
-import type { Enum, Model, ModelProperty, Program } from "@typespec/compiler";
+import {
+  getMaxLength as tsGetMaxLength,
+  getMaxValue as tsGetMaxValue,
+  getMinLength as tsGetMinLength,
+  getMinValue as tsGetMinValue,
+  getMinValueExclusive as tsGetMinValueExclusive,
+  getMaxValueExclusive as tsGetMaxValueExclusive,
+  getPattern as tsGetPattern,
+  type Enum,
+  type Model,
+  type ModelProperty,
+  type Program,
+  type Scalar,
+} from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
+  getOrmScalarName,
   getColumnName,
   getCompositeFields,
   getDefaultValue,
   getDoc,
   getForeignKeyConfig,
-  getFormat,
   getMaxLength,
   getMaxValue,
   getMinLength,
@@ -38,6 +51,7 @@ import {
   isArrayType,
   getArrayElementType,
   camelToSnake,
+  isCustomScalar,
   NUMERIC_TYPES,
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
@@ -49,7 +63,7 @@ import {
   pythonStringLiteral,
   promoteFieldArgsToColumn,
   serializeColumnKwargs,
-  resolveFormatPyType,
+  getNativePydanticType,
 } from "./PyConstants.js";
 
 export interface ResolvedForeignKeyFieldInfo {
@@ -73,6 +87,7 @@ export function generateField(
   isPartOfCompositeUnique?: boolean,
   relationForeignKey?: ResolvedForeignKeyFieldInfo,
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"],
+  scalarAliasNames?: ReadonlyMap<Scalar, string>,
 ): string {
   // Skip composite type fields - they are configuration only
   if (getCompositeFields(program, prop)) {
@@ -110,7 +125,6 @@ export function generateField(
       columnName,
       enumInfo,
       saImports,
-      sqlmodelImports,
       needsField,
       needsColumn,
       isPartOfCompositeUnique,
@@ -138,28 +152,56 @@ export function generateField(
   const isIndexed = isIndex(program, prop);
   // Skip unique=True if field is part of composite unique (handled by __table_args__)
   const isUnq = isUnique(program, prop) && !isPartOfCompositeUnique;
-  const maxLen = getMaxLength(program, prop);
   const defaultVal = getDefaultValue(program, prop);
   const fk = getForeignKeyConfig(program, prop);
   const prec = getPrecision(program, prop);
   const autoCreate = isAutoCreateTime(program, prop);
   const autoUpdate = isAutoUpdateTime(program, prop);
 
-  // Format-based type overrides using shared helper
-  const format = getFormat(program, prop);
-  if (format) {
-    const formatType = resolveFormatPyType(format);
-    if (formatType) {
-      stdImports.add(`pydantic.${formatType}`);
-      pyType = formatType;
-    } else if (format !== "") {
-      reportDiagnostic(program, {
-        code: "unknown-format",
-        target: prop,
-        format: { format, propName: prop.name },
-      });
+  const semanticScalarName = prop.type.kind === "Scalar" ? getOrmScalarName(prop.type) : undefined;
+
+  // Custom scalar overrides using shared helper
+  let usesScalarAlias = false;
+  let usesNativeScalar = false;
+  if (prop.type.kind === "Scalar" && isCustomScalar(program, prop.type)) {
+    const nativeType = getNativePydanticType(semanticScalarName ?? prop.type.name);
+    if (nativeType) {
+      stdImports.add(`pydantic.${nativeType}`);
+      pyType = nativeType;
+      usesNativeScalar = true;
+    } else {
+      pyType = scalarAliasNames?.get(prop.type) ?? prop.type.name;
+      usesScalarAlias = true;
     }
   }
+
+  // When using a scalar alias, only read constraints directly applied on the
+  // property itself (raw TypeSpec getters). Constraints inherited from the scalar
+  // definition are already in _scalars.py — don't duplicate them.
+  // Native semantic scalars also use direct property constraints only; their
+  // scalar-defined constraints are already represented by the native type.
+  const useDirectPropertyConstraints = usesScalarAlias || usesNativeScalar;
+  const propMaxLen = useDirectPropertyConstraints
+    ? tsGetMaxLength(program, prop)
+    : getMaxLength(program, prop);
+  const propMinLen = useDirectPropertyConstraints
+    ? tsGetMinLength(program, prop)
+    : getMinLength(program, prop);
+  const propMinVal = useDirectPropertyConstraints
+    ? tsGetMinValue(program, prop)
+    : getMinValue(program, prop);
+  const propMaxVal = useDirectPropertyConstraints
+    ? tsGetMaxValue(program, prop)
+    : getMaxValue(program, prop);
+  const propMinValExcl = useDirectPropertyConstraints
+    ? tsGetMinValueExclusive(program, prop)
+    : getMinValueExclusive(program, prop);
+  const propMaxValExcl = useDirectPropertyConstraints
+    ? tsGetMaxValueExclusive(program, prop)
+    : getMaxValueExclusive(program, prop);
+  const propPattern = useDirectPropertyConstraints
+    ? tsGetPattern(program, prop)
+    : getPattern(program, prop);
 
   if (isOptional || isSoft) {
     pyType = `${pyType} | None`;
@@ -208,15 +250,14 @@ export function generateField(
   // String length constraints
   const isStringType = dbType === "string" || dbType === "text";
   if (isStringType) {
-    const minLen = getMinLength(program, prop);
-    if (minLen !== undefined) {
+    if (propMinLen !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`min_length=${minLen}`);
+      fieldArgs.push(`min_length=${propMinLen}`);
     }
-    if (maxLen !== undefined) {
+    if (propMaxLen !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`max_length=${maxLen}`);
-    } else if (dbType === "string") {
+      fieldArgs.push(`max_length=${propMaxLen}`);
+    } else if (!usesScalarAlias && dbType === "string") {
       needsField.value = true;
       fieldArgs.push("max_length=255");
     }
@@ -225,26 +266,20 @@ export function generateField(
   // Numeric range constraints
   const isNumericType = dbType !== undefined && NUMERIC_TYPES.has(dbType);
   if (isNumericType) {
-    // Exclusive constraints take precedence over inclusive
-    const minValExclusive = getMinValueExclusive(program, prop);
-    const maxValExclusive = getMaxValueExclusive(program, prop);
-    const minVal = getMinValue(program, prop);
-    const maxVal = getMaxValue(program, prop);
-
-    if (minValExclusive !== undefined) {
+    if (propMinValExcl !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`gt=${minValExclusive}`);
-    } else if (minVal !== undefined) {
+      fieldArgs.push(`gt=${propMinValExcl}`);
+    } else if (propMinVal !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`ge=${minVal}`);
+      fieldArgs.push(`ge=${propMinVal}`);
     }
 
-    if (maxValExclusive !== undefined) {
+    if (propMaxValExcl !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`lt=${maxValExclusive}`);
-    } else if (maxVal !== undefined) {
+      fieldArgs.push(`lt=${propMaxValExcl}`);
+    } else if (propMaxVal !== undefined) {
       needsField.value = true;
-      fieldArgs.push(`le=${maxVal}`);
+      fieldArgs.push(`le=${propMaxVal}`);
     }
   }
 
@@ -256,10 +291,9 @@ export function generateField(
   }
 
   // Pattern constraint
-  const pattern = getPattern(program, prop);
-  if (pattern) {
+  if (propPattern) {
     needsField.value = true;
-    fieldArgs.push(`pattern=${pythonStringLiteral(pattern)}`);
+    fieldArgs.push(`pattern=${pythonStringLiteral(propPattern)}`);
   }
 
   // Server defaults
@@ -278,7 +312,7 @@ export function generateField(
   }
 
   // Default value (non-auto-timestamp)
-  if (defaultVal && !isPk && !autoCreate && !autoUpdate) {
+  if (defaultVal !== undefined && !isPk && !autoCreate && !autoUpdate) {
     needsColumn.value = true;
     columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
   }
@@ -378,10 +412,10 @@ function generateArrayField(
   program: Program,
   prop: ModelProperty,
   pyFieldName: string,
-  columnName: string,
+  _columnName: string,
   stdImports: Set<string>,
   saImports: Set<string>,
-  sqlmodelImports: Set<string>,
+  _sqlmodelImports: Set<string>,
   needsField: { value: boolean },
   needsColumn: { value: boolean },
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"],
@@ -466,7 +500,7 @@ function generateArrayField(
 
   // Default value
   const defaultVal = getDefaultValue(program, prop);
-  if (defaultVal && !isPk) {
+  if (defaultVal !== undefined && !isPk) {
     needsColumn.value = true;
     columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
   }
@@ -565,7 +599,6 @@ function generateEnumField(
   _columnName: string,
   enumInfo: { enumType: Enum; members: EnumMemberInfo[] },
   saImports: Set<string>,
-  sqlmodelImports: Set<string>,
   needsField: { value: boolean },
   needsColumn: { value: boolean },
   isPartOfCompositeUnique?: boolean,
@@ -591,7 +624,8 @@ function generateEnumField(
   if (isUnique(program, prop) && !isPartOfCompositeUnique) columnArgs.push("unique=True");
 
   const defaultVal = getDefaultValue(program, prop);
-  if (defaultVal) columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
+  if (defaultVal !== undefined)
+    columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
 
   const doc = getDoc(program, prop);
   if (doc) columnArgs.push(`comment=${pythonStringLiteral(doc)}`);

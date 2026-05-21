@@ -8,11 +8,14 @@ import {
   MemberExpression,
   ObjectExpression,
   ObjectProperty,
+  ObjectSpreadProperty,
 } from "@alloy-js/typescript";
 import {
   Enum,
+  EnumMember,
   LiteralType,
   Model,
+  ModelProperty,
   Program,
   Scalar,
   Tuple,
@@ -22,6 +25,7 @@ import {
 } from "@typespec/compiler";
 import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
+import { getModelOwnProperties, isData, isTableMixin } from "@qninhdt/typespec-orm";
 import { ZodCustomTypeComponent } from "./components/ZodCustomTypeComponent.js";
 import { ZodSchema } from "./components/ZodSchema.js";
 import {
@@ -59,7 +63,7 @@ export function zodBaseSchemaParts(type: Type) {
     case "ModelProperty":
       return zodBaseSchemaParts(type.type);
     case "EnumMember":
-      return type.value
+      return type.value !== undefined
         ? literalBaseType($, $.literal.create(type.value))
         : literalBaseType($, $.literal.create(type.name));
     case "Tuple":
@@ -94,7 +98,7 @@ function scalarBaseType($: Typekit, type: Scalar): Children {
     return stringScalarBaseType($, type);
   }
   if ($.scalar.extendsBytes(type)) {
-    return zodMemberExpr(callPart("instanceof"), "Uint8Array");
+    return zodMemberExpr(callPart("instanceof", "Uint8Array"));
   }
   if ($.scalar.extendsPlainDate(type)) {
     return zodMemberExpr(idPart("coerce"), callPart("date"));
@@ -116,27 +120,46 @@ function scalarBaseType($: Typekit, type: Scalar): Children {
 }
 
 function enumBaseType(type: Enum) {
-  // Only the base z.enum([...])
-  // We want: zodMemberExpr(callPart("enum", ...))
+  const values = [...type.members.values()].map(enumMemberValue);
+  const allStringValues = values.every((value) => typeof value === "string");
+
+  if (!allStringValues) {
+    if (values.length === 1) {
+      return zodMemberExpr(callPart("literal", enumLiteralValue(values[0])));
+    }
+
+    return zodMemberExpr(
+      callPart(
+        "union",
+        <ArrayExpression>
+          <For each={values} comma line>
+            {(value: string | number) =>
+              zodMemberExpr(callPart("literal", enumLiteralValue(value)))
+            }
+          </For>
+        </ArrayExpression>,
+      ),
+    );
+  }
+
   return zodMemberExpr(
     callPart(
       "enum",
       <ArrayExpression>
-        <For each={type.members.values()} comma line>
-          {(member: any) => (
-            <ZodCustomTypeComponent
-              type={member}
-              Declaration={(props: { children?: Children }) => props.children}
-              declarationProps={{}}
-              declare
-            >
-              {JSON.stringify(member.value ?? member.name)}
-            </ZodCustomTypeComponent>
-          )}
+        <For each={values} comma line>
+          {(value: string | number) => JSON.stringify(value)}
         </For>
       </ArrayExpression>,
     ),
   );
+}
+
+function enumMemberValue(member: EnumMember): string | number {
+  return member.value === undefined ? member.name : member.value;
+}
+
+function enumLiteralValue(value: string | number): string {
+  return typeof value === "number" ? String(value) : JSON.stringify(value);
 }
 
 function tupleBaseType(type: Tuple) {
@@ -177,38 +200,22 @@ function modelBaseType(type: Model) {
     );
   }
 
+  const sourceModels = getReferenceSourceModels($.program, type);
+  const properties = getModelSchemaProperties($.program, type, sourceModels.length > 0);
+  const memberObject = buildModelObjectExpression(properties, sourceModels.slice(1));
   let memberPart: Children | undefined;
-  const properties = getModelSchemaProperties($.program, type);
-  if (properties.length > 0) {
-    const members = (
-      <ObjectExpression>
-        <For each={properties} comma enderPunctuation>
-          {(prop: any) => (
-            <ZodCustomTypeComponent
-              type={prop}
-              declare
-              Declaration={ObjectProperty}
-              declarationProps={{ name: prop.name }}
-            >
-              <ObjectProperty name={prop.name}>
-                <ZodSchema type={prop} nested />
-              </ObjectProperty>
-            </ZodCustomTypeComponent>
-          )}
-        </For>
-      </ObjectExpression>
-    );
-    memberPart = zodMemberExpr(callPart("object", members));
+  if (properties.length > 0 || sourceModels.length > 1) {
+    memberPart = zodMemberExpr(callPart("object", memberObject));
   }
 
   const parts = combineModelSchemaParts(memberPart, recordPart);
 
-  if (type.baseModel && shouldReference($.program, type.baseModel)) {
+  if (sourceModels.length > 0) {
     return (
       <MemberExpression>
-        <MemberExpression.Part refkey={refkey(type.baseModel, refkeySym)} />
-        <MemberExpression.Part id="merge" />
-        <MemberExpression.Part args={[parts]} />
+        <MemberExpression.Part refkey={refkey(sourceModels[0], refkeySym)} />
+        <MemberExpression.Part id="safeExtend" />
+        <MemberExpression.Part args={[memberObject]} />
       </MemberExpression>
     );
   }
@@ -216,9 +223,60 @@ function modelBaseType(type: Model) {
   return parts;
 }
 
-function getModelSchemaProperties(program: Program, type: Model) {
-  if (type.baseModel && shouldReference(program, type.baseModel)) {
-    return [...type.properties.values()];
+function buildModelObjectExpression(properties: ModelProperty[], extraSourceModels: Model[]) {
+  return (
+    <ObjectExpression>
+      <For each={extraSourceModels} comma enderPunctuation>
+        {(sourceModel: Model) => (
+          <ObjectSpreadProperty>
+            <MemberExpression>
+              <MemberExpression.Part refkey={refkey(sourceModel, refkeySym)} />
+              <MemberExpression.Part id="shape" />
+            </MemberExpression>
+          </ObjectSpreadProperty>
+        )}
+      </For>
+      <For each={properties} comma enderPunctuation>
+        {(prop: any) => (
+          <ZodCustomTypeComponent
+            type={prop}
+            declare
+            Declaration={ObjectProperty}
+            declarationProps={{ name: prop.name }}
+          >
+            <ObjectProperty name={prop.name}>
+              <ZodSchema type={prop} nested />
+            </ObjectProperty>
+          </ZodCustomTypeComponent>
+        )}
+      </For>
+    </ObjectExpression>
+  );
+}
+
+function getReferenceSourceModels(program: Program, type: Model): Model[] {
+  const sources = new Map<string, Model>();
+  for (const source of type.sourceModels) {
+    if (
+      shouldReference(program, source.model) &&
+      (isData(program, source.model) || isTableMixin(program, source.model))
+    ) {
+      sources.set(source.model.name, source.model);
+    }
+  }
+  if (
+    type.baseModel &&
+    shouldReference(program, type.baseModel) &&
+    (isData(program, type.baseModel) || isTableMixin(program, type.baseModel))
+  ) {
+    sources.set(type.baseModel.name, type.baseModel);
+  }
+  return [...sources.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getModelSchemaProperties(program: Program, type: Model, ownOnly: boolean) {
+  if (ownOnly || (type.baseModel && shouldReference(program, type.baseModel))) {
+    return getModelOwnProperties(type);
   }
 
   return [...walkPropertiesInherited(type)];
@@ -295,6 +353,45 @@ function numericScalarBaseType($: Typekit, type: Scalar): Children {
 }
 
 function stringScalarBaseType($: Typekit, type: Scalar): Children {
+  // Check scalar name directly for DB scalars that have Zod native methods
+  if (type.name === "uuid") return zodMemberExpr(callPart("string"), callPart("uuid"));
+
+  switch (type.name) {
+    // Zod has native support for these validators
+    case "email":
+      return zodMemberExpr(callPart("string"), callPart("email"));
+    case "url":
+      return zodMemberExpr(callPart("string"), callPart("url"));
+    case "ipv4":
+      return zodMemberExpr(callPart("string"), callPart("ipv4"));
+    case "ipv6":
+      return zodMemberExpr(callPart("string"), callPart("ipv6"));
+    case "ip":
+      return zodMemberExpr(callPart("string"), callPart("ip"));
+    case "cidr":
+      return zodMemberExpr(callPart("string"), callPart("cidr"));
+    case "base64":
+      return zodMemberExpr(callPart("string"), callPart("base64"));
+    case "cuid":
+      return zodMemberExpr(callPart("string"), callPart("cuid"));
+    case "cuid2":
+      return zodMemberExpr(callPart("string"), callPart("cuid2"));
+    case "ulid":
+      return zodMemberExpr(callPart("string"), callPart("ulid"));
+    case "nanoid":
+      return zodMemberExpr(callPart("string"), callPart("nanoid"));
+    case "jwt":
+      return zodMemberExpr(callPart("string"), callPart("jwt"));
+    case "emoji":
+      return zodMemberExpr(callPart("string"), callPart("emoji"));
+    // No native Zod method — constraints from decorators on the scalar
+    // (e.g. @pattern on mac/hostname) will be applied via zodConstraintsParts.
+    case "mac":
+    case "hostname":
+    default:
+      break;
+  }
+
   return $.scalar.extendsUrl(type)
     ? zodMemberExpr(callPart("string"), callPart("url"))
     : zodMemberExpr(callPart("string"));

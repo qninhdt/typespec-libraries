@@ -41,3 +41,5 @@ packages/**/@qninhdt/
 
 # Environment variables
 .env
+
+.claude

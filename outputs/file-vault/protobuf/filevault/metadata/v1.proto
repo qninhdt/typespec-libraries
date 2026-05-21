@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+package filevault.metadata.v1;
+
+enum VaultNodeKind {
+  FOLDER = 0;
+  FILE = 1;
+}
+
+enum VaultNodeState {
+  ACTIVE = 0;
+  TRASHED = 1;
+  DELETED = 2;
+}
+
+enum FileCategory {
+  UNSPECIFIED = 0;
+  DOCUMENT = 1;
+  IMAGE = 2;
+  AUDIO = 3;
+  VIDEO = 4;
+  ARCHIVE = 5;
+}
+
+enum Visibility {
+  PRIVATE = 0;
+  SHARED = 1;
+  PUBLIC_LINK = 2;
+}
+
+enum NodeKindCode {
+  UNSPECIFIED = 0;
+  FOLDER = 1;
+  FILE = 2;
+}
+
+enum NodeStateCode {
+  UNSPECIFIED = 0;
+  ACTIVE = 1;
+  TRASHED = 2;
+  DELETED = 3;
+}
+
+enum FileCategoryCode {
+  UNSPECIFIED = 0;
+  DOCUMENT = 1;
+  IMAGE = 2;
+  AUDIO = 3;
+  VIDEO = 4;
+  ARCHIVE = 5;
+}
+
+enum VisibilityCode {
+  UNSPECIFIED = 0;
+  PRIVATE = 1;
+  SHARED = 2;
+  PUBLIC_LINK = 3;
+}
+
+message VaultView {
+  string id = 1;
+  ActorRef owner = 2;
+  string name = 3;
+  int64 quota_bytes = 4;
+  int64 used_bytes = 5;
+}
+
+message NodeView {
+  string id = 1;
+  string vault_id = 2;
+  optional string parent_id = 3;
+  NodeKindCode kind = 4;
+  string name = 5;
+  string path = 6;
+  NodeStateCode state = 7;
+  VisibilityCode visibility = 8;
+}
+
+message FileView {
+  NodeView node = 1;
+  FileCategoryCode category = 2;
+  string media_type = 3;
+  optional string extension = 4;
+  int64 size_bytes = 5;
+  string sha256 = 6;
+  optional string current_version_id = 7;
+  repeated string labels = 8;
+}
+
+message FileVersionView {
+  string id = 1;
+  string file_id = 2;
+  int32 version_number = 3;
+  string storage_object_id = 4;
+  int64 size_bytes = 5;
+  string sha256 = 6;
+  string created_at_iso = 7;
+}
+
+message CreateFolderRequest {
+  string vault_id = 1;
+  optional string parent_id = 2;
+  string name = 3;
+  string actor_id = 4;
+}
+
+message CreateFileDraftRequest {
+  string vault_id = 1;
+  optional string parent_id = 2;
+  string name = 3;
+  string media_type = 4;
+  int64 expected_size_bytes = 5;
+  string actor_id = 6;
+}
+
+message CreateFileDraftResponse {
+  FileView file = 1;
+  string upload_intent_id = 2;
+}
+
+message CommitFileVersionRequest {
+  string file_id = 1;
+  string storage_object_id = 2;
+  int64 size_bytes = 3;
+  string sha256 = 4;
+  string actor_id = 5;
+}
+
+message MoveNodeRequest {
+  string node_id = 1;
+  optional string new_parent_id = 2;
+  string actor_id = 3;
+}
+
+message RenameNodeRequest {
+  string node_id = 1;
+  string name = 2;
+  string actor_id = 3;
+}
+
+message TrashNodeRequest {
+  string node_id = 1;
+  string actor_id = 2;
+}
+
+message GetNodeRequest {
+  string node_id = 1;
+  string requester_id = 2;
+}
+
+message ListFolderRequest {
+  string folder_id = 1;
+  string requester_id = 2;
+  PageRequest page = 3;
+}
+
+message ListFolderResponse {
+  repeated NodeView nodes = 1;
+  PageInfo page = 2;
+}
+
+message ListFileVersionsRequest {
+  string file_id = 1;
+  string requester_id = 2;
+  PageRequest page = 3;
+}
+
+message ListFileVersionsResponse {
+  repeated FileVersionView versions = 1;
+  PageInfo page = 2;
+}
+
+service MetadataService {
+  rpc CreateFolder(CreateFolderRequest) returns (NodeView);
+  rpc CreateFileDraft(CreateFileDraftRequest) returns (CreateFileDraftResponse);
+  rpc CommitFileVersion(CommitFileVersionRequest) returns (FileVersionView);
+  rpc GetNode(GetNodeRequest) returns (NodeView);
+  rpc ListFolder(ListFolderRequest) returns (ListFolderResponse);
+  rpc MoveNode(MoveNodeRequest) returns (NodeView);
+  rpc RenameNode(RenameNodeRequest) returns (NodeView);
+  rpc TrashNode(TrashNodeRequest) returns (Ack);
+  rpc ListFileVersions(ListFileVersionsRequest) returns (ListFileVersionsResponse);
+}

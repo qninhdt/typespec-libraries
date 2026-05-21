@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emitPyFile } from "./utils.jsx";
+import { emitPyFile, renderPyOutput } from "./utils.jsx";
+import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
 
 describe("Python scalar type mappings", () => {
   it("maps uuid to UUID with uuid4 import", async () => {
@@ -193,5 +194,146 @@ describe("Python scalar type mappings", () => {
     expect(output).toContain("from decimal import Decimal");
     // Framework imports
     expect(output).toContain("from sqlmodel import");
+  });
+});
+
+describe("Python semantic scalar mappings", () => {
+  it("maps email to EmailStr with pydantic import", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        contact: email;
+      }
+    `,
+      "user.py",
+    );
+
+    expect(output).toContain("contact: EmailStr");
+    expect(output).toContain("EmailStr");
+  });
+
+  it("maps ipv4 to IPv4Address", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model Server {
+        @key id: uuid;
+        addr: ipv4;
+      }
+    `,
+      "server.py",
+    );
+
+    expect(output).toContain("addr: IPv4Address");
+  });
+
+  it("generates Annotated alias for cuid (no native pydantic type)", async () => {
+    const output = await renderPyOutput(`
+      @table
+      model Resource {
+        @key id: uuid;
+        externalId: cuid;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+    const modelFile = getOutputFileContent(output, "resource.py");
+
+    expect(scalarsFile).toContain("cuid = Annotated[str, Field(");
+    expect(scalarsFile).toContain("pattern=");
+    expect(modelFile).toContain("from ._scalars import cuid");
+    expect(modelFile).toContain("external_id: cuid");
+  });
+
+  it("generates Annotated alias for ulid (no native pydantic type)", async () => {
+    const output = await renderPyOutput(`
+      @table
+      model Resource {
+        @key id: uuid;
+        externalId: ulid;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+    const modelFile = getOutputFileContent(output, "resource.py");
+
+    expect(scalarsFile).toContain("ulid = Annotated[str, Field(");
+    expect(scalarsFile).toContain("pattern=");
+    expect(modelFile).toContain("from ._scalars import ulid");
+    expect(modelFile).toContain("external_id: ulid");
+  });
+
+  it("generates Annotated alias for nanoid (no native pydantic type)", async () => {
+    const output = await renderPyOutput(`
+      @table
+      model Resource {
+        @key id: uuid;
+        shortId: nanoid;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+    const modelFile = getOutputFileContent(output, "resource.py");
+
+    expect(scalarsFile).toContain("nanoid = Annotated[str, Field(");
+    expect(scalarsFile).toContain("pattern=");
+    expect(modelFile).toContain("from ._scalars import nanoid");
+    expect(modelFile).toContain("short_id: nanoid");
+  });
+
+  it("generates Annotated alias for jwt (no native pydantic type)", async () => {
+    const output = await renderPyOutput(`
+      @table
+      model Session {
+        @key id: uuid;
+        token: jwt;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+    const modelFile = getOutputFileContent(output, "session.py");
+
+    expect(scalarsFile).toContain("jwt = Annotated[str, Field(");
+    expect(scalarsFile).toContain("pattern=");
+    expect(modelFile).toContain("from ._scalars import jwt");
+    expect(modelFile).toContain("token: jwt");
+  });
+
+  it("imports top-level scalar aliases from nested namespace packages", async () => {
+    const output = await renderPyOutput(`
+      namespace Demo.Identity {
+
+      @minLength(8)
+      scalar StrongPassword extends string;
+
+      @data("Login form")
+      model SignInRequest {
+        password: StrongPassword;
+      }
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "test/_scalars.py");
+    const modelFile = getOutputFileContent(output, "test/demo/identity/sign_in_request.py");
+
+    expect(scalarsFile).toContain("StrongPassword = Annotated[str, Field(");
+    expect(modelFile).toContain("from ..._scalars import StrongPassword");
+    expect(modelFile).toContain("password: StrongPassword");
+  });
+
+  it("does not emit composite marker scalars as aliases", async () => {
+    const output = await renderPyOutput(`
+      @table
+      model User {
+        @key id: uuid;
+        email: string;
+        deletedAt?: utcDateTime;
+
+        @unique
+        emailDeletedAt: composite<"email", "deletedAt">;
+      }
+    `);
+    const modelFile = getOutputFileContent(output, "user.py");
+
+    expect(() => getOutputFileContent(output, "_scalars.py")).toThrow();
+    expect(modelFile).not.toContain("_scalars");
+    expect(modelFile).not.toContain("composite");
   });
 });

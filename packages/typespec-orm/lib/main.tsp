@@ -21,6 +21,107 @@ scalar text extends string;
  */
 scalar jsonb extends string;
 
+// ─── Scalars (semantic string/numeric wrappers) ──────────────────────
+
+/**
+ * Email address (RFC 5322).
+ * Emitters with native email validation (Zod, Pydantic) use it directly;
+ * others fall back to the @pattern below.
+ */
+@pattern("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+scalar email extends string;
+
+/**
+ * IPv4 address (dotted-quad notation, e.g. 192.168.1.1).
+ */
+@pattern("^((25[0-5]|2[0-4]\\d|[01]?\\d\\d?)\\.){3}(25[0-5]|2[0-4]\\d|[01]?\\d\\d?)$")
+scalar ipv4 extends string;
+
+/**
+ * IPv6 address.
+ */
+@pattern("^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$|^::$|^([0-9a-fA-F]{1,4}:){1,7}:$|^:(:([0-9a-fA-F]{1,4})){1,7}$")
+scalar ipv6 extends string;
+
+/**
+ * IPv4 or IPv6 address.
+ */
+scalar ip extends string;
+
+/**
+ * CIDR notation (e.g. 192.168.0.0/24 or 2001:db8::/32).
+ */
+@pattern("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$|^[0-9a-fA-F:]+/[0-9]{1,3}$")
+scalar cidr extends string;
+
+/**
+ * MAC address (IEEE 802, colon or hyphen separated).
+ */
+@pattern("^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
+scalar mac extends string;
+
+/**
+ * Base64-encoded string.
+ */
+@pattern("^[A-Za-z0-9+/]*={0,2}$")
+scalar base64 extends string;
+
+/**
+ * Hostname (RFC 1123).
+ */
+@pattern("^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+scalar hostname extends string;
+
+/**
+ * CUID - collision-resistant unique identifier (v1).
+ */
+@pattern("^c[a-z0-9]{24}$")
+scalar cuid extends string;
+
+/**
+ * CUID2 - next-generation collision-resistant identifier.
+ */
+@pattern("^[a-z][a-z0-9]{23}$")
+scalar cuid2 extends string;
+
+/**
+ * ULID - Universally Unique Lexicographically Sortable Identifier.
+ */
+@pattern("^[0-9A-HJKMNP-TV-Z]{26}$")
+scalar ulid extends string;
+
+/**
+ * NanoID - compact URL-friendly unique identifier.
+ */
+@pattern("^[A-Za-z0-9_-]{21}$")
+scalar nanoid extends string;
+
+/**
+ * JWT - JSON Web Token (header.payload.signature).
+ */
+@pattern("^[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]*$")
+scalar jwt extends string;
+
+/**
+ * Emoji - one or more emoji characters.
+ */
+@pattern("^\\p{Emoji}+$")
+scalar emoji extends string;
+
+/**
+ * Geographic latitude (-90 to 90).
+ */
+@minValue(-90)
+@maxValue(90)
+scalar latitude extends float64;
+
+/**
+ * Geographic longitude (-180 to 180).
+ */
+@minValue(-180)
+@maxValue(180)
+scalar longitude extends float64;
+
 /**
  * Auto-incrementing 32-bit integer
  */

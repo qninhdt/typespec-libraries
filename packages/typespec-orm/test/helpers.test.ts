@@ -42,6 +42,18 @@ describe("camelToSnake", () => {
   it("handles already snake_case", () => {
     expect(camelToSnake("user_id")).toBe("user_id");
   });
+
+  it("handles trailing abbreviation ID", () => {
+    expect(camelToSnake("userID")).toBe("user_id");
+  });
+
+  it("handles trailing abbreviation URL", () => {
+    expect(camelToSnake("parseURL")).toBe("parse_url");
+  });
+
+  it("handles abbreviation in the middle", () => {
+    expect(camelToSnake("getHTTPResponse")).toBe("get_http_response");
+  });
 });
 
 describe("camelToPascal", () => {
@@ -95,6 +107,14 @@ describe("deriveTableName", () => {
   it("pluralizes -ch ending by adding -es", () => {
     expect(deriveTableName("Match")).toBe("matches");
   });
+
+  it("pluralizes -z ending by adding -es", () => {
+    expect(deriveTableName("Quiz")).toBe("quizes");
+  });
+
+  it("handles single-word model name", () => {
+    expect(deriveTableName("Post")).toBe("posts");
+  });
 });
 
 describe("metadata and relation helpers", () => {
@@ -113,7 +133,8 @@ describe("metadata and relation helpers", () => {
         }
 
         @table
-        model User is AuditFields {
+        model User {
+          ...AuditFields;
           @key id: uuid;
         }
       }
@@ -161,7 +182,7 @@ describe("metadata and relation helpers", () => {
     expect(resolveDbType(copiedSecret!.type)).toBe("string");
   });
 
-  it("falls back to format-derived input types and unwraps enums", async () => {
+  it("falls back to semantic-scalar-derived input types and unwraps enums", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       enum Role {
@@ -170,8 +191,7 @@ describe("metadata and relation helpers", () => {
       }
 
       model User {
-        @format("email")
-        email: string;
+        email: email;
         role: Role;
         roleCopy: User.role;
       }
@@ -181,15 +201,15 @@ describe("metadata and relation helpers", () => {
       .getGlobalNamespaceType()
       .namespaces.get("Test")!
       .models.get("User")!;
-    const email = user.properties.get("email")!;
+    const emailProp = user.properties.get("email")!;
     const roleCopy = user.properties.get("roleCopy")!;
 
-    expect(getInputTypeForProperty(runner.program, email)).toBe("email");
+    expect(getInputTypeForProperty(runner.program, emailProp)).toBe("email");
     expect(getPropertyEnum(roleCopy)).toEqual({
       enumType: user.properties.get("role")!.type,
       members: [
-        { name: "admin", value: "admin" },
-        { name: "user", value: "user" },
+        { name: "admin", value: "admin", rawValue: "admin", valueKind: "string" },
+        { name: "user", value: "user", rawValue: "user", valueKind: "string" },
       ],
     });
   });

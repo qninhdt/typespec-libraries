@@ -11,6 +11,7 @@ import {
   type Model,
   type ModelProperty,
   type Program,
+  type Scalar,
 } from "@typespec/compiler";
 import {
   getColumnName,
@@ -30,10 +31,12 @@ import {
   buildPythonImportBlock,
   pythonStringLiteral,
   pythonTripleQuotedString,
+  toPythonRelativeImport,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
 import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
 import { generateRelationField } from "./PyRelationField.jsx";
+import { collectAliasableCustomScalars } from "./py-field-utils.js";
 import type { SqlModelEmitterOptions } from "../lib.js";
 
 export interface PyModelFileProps {
@@ -43,6 +46,7 @@ export interface PyModelFileProps {
   readonly collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
   readonly manyToManySecondaryByProp?: Map<ModelProperty, string>;
   readonly runtimeImports?: Map<string, Set<string>>;
+  readonly scalarAliasNames?: ReadonlyMap<Scalar, string>;
 }
 
 interface RegularFieldContext {
@@ -57,23 +61,27 @@ interface RegularFieldContext {
   needsColumn: { value: boolean };
   fieldDefs: string[];
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
+  scalarAliasNames?: ReadonlyMap<Scalar, string>;
 }
 
 interface PyModelRenderContext {
   program: Program;
   model: Model;
-  tableName: string;
+  tableName?: string;
   enumTypes: ReturnType<typeof classifyProperties>["enumTypes"];
   stdImports: Set<string>;
   saImports: Set<string>;
   sqlmodelImports: Set<string>;
   runtimeImports?: Map<string, Set<string>>;
   relationTargetModels: Set<Model>;
+  sourceModels: Model[];
   modelLookup: Map<Model, NormalizedOrmModel>;
   namespacePath: string[];
+  sourceModelNames: string[];
   tableArgEntries: string[];
   fieldDefs: string[];
   relationDefs: string[];
+  scalarNames?: string[];
 }
 
 /**
@@ -87,10 +95,12 @@ export function PyModelFile(props: PyModelFileProps): Children {
     collectionStrategy,
     manyToManySecondaryByProp,
     runtimeImports,
+    scalarAliasNames,
   } = props;
   const { model } = normalizedModel;
-  const tableName = normalizedModel.tableName!;
+  const tableName = normalizedModel.tableName;
   const fileName = camelToSnake(model.name) + ".py";
+  const sourceModels = normalizedModel.mixins;
 
   const stdImports = new Set<string>();
   const saImports = new Set<string>();
@@ -104,14 +114,20 @@ export function PyModelFile(props: PyModelFileProps): Children {
     ignored,
     relations,
     fields: regularProps,
-  } = classifyProperties(program, model);
-  const compositeTypeFields = collectCompositeTypeFields(program, model, tableName);
+  } = classifyProperties(program, model, { ownPropertiesOnly: true });
+  const compositeTypeFields =
+    normalizedModel.kind === "table" && tableName
+      ? collectCompositeTypeFields(program, model, tableName)
+      : [];
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
   const fkInfoMap = buildForeignKeyInfoMap(model, relations);
+
   const fieldDefs: string[] = [];
   const relationDefs: string[] = [];
   const relationTargetModels = new Set<Model>();
   const tableArgEntries = buildTableArgEntries(program, model, compositeTypeFields, saImports);
+
+  const allCustomScalars = collectAliasableCustomScalars(program, model);
 
   addIgnoredFields(program, ignored, fieldDefs, stdImports);
   addRelationFields(
@@ -135,6 +151,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
     needsColumn,
     fieldDefs,
     collectionStrategy,
+    scalarAliasNames,
   });
   addEnumImports(enumTypes, stdImports, saImports);
 
@@ -148,11 +165,14 @@ export function PyModelFile(props: PyModelFileProps): Children {
     sqlmodelImports,
     runtimeImports,
     relationTargetModels,
+    sourceModels,
     modelLookup,
     namespacePath: normalizedModel.namespacePath,
+    sourceModelNames: sourceModels.map((item) => item.name).sort((a, b) => a.localeCompare(b)),
     tableArgEntries,
     fieldDefs,
     relationDefs,
+    scalarNames: Array.from(allCustomScalars).map((s) => scalarAliasNames?.get(s) ?? s.name),
   });
 
   return (
@@ -175,6 +195,7 @@ function addRegularFields(context: RegularFieldContext): void {
     needsColumn,
     fieldDefs,
     collectionStrategy,
+    scalarAliasNames,
   } = context;
   for (const { prop } of regularProps) {
     if (getCompositeFields(program, prop)) continue;
@@ -192,6 +213,7 @@ function addRegularFields(context: RegularFieldContext): void {
         compositeUniqueColumns.has(columnName),
         fkInfoMap.get(columnName),
         collectionStrategy,
+        scalarAliasNames,
       ),
     );
   }
@@ -278,20 +300,39 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     sqlmodelImports,
     runtimeImports,
     relationTargetModels,
+    sourceModels,
     modelLookup,
     namespacePath,
+    sourceModelNames,
     tableArgEntries,
     fieldDefs,
     relationDefs,
+    scalarNames,
   } = context;
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
   code += buildRuntimeImportBlock(runtimeImports);
+  code += buildSourceModelImportBlock(sourceModels, modelLookup, namespacePath);
   code += buildTypeCheckingBlock(relationTargetModels, modelLookup, namespacePath);
+  if (scalarNames && scalarNames.length > 0) {
+    code += `from ${".".repeat(Math.max(namespacePath.length, 1))}_scalars import ${dedupeImportNames(scalarNames).join(", ")}\n`;
+  }
   code += "\n\n";
   code += buildEnumClasses(enumTypes);
-  code += buildModelClass(program, model, tableName, tableArgEntries, fieldDefs, relationDefs);
+  code += buildModelClass(
+    program,
+    model,
+    tableName,
+    sourceModelNames,
+    tableArgEntries,
+    fieldDefs,
+    relationDefs,
+  );
   return code;
+}
+
+function dedupeImportNames(names: readonly string[]): string[] {
+  return [...new Set(names)].sort((left, right) => left.localeCompare(right));
 }
 
 function buildEnumClasses(enumTypes: ReturnType<typeof classifyProperties>["enumTypes"]): string {
@@ -306,15 +347,22 @@ function buildEnumClasses(enumTypes: ReturnType<typeof classifyProperties>["enum
 function buildModelClass(
   program: Program,
   model: Model,
-  tableName: string,
+  tableName: string | undefined,
+  sourceModelNames: string[],
   tableArgEntries: string[],
   fieldDefs: string[],
   relationDefs: string[],
 ): string {
-  const modelDoc = getDoc(program, model) ?? `Represents the ${tableName} table.`;
-  let code = `class ${model.name}(SQLModel, table=True):\n`;
+  const baseList = sourceModelNames.length > 0 ? sourceModelNames.join(", ") : "SQLModel";
+  const isTable = !!tableName;
+  const modelDoc =
+    getDoc(program, model) ?? (isTable ? `Represents the ${tableName} table.` : model.name);
+  let code = `class ${model.name}(${baseList}${isTable ? ", table=True" : ""}):\n`;
   code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc)}\n\n`;
-  code += `${FOUR_SPACES}__tablename__ = ${pythonStringLiteral(tableName)} # type: ignore \n`;
+
+  if (tableName) {
+    code += `${FOUR_SPACES}__tablename__ = ${pythonStringLiteral(tableName)} # type: ignore \n`;
+  }
 
   if (tableArgEntries.length > 0) {
     code += `${FOUR_SPACES}__table_args__ = (\n`;
@@ -399,6 +447,24 @@ function buildRuntimeImportBlock(runtimeImports?: Map<string, Set<string>>): str
   return code;
 }
 
+function buildSourceModelImportBlock(
+  sourceModels: Model[],
+  modelLookup: Map<Model, NormalizedOrmModel>,
+  namespacePath: string[],
+): string {
+  if (sourceModels.length === 0) {
+    return "";
+  }
+
+  let code = "";
+  for (const sourceModel of sourceModels) {
+    const sourceInfo = modelLookup.get(sourceModel);
+    if (!sourceInfo) continue;
+    code += `from ${toPythonRelativeImport(namespacePath, sourceInfo.namespacePath, camelToSnake(sourceModel.name))} import ${sourceModel.name}\n`;
+  }
+  return code ? `${code}\n` : "";
+}
+
 function buildTypeCheckingBlock(
   relationTargetModels: Set<Model>,
   modelLookup: Map<Model, NormalizedOrmModel>,
@@ -417,23 +483,4 @@ function buildTypeCheckingBlock(
     code += `    from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
   }
   return code;
-}
-
-function toPythonRelativeImport(
-  fromSegments: string[],
-  toSegments: string[],
-  moduleName: string,
-): string {
-  let common = 0;
-  while (
-    common < fromSegments.length &&
-    common < toSegments.length &&
-    fromSegments[common] === toSegments[common]
-  ) {
-    common++;
-  }
-
-  const up = fromSegments.length - common;
-  const down = toSegments.slice(common);
-  return `${".".repeat(up + 1)}${[...down, moduleName].join(".")}`;
 }

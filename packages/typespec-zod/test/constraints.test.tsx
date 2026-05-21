@@ -59,12 +59,12 @@ describe("Zod string constraints", () => {
     expect(output).toContain(".regex(/^a\\/b$/)");
   });
 
-  it("generates .email() for @format email", async () => {
+  it("generates .email() for email scalar", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
       model User {
-        @format("email") email: string;
+        contact: email;
       }
     `,
       "User.ts",
@@ -73,12 +73,12 @@ describe("Zod string constraints", () => {
     expect(output).toContain(".email()");
   });
 
-  it("generates .url() for @format url", async () => {
+  it("generates .url() for url scalar", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
       model User {
-        @format("url") website?: string;
+        website?: url;
       }
     `,
       "User.ts",
@@ -92,7 +92,7 @@ describe("Zod string constraints", () => {
       `
       @data("Form")
       model User {
-        @minLength(1) @maxLength(255) @format("email") email: string;
+        @minLength(1) @maxLength(255) contact: email;
       }
     `,
       "User.ts",

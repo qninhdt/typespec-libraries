@@ -9,7 +9,7 @@ describe("SQLModel emitter end-to-end", () => {
       model User {
         @key id: uuid;
         @maxLength(255) name: string;
-        @unique @format("email") email: string;
+        @unique contact: email;
         age?: int32;
         @autoCreateTime createdAt: utcDateTime;
         @autoUpdateTime updatedAt: utcDateTime;
@@ -22,7 +22,7 @@ describe("SQLModel emitter end-to-end", () => {
     expect(output).toContain('__tablename__ = "users"');
     expect(output).toContain("id: UUID = Field(default_factory=uuid4, primary_key=True)");
     expect(output).toContain("name: str = Field(max_length=255");
-    expect(output).toContain("email: EmailStr = Field(unique=True");
+    expect(output).toContain("contact: EmailStr = Field(unique=True");
     expect(output).toContain("age: int | None = Field(default=None");
     expect(output).toContain("created_at: datetime");
     expect(output).toContain("server_default=func.now()");
@@ -79,7 +79,7 @@ describe("SQLModel emitter end-to-end", () => {
       @data("Registration Form")
       model RegisterForm {
         @title("Full Name") @minLength(1) name: string;
-        @title("Email") @format("email") email: string;
+        @title("Email") contact: email;
         @title("Password") @minLength(8) password: string;
       }
     `,
@@ -89,10 +89,47 @@ describe("SQLModel emitter end-to-end", () => {
     expect(output).toContain("class RegisterForm(BaseModel):");
     expect(output).toContain('"""Registration Form"""');
     expect(output).toContain('name: str = Field(..., min_length=1, title="Full Name")');
-    expect(output).toContain('email: EmailStr = Field(..., title="Email")');
+    expect(output).toContain('contact: EmailStr = Field(..., title="Email")');
     expect(output).toContain('password: str = Field(..., min_length=8, title="Password")');
     expect(output).not.toContain("table=True");
     expect(output).not.toContain("__tablename__");
+  });
+
+  it("emits @data model references and arrays as DTO types", async () => {
+    const output = await emitPyFile(
+      `
+      namespace App.Shared {
+        @data("Page Info")
+        model PageInfo {
+          nextPageToken?: string;
+        }
+      }
+
+      namespace App.Metadata {
+        @data("Node")
+        model NodeView {
+          id: uuid;
+        }
+
+        @data("File")
+        model FileView {
+          node: NodeView;
+          labels: string[];
+          page: App.Shared.PageInfo;
+          related: NodeView[];
+        }
+      }
+    `,
+      "file_view.py",
+    );
+
+    expect(output).toContain("from .node_view import NodeView");
+    expect(output).toContain("from ..shared.page_info import PageInfo");
+    expect(output).toContain("node: NodeView = Field(...)");
+    expect(output).toContain("labels: list[str] = Field(...)");
+    expect(output).toContain("page: PageInfo = Field(...)");
+    expect(output).toContain("related: list[NodeView] = Field(...)");
+    expect(output).not.toContain(": Any = Field");
   });
 
   it("emits composite index and unique table args", async () => {

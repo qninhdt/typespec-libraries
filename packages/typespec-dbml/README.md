@@ -18,7 +18,7 @@ DBML output is the right fit when you want:
 Use this emitter when you want DBML that stays in sync with:
 
 - namespace-aware table organization
-- the same relation semantics used by GORM and SQLModel
+- the same relation semantics used by Ent and SQLModel
 - lookup-type columns
 - FK delete/update actions
 - synthesized many-to-many join tables
@@ -249,7 +249,6 @@ The repo verifies DBML generation through:
 
 ```sh
 pnpm run compile-examples
-git diff --exit-code -- outputs
 ```
 
 ## Related Docs

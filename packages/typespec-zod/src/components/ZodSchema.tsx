@@ -6,7 +6,7 @@ import { Children, refkey } from "@alloy-js/core";
 import { MemberExpression } from "@alloy-js/typescript";
 import { Type } from "@typespec/compiler";
 import { useTsp } from "@typespec/emitter-framework";
-import { refkeySym, shouldReference } from "../utils.js";
+import { callPart, refkeySym, shouldReference } from "../utils.js";
 import { zodBaseSchemaParts } from "../zod-base-schema.js";
 import { zodConstraintsParts } from "../zod-constraints.js";
 import { zodDescriptionParts } from "../zod-description.js";
@@ -26,11 +26,14 @@ export function ZodSchema(props: ZodSchemaProps): Children {
 
   if (!props.nested) {
     // we are making a declaration
+    const brandParts =
+      props.type.kind === "Scalar" ? [callPart("brand", JSON.stringify(props.type.name))] : [];
     return (
       <MemberExpression>
         {zodBaseSchemaParts(props.type)}
         {zodConstraintsParts(props.type)}
         {zodDescriptionParts(props.type)}
+        {brandParts}
       </MemberExpression>
     );
   }

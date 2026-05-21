@@ -35,7 +35,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
-- All emitters (`typespec-gorm`, `typespec-sqlmodel`, `typespec-zod`) now import the generated header from `@qninhdt/typespec-orm` instead of defining their own
+- All emitters (`typespec-ent`, `typespec-sqlmodel`, `typespec-zod`) now import the generated header from `@qninhdt/typespec-orm` instead of defining their own
 
 ---
 

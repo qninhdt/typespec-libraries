@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package filevault.sharing.v1;
+
+enum ShareRole {
+  VIEWER = 0;
+  COMMENTER = 1;
+  EDITOR = 2;
+}
+
+enum ShareSubjectKind {
+  ACCOUNT = 0;
+  EMAIL = 1;
+  ORGANIZATION = 2;
+}
+
+enum ShareRoleCode {
+  UNSPECIFIED = 0;
+  VIEWER = 1;
+  COMMENTER = 2;
+  EDITOR = 3;
+  OWNER = 4;
+}
+
+enum ShareSubjectKindCode {
+  UNSPECIFIED = 0;
+  ACCOUNT = 1;
+  GROUP = 2;
+  PUBLIC_LINK = 3;
+}
+
+message ShareGrantView {
+  string id = 1;
+  string resource_node_id = 2;
+  ShareSubjectKindCode subject_kind = 3;
+  string subject = 4;
+  ShareRoleCode role = 5;
+  optional string expires_at_iso = 6;
+}
+
+message CreateShareGrantRequest {
+  string resource_node_id = 1;
+  string granted_by = 2;
+  ShareSubjectKindCode subject_kind = 3;
+  string subject = 4;
+  ShareRoleCode role = 5;
+  optional string expires_at_iso = 6;
+}
+
+message RevokeShareGrantRequest {
+  string grant_id = 1;
+  string revoked_by = 2;
+}
+
+message CreateShareLinkRequest {
+  string resource_node_id = 1;
+  string created_by = 2;
+  ShareRoleCode role = 3;
+  optional string expires_at_iso = 4;
+  optional string password = 5;
+}
+
+message ShareLinkView {
+  string id = 1;
+  string resource_node_id = 2;
+  string url = 3;
+  ShareRoleCode role = 4;
+  optional string expires_at_iso = 5;
+}
+
+message ListSharesRequest {
+  string resource_node_id = 1;
+  string requester_id = 2;
+  PageRequest page = 3;
+}
+
+message ListSharesResponse {
+  repeated ShareGrantView grants = 1;
+  repeated ShareLinkView links = 2;
+  PageInfo page = 3;
+}
+
+service SharingService {
+  rpc CreateGrant(CreateShareGrantRequest) returns (ShareGrantView);
+  rpc RevokeGrant(RevokeShareGrantRequest) returns (Ack);
+  rpc CreateLink(CreateShareLinkRequest) returns (ShareLinkView);
+  rpc ListShares(ListSharesRequest) returns (ListSharesResponse);
+}

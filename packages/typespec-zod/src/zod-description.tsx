@@ -7,6 +7,7 @@
 
 import { ModelProperty, Type } from "@typespec/compiler";
 import { useTsp } from "@typespec/emitter-framework";
+import { getOrmScalarName } from "@qninhdt/typespec-orm";
 import { callPart, isBuiltIn } from "./utils.js";
 
 export function zodDescriptionParts(type: Type, member?: ModelProperty) {
@@ -20,8 +21,13 @@ export function zodDescriptionParts(type: Type, member?: ModelProperty) {
   }
 
   // Only add type if it's not a lookup type (ModelProperty)
-  // For lookup types, we already have the member's doc which is more relevant
-  if (!isBuiltIn($.program, type) && !$.modelProperty.is(type)) {
+  // For lookup types, we already have the member's doc which is more relevant.
+  // Skip ORM semantic scalars — their TSDoc is library-internal, not user-facing.
+  if (
+    !isBuiltIn($.program, type) &&
+    !$.modelProperty.is(type) &&
+    getOrmScalarName(type) === undefined
+  ) {
     sources.push(type);
   }
 

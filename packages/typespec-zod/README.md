@@ -1,6 +1,6 @@
 # @qninhdt/typespec-zod
 
-TypeSpec emitter that generates namespace-grouped Zod schemas from `@data` models.
+TypeSpec emitter that generates namespace-grouped Zod schemas from default form models.
 
 This emitter is intentionally focused on form and DTO shapes. It follows the same namespace and selector rules as the ORM-backed emitters, but it does not emit `@table` models.
 
@@ -8,14 +8,14 @@ This emitter is intentionally focused on form and DTO shapes. It follows the sam
 
 Use this emitter when you want:
 
-- Zod schemas generated from TypeSpec `@data`
+- Zod schemas generated from TypeSpec default form models
 - inferred TypeScript types beside the schemas
 - stable namespace-derived output layout
 - rich field metadata for frontend forms
 
 ## Installation
 
-```sh
+`sh
 pnpm add -D \
   @typespec/compiler \
   @typespec/emitter-framework \
@@ -24,7 +24,7 @@ pnpm add -D \
   @qninhdt/typespec-orm \
   @qninhdt/typespec-zod \
   zod
-```
+`
 
 ## Runtime Expectations
 
@@ -37,18 +37,18 @@ Generated Zod output is intended to drop into TypeScript projects cleanly.
 
 ## Configuration Reference
 
-```yaml
+`yaml
 emit:
-  - "@qninhdt/typespec-zod"
+
+- "@qninhdt/typespec-zod"
 
 options:
-  "@qninhdt/typespec-zod":
-    output-dir: "./outputs/zod"
-    standalone: true
-    library-name: "@acme/forms"
-    include:
-      - "Demo.Platform.Forms"
-```
+"@qninhdt/typespec-zod":
+output-dir: "./outputs/zod"
+standalone: true
+library-name: "@acme/forms"
+include: - "Demo.Platform.Forms"
+`
 
 Supported options:
 
@@ -72,30 +72,31 @@ Zod uses the same selector behavior as the ORM-backed emitters.
 
 Examples:
 
-```yaml
+`yaml
 include:
-  - "Demo.GamePlatform.Forms"
-exclude:
-  - "Demo.GamePlatform.Forms.Internal"
-```
+
+- "Demo.GamePlatform.Forms"
+  exclude:
+- "Demo.GamePlatform.Forms.Internal"
+  `
 
 Behavior:
 
 - selectors are dotted names, not glob patterns
 - `exclude` wins over `include`
-- excluding a dependency required by a selected `@data` model fails emission
+- excluding a dependency required by a selected default form model fails emission
 
 ## Output Layout
 
 Given:
 
-```typescript
+`typescript
 namespace App.Forms.Public;
-```
+`
 
 Standalone output looks like:
 
-```text
+`text
 outputs/zod/
   package.json
   tsconfig.json
@@ -105,13 +106,13 @@ outputs/zod/
         public/
           CreateInvitationForm.ts
     index.ts
-```
+`
 
 Non-standalone mode writes directly under the namespace folders and skips package metadata files.
 
 ## Generated Package Contract
 
-For each emitted `@data` model, the emitter writes:
+For each emitted default form model, the emitter writes:
 
 - a `ModelSchema`
 - `type Model = z.infer<typeof ModelSchema>`
@@ -127,7 +128,7 @@ This means consumers can either import from the root barrel or from specific nam
 
 ## Schema Example
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -136,34 +137,32 @@ namespace Demo.Accounts;
 
 @table
 model User {
-  @key id: uuid;
+@key id: uuid;
 
-  @maxLength(320)
-  @format("email")
-  email: string;
+@maxLength(320)
+@format("email")
+email: string;
 
-  @maxLength(100)
-  displayName: string;
+@maxLength(100)
+displayName: string;
 }
 
 namespace Demo.Forms;
-
-@data("Create Invitation Form")
 model CreateInvitationForm {
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: Demo.Accounts.User.email;
+@title("Invitee Email")
+@placeholder("friend@example.com")
+inviteeEmail: Demo.Accounts.User.email;
 
-  @title("Message")
-  message?: text;
+@title("Message")
+message?: text;
 }
 
 @@inputType(CreateInvitationForm.message::type, "textarea");
-```
+`
 
 ## Generated Behavior
 
-For each `@data` model, the emitter generates:
+For each default form model, the emitter generates:
 
 - `ModelSchema`
 - `type Model = z.infer<typeof ModelSchema>`
@@ -171,28 +170,28 @@ For each `@data` model, the emitter generates:
 
 Example shape:
 
-```ts
+`ts
 import { z } from "zod";
 
 export const CreateInvitationFormSchema = z.object({
-  inviteeEmail: z.string().max(320).email(),
-  message: z.string().optional(),
+inviteeEmail: z.string().max(320).email(),
+message: z.string().optional(),
 });
 
 export type CreateInvitationForm = z.infer<typeof CreateInvitationFormSchema>;
 
 export const CreateInvitationFormMeta = {
-  inviteeEmail: {
-    title: "Invitee Email",
-    placeholder: "friend@example.com",
-    inputType: "email",
-  },
-  message: {
-    title: "Message",
-    inputType: "textarea",
-  },
+inviteeEmail: {
+title: "Invitee Email",
+placeholder: "friend@example.com",
+inputType: "email",
+},
+message: {
+title: "Message",
+inputType: "textarea",
+},
 } as const;
-```
+`
 
 ## Form Metadata
 
@@ -209,26 +208,25 @@ This gives frontend teams a single generated source for both validation and disp
 
 Zod generation works especially well with lookup types:
 
-```typescript
-@data
+`typescript
 model PublicUser {
   email: Demo.GamePlatform.Accounts.User.email;
 }
-```
+`
 
 That pattern lets a form or DTO model inherit scalar constraints from the source property, such as:
 
 - string length bounds
 - format-derived validators like `email` and `url`
-- titles and placeholders when modeled on the `@data` field
+- titles and placeholders when modeled on the default form field
 
-If the public shape should diverge from the persistence model, define a dedicated `@data` property explicitly instead of chaining more lookup reuse.
+If the public shape should diverge from the persistence model, define a dedicated default form property explicitly instead of chaining more lookup reuse.
 
 ## Frontend Integration Pattern
 
 The intended usage pattern is:
 
-1. model public-facing input shapes as `@data`
+1. model public-facing input shapes as default form models
 2. reuse field constraints with lookup types where it helps
 3. generate Zod output
 4. import `ModelSchema`, `Model`, and `ModelMeta` in the frontend
@@ -247,22 +245,22 @@ That keeps validation, TypeScript inference, and form hints sourced from one sch
 
 ## Important Boundaries
 
-- only `@data` models are emitted
+- only default form models and `` schemas are emitted
 - relation-heavy `@table` models are not the target of this emitter
-- if a `@data` model references a shape that cannot be represented cleanly as Zod output, fix the source schema instead of expecting silent fallback behavior
+- if a default form model references a shape that cannot be represented cleanly as Zod output, fix the source schema instead of expecting silent fallback behavior
 
 ## Common Diagnostics And Gotchas
 
 - `standalone-requires-library-name`
   Standalone package generation requires `library-name`.
 - filtered dependency failures
-  A selected `@data` model still needs every required dependency included by the selector set.
+  A selected default form model still needs every required dependency included by the selector set.
 - table-only shapes leaking into forms
-  If a public form model starts to mirror a full persistence model, prefer writing an explicit `@data` model rather than reusing relation-heavy table shapes directly.
+  If a public form model starts to mirror a full persistence model, prefer writing an explicit default form model rather than reusing relation-heavy table shapes directly.
 
 Practical guidance:
 
-- keep `@data` models intentionally public-facing
+- keep default form models intentionally public-facing
 - use lookup types for individual fields more often than for whole object graphs
 - treat the root barrel as a convenience export, not a forced import style
 
@@ -270,10 +268,10 @@ Practical guidance:
 
 The repo verifies generated Zod output with:
 
-```sh
+`sh
 pnpm run compile-examples
 pnpm --dir outputs/zod exec tsc -p tsconfig.json
-```
+`
 
 ## Related Docs
 

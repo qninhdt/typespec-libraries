@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { emitPyFile } from "./utils.jsx";
 
 describe("SQLModel @data model (Pydantic BaseModel)", () => {
+  it("treats unmarked models as BaseModel forms", async () => {
+    const output = await emitPyFile(
+      `
+      model CreateUserForm {
+        name: string;
+      }
+    `,
+      "create_user_form.py",
+    );
+
+    expect(output).toContain("class CreateUserForm(BaseModel):");
+    expect(output).not.toContain("table=True");
+  });
+
   it("generates BaseModel WITHOUT table=True or __tablename__", async () => {
     const output = await emitPyFile(
       `
@@ -39,20 +53,58 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
     const output = await emitPyFile(
       `
       model BaseForm {
-        @title("Email Address") @format("email") email: string;
+        @title("Email Address") contact: email;
       }
 
-      @data("Invite form")
-      model InviteForm extends BaseForm {
+      model InviteForm {
+        ...BaseForm;
         message?: string;
       }
     `,
       "invite_form.py",
     );
 
-    expect(output).toContain("email: EmailStr = Field(...");
-    expect(output).toContain('title="Email Address"');
+    expect(output).toContain("from .base_form import BaseForm");
+    expect(output).toContain("class InviteForm(BaseForm):");
+    expect(output).not.toContain("contact: EmailStr = Field(...");
     expect(output).toContain("message: str | None = Field(None");
+  });
+
+  it("generates table mixins as SQLModel bases", async () => {
+    const mixin = await emitPyFile(
+      `
+      @tableMixin
+      model Timestamped {
+        createdAt: utcDateTime;
+      }
+
+      @table
+      model User {
+        ...Timestamped;
+        @key id: uuid;
+      }
+    `,
+      "timestamped.py",
+    );
+    const table = await emitPyFile(
+      `
+      @tableMixin
+      model Timestamped {
+        createdAt: utcDateTime;
+      }
+
+      @table
+      model User {
+        ...Timestamped;
+        @key id: uuid;
+      }
+    `,
+      "user.py",
+    );
+
+    expect(mixin).toContain("class Timestamped(SQLModel):");
+    expect(table).toContain("from .timestamped import Timestamped");
+    expect(table).toContain("class User(Timestamped, table=True):");
   });
 
   it("generates T | None with Field(None) for optional fields", async () => {

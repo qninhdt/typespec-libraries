@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emitZodFile } from "./utils.jsx";
+import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
+import { emitZodFile, renderZodOutput } from "./utils.jsx";
 
 describe("Zod scalar type mappings", () => {
   it("maps string to z.string()", async () => {
@@ -88,7 +89,23 @@ describe("Zod scalar type mappings", () => {
       "User.ts",
     );
 
-    expect(output).toContain("z.instanceof()");
+    expect(output).toContain("z.instanceof(Uint8Array)");
+  });
+
+  it("maps uuid scalar to z.string().uuid()", async () => {
+    const output = await emitZodFile(
+      `
+      scalar uuid extends string;
+
+      @data("Form")
+      model User {
+        id: uuid;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain("z.string().uuid()");
   });
 
   it("maps plainDate to z.coerce.date()", async () => {
@@ -201,6 +218,20 @@ describe("Zod optional fields", () => {
     expect(output).toContain(".default(");
   });
 
+  it("preserves empty string default values", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        displayName: string = "";
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain('displayName: z.string().default("")');
+  });
+
   it("matches numeric default literals to the emitted schema type", async () => {
     const output = await emitZodFile(
       `
@@ -216,5 +247,444 @@ describe("Zod optional fields", () => {
     expect(output).toContain(".default(0)");
     expect(output).toContain(".default(42n)");
     expect(output).not.toContain(".default(0n)");
+  });
+});
+
+describe("Zod semantic scalars", () => {
+  it("maps email to z.string().email()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        contact: email;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain("z.string().email()");
+  });
+
+  it("maps ipv4 to z.string().ipv4()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Server {
+        addr: ipv4;
+      }
+    `,
+      "Server.ts",
+    );
+
+    expect(output).toContain("z.string().ipv4()");
+  });
+
+  it("maps ipv6 to z.string().ipv6()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Server {
+        addr: ipv6;
+      }
+    `,
+      "Server.ts",
+    );
+
+    expect(output).toContain("z.string().ipv6()");
+  });
+
+  it("maps ip to z.string().ip()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Server {
+        addr: ip;
+      }
+    `,
+      "Server.ts",
+    );
+
+    expect(output).toContain("z.string().ip()");
+  });
+
+  it("maps url to z.string().url()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Link {
+        href: url;
+      }
+    `,
+      "Link.ts",
+    );
+
+    expect(output).toContain("z.string().url()");
+  });
+
+  it("maps cidr to z.string().cidr()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Network {
+        subnet: cidr;
+      }
+    `,
+      "Network.ts",
+    );
+
+    expect(output).toContain("z.string().cidr()");
+  });
+
+  it("maps base64 to z.string().base64()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Attachment {
+        content: base64;
+      }
+    `,
+      "Attachment.ts",
+    );
+
+    expect(output).toContain("z.string().base64()");
+  });
+
+  it("does not add extra regex for email scalar", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model User {
+        contact: email;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain(".email()");
+    expect(output).not.toContain(".regex(");
+    expect(output).not.toContain(".describe(");
+  });
+
+  it("emits branded alias with regex for mac scalar", async () => {
+    const output = await renderZodOutput(
+      `
+      @data("Form")
+      model Device {
+        macAddr: mac;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Device.ts");
+
+    expect(scalarsFile).toContain("export const macSchema = z");
+    expect(scalarsFile).toContain(".string()");
+    expect(scalarsFile).toContain(".regex(");
+    expect(scalarsFile).toContain('.brand("mac")');
+    expect(scalarsFile).not.toContain(".mac(");
+    expect(modelFile).toContain('import { macSchema } from "./_scalars.js";');
+    expect(modelFile).toContain("macAddr: macSchema");
+  });
+
+  it("maps cuid to z.string().cuid()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Resource {
+        id: cuid;
+      }
+    `,
+      "Resource.ts",
+    );
+
+    expect(output).toContain("z.string().cuid()");
+  });
+
+  it("maps cuid2 to z.string().cuid2()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Resource {
+        id: cuid2;
+      }
+    `,
+      "Resource.ts",
+    );
+
+    expect(output).toContain("z.string().cuid2()");
+  });
+
+  it("maps ulid to z.string().ulid()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Resource {
+        id: ulid;
+      }
+    `,
+      "Resource.ts",
+    );
+
+    expect(output).toContain("z.string().ulid()");
+  });
+
+  it("maps nanoid to z.string().nanoid()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Resource {
+        id: nanoid;
+      }
+    `,
+      "Resource.ts",
+    );
+
+    expect(output).toContain("z.string().nanoid()");
+  });
+
+  it("maps jwt to z.string().jwt()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Auth {
+        token: jwt;
+      }
+    `,
+      "Auth.ts",
+    );
+
+    expect(output).toContain("z.string().jwt()");
+  });
+
+  it("maps emoji to z.string().emoji()", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Reaction {
+        icon: emoji;
+      }
+    `,
+      "Reaction.ts",
+    );
+
+    expect(output).toContain("z.string().emoji()");
+  });
+
+  it("does not add extra regex for cuid scalar", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Resource {
+        id: cuid;
+      }
+    `,
+      "Resource.ts",
+    );
+
+    expect(output).toContain(".cuid()");
+    expect(output).not.toContain(".regex(");
+  });
+});
+
+describe("Zod user-defined scalars", () => {
+  it("emits user-defined scalar as named declaration with .brand()", async () => {
+    const output = await renderZodOutput(
+      `
+      @minValue(18)
+      scalar AdultAge extends int32;
+
+      @data("Form")
+      model RegistrationForm {
+        age: AdultAge;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "RegistrationForm.ts");
+
+    expect(scalarsFile).toContain("export const AdultAgeSchema = z.number().int()");
+    expect(scalarsFile).toContain('.brand("AdultAge")');
+    expect(scalarsFile).toContain(".gte(18)");
+    expect(modelFile).toContain("age: AdultAgeSchema");
+  });
+
+  it("emits user-defined string scalar with constraints and .brand()", async () => {
+    const output = await renderZodOutput(
+      `
+      @minLength(8)
+      @maxLength(128)
+      scalar StrongPassword extends string;
+
+      @data("Form")
+      model LoginForm {
+        password: StrongPassword;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "LoginForm.ts");
+
+    expect(scalarsFile).toContain("export const StrongPasswordSchema = z");
+    expect(scalarsFile).toContain(".string()");
+    expect(scalarsFile).toContain(".min(8)");
+    expect(scalarsFile).toContain(".max(128)");
+    expect(scalarsFile).toContain('.brand("StrongPassword")');
+    expect(modelFile).toContain("password: StrongPasswordSchema");
+  });
+
+  it("references user-defined scalar by name in fields", async () => {
+    const output = await renderZodOutput(
+      `
+      @minValue(18) @maxValue(150)
+      scalar AdultAge extends int32;
+
+      @data("Form")
+      model Profile {
+        name: string;
+        age: AdultAge;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Profile.ts");
+
+    expect(scalarsFile).toContain("export const AdultAgeSchema =");
+    expect(modelFile).toContain('import { AdultAgeSchema } from "./_scalars.js";');
+    expect(modelFile).toContain("age: AdultAgeSchema");
+  });
+
+  it("emits user-defined scalar extending float64 with constraints", async () => {
+    const output = await renderZodOutput(
+      `
+      @minValue(0) @maxValue(100)
+      scalar Percentage extends float64;
+
+      @data("Form")
+      model Stats {
+        completion: Percentage;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Stats.ts");
+
+    expect(scalarsFile).toContain("export const PercentageSchema = z");
+    expect(scalarsFile).toContain(".number()");
+    expect(scalarsFile).toContain(".nonnegative()");
+    expect(scalarsFile).toContain(".lte(100)");
+    expect(scalarsFile).toContain('.brand("Percentage")');
+    expect(modelFile).toContain("completion: PercentageSchema");
+  });
+
+  it("emits user-defined scalar with @pattern and .brand()", async () => {
+    const output = await renderZodOutput(
+      `
+      @pattern("^[A-Z]{2}-[0-9]{4}$")
+      scalar ProductCode extends string;
+
+      @data("Form")
+      model Product {
+        code: ProductCode;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Product.ts");
+
+    expect(scalarsFile).toContain("export const ProductCodeSchema =");
+    expect(scalarsFile).toContain(".string()");
+    expect(scalarsFile).toContain(".regex(");
+    expect(scalarsFile).toContain("^[A-Z]{2}-[0-9]{4}$");
+    expect(scalarsFile).toContain('.brand("ProductCode")');
+    expect(modelFile).toContain("code: ProductCodeSchema");
+  });
+});
+
+describe("Zod user-defined scalar constraint overrides", () => {
+  it("property narrows scalar's maxValue", async () => {
+    const output = await renderZodOutput(
+      `
+      @minValue(0) @maxValue(150)
+      scalar Age extends int32;
+
+      @data("Form")
+      model Player {
+        @maxValue(13) age: Age;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Player.ts");
+
+    expect(scalarsFile).toContain(
+      "export const AgeSchema = z.number().int().nonnegative().lte(150)",
+    );
+    expect(modelFile).toContain("AgeSchema.lte(13)");
+    expect(modelFile).not.toContain("lte(150)");
+  });
+
+  it("property adds constraint not present on scalar", async () => {
+    const output = await renderZodOutput(
+      `
+      @minValue(0)
+      scalar PositiveInt extends int32;
+
+      @data("Form")
+      model Bounded {
+        @maxValue(100) value: PositiveInt;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Bounded.ts");
+
+    expect(scalarsFile).toContain("export const PositiveIntSchema = z");
+    expect(scalarsFile).toContain(".number()");
+    expect(scalarsFile).toContain(".int()");
+    expect(scalarsFile).toContain(".nonnegative()");
+    expect(modelFile).toContain("PositiveIntSchema");
+    expect(modelFile).toContain(".lte(100)");
+  });
+
+  it("property narrows string scalar's maxLength", async () => {
+    const output = await renderZodOutput(
+      `
+      @minLength(1) @maxLength(255)
+      scalar ShortText extends string;
+
+      @data("Form")
+      model Comment {
+        @maxLength(100) body: ShortText;
+      }
+    `,
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "Comment.ts");
+
+    expect(scalarsFile).toContain("export const ShortTextSchema = z.string().min(1).max(255)");
+    expect(modelFile).toContain("ShortTextSchema.max(100)");
+    expect(modelFile).not.toContain("max(255)");
+  });
+
+  it("imports root scalar declarations from nested model files", async () => {
+    const output = await renderZodOutput(
+      `
+      @minLength(8)
+      scalar StrongPassword extends string;
+
+      @data("Form")
+      model LoginForm {
+        password: StrongPassword;
+      }
+    `,
+      "forms/auth",
+    );
+    const scalarsFile = getOutputFileContent(output, "_scalars.ts");
+    const modelFile = getOutputFileContent(output, "forms/auth/LoginForm.ts");
+
+    expect(scalarsFile).toContain("export const StrongPasswordSchema");
+    expect(modelFile).toContain('import { StrongPasswordSchema } from "../../_scalars.js";');
+    expect(modelFile).toContain("password: StrongPasswordSchema");
+    expect(modelFile).not.toContain("<Unresolved Symbol");
   });
 });

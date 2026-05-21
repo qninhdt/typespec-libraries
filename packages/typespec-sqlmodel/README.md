@@ -5,7 +5,7 @@ TypeSpec emitter that generates namespace-grouped SQLModel packages.
 This emitter consumes `@qninhdt/typespec-orm` schemas and generates:
 
 - SQLModel classes for `@table`
-- Pydantic-style data models for `@data`
+- Pydantic-style data models for default form models
 - package scaffolding for standalone distribution
 - Alembic-friendly package metadata
 
@@ -22,7 +22,7 @@ It is designed for:
 
 ## Installation
 
-```sh
+`sh
 pnpm add -D \
   @typespec/compiler \
   @typespec/emitter-framework \
@@ -30,7 +30,7 @@ pnpm add -D \
   @alloy-js/typescript \
   @qninhdt/typespec-orm \
   @qninhdt/typespec-sqlmodel
-```
+`
 
 ## Runtime Expectations
 
@@ -45,21 +45,20 @@ The repo currently verifies generated output with Python `3.10+`.
 
 ## Configuration Reference
 
-```yaml
+`yaml
 emit:
-  - "@qninhdt/typespec-sqlmodel"
+
+- "@qninhdt/typespec-sqlmodel"
 
 options:
-  "@qninhdt/typespec-sqlmodel":
-    output-dir: "./outputs/sqlmodel"
-    standalone: true
-    library-name: "acme-models"
-    collection-strategy: "jsonb"
-    include:
-      - "Demo.Platform"
-    exclude:
-      - "Demo.Platform.Audit"
-```
+"@qninhdt/typespec-sqlmodel":
+output-dir: "./outputs/sqlmodel"
+standalone: true
+library-name: "acme-models"
+collection-strategy: "jsonb"
+include: - "Demo.Platform"
+exclude: - "Demo.Platform.Audit"
+`
 
 Supported options:
 
@@ -83,12 +82,13 @@ SQLModel generation uses the shared ORM selector engine. Selectors are dotted na
 
 Examples:
 
-```yaml
+`yaml
 include:
-  - "Demo.GamePlatform"
-exclude:
-  - "Demo.GamePlatform.Audit"
-```
+
+- "Demo.GamePlatform"
+  exclude:
+- "Demo.GamePlatform.Audit"
+  `
 
 Behavior:
 
@@ -100,13 +100,13 @@ Behavior:
 
 Given:
 
-```typescript
+`typescript
 namespace App.Identity;
-```
+`
 
 Standalone output looks like:
 
-```text
+`text
 outputs/sqlmodel/
   pyproject.toml
   app/
@@ -114,7 +114,7 @@ outputs/sqlmodel/
     identity/
       __init__.py
       user.py
-```
+`
 
 Rules:
 
@@ -138,7 +138,7 @@ Non-standalone mode emits only the code tree and skips package metadata files.
 
 ## Schema Example
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -147,35 +147,37 @@ namespace Demo.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Accounts;
 
 @table
-model User is Demo.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Shared.Timestamped {
-  @unique code: string;
+model Badge {
+...Demo.Shared.Timestamped;
+@unique code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
-```
+`
 
 ## Generated Behavior
 
@@ -191,7 +193,7 @@ model Badge is Demo.Shared.Timestamped {
 
 ### Data models
 
-`@data` models become non-table Python models that preserve:
+default form models become non-table Python models that preserve:
 
 - validation metadata
 - titles and descriptions
@@ -199,16 +201,16 @@ model Badge is Demo.Shared.Timestamped {
 
 ### Named checks
 
-```typescript
+`typescript
 @check("users_credits_non_negative", "credits >= 0")
 credits: int32 = 0;
-```
+`
 
 becomes:
 
-```py
+`py
 CheckConstraint("credits >= 0", name="users_credits_non_negative")
-```
+`
 
 inside `__table_args__`.
 
@@ -216,9 +218,9 @@ inside `__table_args__`.
 
 When both sides declare:
 
-```typescript
+`typescript
 @manyToMany("user_badges")
-```
+`
 
 the emitter generates:
 
@@ -230,21 +232,21 @@ the emitter generates:
 
 Top-level package roots expose:
 
-```py
+`py
 from sqlmodel import SQLModel
 
 metadata = SQLModel.metadata
-```
+`
 
 This makes it straightforward to wire the generated package into Alembic.
 
 Example:
 
-```py
+`py
 from demo import metadata
 
 target_metadata = metadata
-```
+`
 
 ### Collection persistence
 
@@ -274,7 +276,7 @@ When you need payload columns on the join itself, define an explicit junction ta
 - named checks
 - many-to-many shorthand
 - collection persistence strategies
-- `@data` model generation
+- default form models model generation
 - shared filtering with `include` and `exclude`
 
 ## Limitations
@@ -304,10 +306,10 @@ Practical guidance:
 
 The repo verifies generated Python output with:
 
-```sh
+`sh
 pnpm run compile-examples
 python -m compileall outputs/sqlmodel
-```
+`
 
 ## Related Docs
 

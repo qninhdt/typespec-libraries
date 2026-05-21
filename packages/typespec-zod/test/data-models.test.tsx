@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { emitZodFile } from "./utils.jsx";
 
 describe("Zod @data model generation", () => {
+  it("treats unmarked models as form schemas", async () => {
+    const output = await emitZodFile(
+      `
+      model UserForm {
+        name: string;
+      }
+    `,
+      "UserForm.ts",
+    );
+
+    expect(output).toContain("export const UserFormSchema = z.object(");
+    expect(output).toContain("name: z.string()");
+  });
+
   it("generates schema variable declaration with correct name", async () => {
     const output = await emitZodFile(
       `
@@ -95,12 +109,12 @@ describe("Zod @data model generation", () => {
     expect(output).toContain(".max(");
   });
 
-  it("generates field with @format constraints", async () => {
+  it("generates field with email scalar", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
       model TestForm {
-        @format("email") email: string;
+        contact: email;
       }
     `,
       "TestForm.ts",
@@ -113,23 +127,42 @@ describe("Zod @data model generation", () => {
     const output = await emitZodFile(
       `
       model BaseForm {
-        @title("Email Address") @format("email") email: string;
+        @title("Email Address") contact: email;
       }
 
-      @data("Invite form")
-      model InviteForm extends BaseForm {
+      model InviteForm {
+        ...BaseForm;
         message?: string;
       }
     `,
       "InviteForm.ts",
     );
 
-    expect(output).toContain("const BaseFormSchema = z.object(");
-    expect(output).not.toContain("export const BaseFormSchema");
-    expect(output).toContain("email: z.string().email()");
-    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.merge(");
+    expect(output).toContain('import { BaseFormSchema } from "./BaseForm.js";');
+    expect(output).not.toContain("contact: z.string().email()");
+    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.safeExtend(");
     expect(output).toContain("message: z.string().optional()");
-    expect(output).toContain('email: { title: "Email Address", inputType: "email" }');
+  });
+
+  it("generates table mixins as reusable Zod schemas", async () => {
+    const mixin = await emitZodFile(
+      `
+      @tableMixin
+      model Timestamped {
+        createdAt: utcDateTime;
+      }
+
+      @table
+      model User {
+        ...Timestamped;
+        @key id: uuid;
+      }
+    `,
+      "Timestamped.ts",
+    );
+
+    expect(mixin).toContain("export const TimestampedSchema = z.object(");
+    expect(mixin).toContain("createdAt:");
   });
 });
 

@@ -1,9 +1,8 @@
-/**
- * TypeSpec emitter that generates namespace-grouped SQLModel / Pydantic files.
- */
 import { render, writeOutput, SourceFile, SourceDirectory } from "@alloy-js/core";
-import type { EmitContext, ModelProperty, Model } from "@typespec/compiler";
+import type { EmitContext, ModelProperty, Model, Scalar } from "@typespec/compiler";
 import {
+  bootstrapEmitter,
+  isBootstrapSuccess,
   camelToSnake,
   collectManyToManyAssociations,
   generatedHeader,
@@ -12,9 +11,7 @@ import {
   getMaxLength,
   getPrecision,
   getTableName,
-  normalizeOrmGraph,
   resolveDbType,
-  selectModelsForEmitter,
   type ManyToManyAssociation,
   type NormalizedOrmGraph,
   type NormalizedOrmModel,
@@ -22,6 +19,11 @@ import {
 import { buildPythonImportBlock, generateInit } from "./components/PyConstants.js";
 import { PyDataFile } from "./components/PyDataModel.jsx";
 import { PyModelFile } from "./components/PyModel.jsx";
+import {
+  buildPythonScalarAliasNames,
+  collectAliasableScalarsForModels,
+  PyScalarsFile,
+} from "./components/PyScalars.jsx";
 import { reportDiagnostic, type SqlModelEmitterOptions } from "./lib.js";
 
 interface AssociationImportRef {
@@ -43,42 +45,43 @@ interface AssociationModuleFile {
   content: string;
 }
 
+interface ScalarGroup {
+  topLevel: string;
+  scalars: Scalar[];
+  aliasNames: Map<Scalar, string>;
+}
+
 export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promise<void> {
-  const { program } = context;
   const options = context.options;
   const outputDir = options["output-dir"] ?? context.emitterOutputDir;
-  const isStandalone = options.standalone ?? false;
-  const libraryName = options["library-name"];
   const collectionStrategy = options["collection-strategy"];
 
-  if (isStandalone && !libraryName) {
-    reportDiagnostic(program, {
-      code: "standalone-requires-library-name",
-      target: program.getGlobalNamespaceType(),
-    });
-    return;
-  }
-
-  const graph = normalizeOrmGraph(program);
-  const selection = selectModelsForEmitter(program, graph, {
+  const result = bootstrapEmitter(context, {
+    kinds: ["table", "mixin", "data"],
     include: options.include,
     exclude: options.exclude,
-    kinds: ["table", "data"],
+    standalone: options.standalone,
+    libraryName: options["library-name"],
   });
-  const tables = selection.models.filter((model) => model.kind === "table");
-  const dataModels = selection.models.filter((model) => model.kind === "data");
 
-  if (tables.length === 0 && dataModels.length === 0) {
-    reportDiagnostic(program, {
-      code: "no-tables-found",
-      target: program.getGlobalNamespaceType(),
-    });
+  if (!isBootstrapSuccess(result)) {
+    if (result.reason === "standalone-requires-library-name") {
+      reportDiagnostic(context.program, {
+        code: "standalone-requires-library-name",
+        target: context.program.getGlobalNamespaceType(),
+      });
+    } else {
+      reportDiagnostic(context.program, {
+        code: "no-tables-found",
+        target: context.program.getGlobalNamespaceType(),
+      });
+    }
     return;
   }
 
-  const namespaceGroups = [...selection.byNamespace.values()].sort((a, b) =>
-    a[0].namespace.localeCompare(b[0].namespace),
-  );
+  const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
+  const tables = selection.models.filter((model) => model.kind === "table");
+
   const manyToManyAssociations = collectManyToManyAssociations(
     program,
     tables.map((model) => model.model),
@@ -99,9 +102,16 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
     selection.models,
     associationModules.map((item) => item.dir),
   );
+  const scalarGroups = buildScalarGroups(program, selection.models);
+  const scalarGroupsByTopLevel = new Map(scalarGroups.map((group) => [group.topLevel, group]));
 
   const tree = (
     <SourceDirectory path=".">
+      {tables.length > 0 && (
+        <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
+          {generateAtlasHcl()}
+        </SourceFile>
+      )}
       {isStandalone && (
         <SourceFile path="pyproject.toml" filetype="toml" printWidth={9999}>
           {`[project]
@@ -110,6 +120,7 @@ version = "0.0.0"
 description = "Generated SQLModel classes"
 requires-python = ">=3.10"
 dependencies = [
+    "atlas-provider-sqlalchemy>=0.3.0",
     "sqlmodel>=0.0.14",
 ]
 
@@ -148,6 +159,11 @@ packages = [` +
           </SourceFile>
         </SourceDirectory>
       ))}
+      {scalarGroups.map((group) => (
+        <SourceDirectory path={group.topLevel}>
+          <PyScalarsFile program={program} scalars={group.scalars} aliasNames={group.aliasNames} />
+        </SourceDirectory>
+      ))}
       {namespaceGroups.map((models) => (
         <SourceDirectory path={models[0].namespaceDir}>
           {models
@@ -160,12 +176,31 @@ packages = [` +
                 collectionStrategy={collectionStrategy}
                 manyToManySecondaryByProp={manyToManySecondaryByProp}
                 runtimeImports={runtimeImportsByModel.get(model.model)}
+                scalarAliasNames={scalarGroupsByTopLevel.get(model.namespacePath[0])?.aliasNames}
+              />
+            ))}
+          {models
+            .filter((model) => model.kind === "mixin")
+            .map((model) => (
+              <PyModelFile
+                program={program}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                collectionStrategy={collectionStrategy}
+                scalarAliasNames={scalarGroupsByTopLevel.get(model.namespacePath[0])?.aliasNames}
               />
             ))}
           {models
             .filter((model) => model.kind === "data")
             .map((model) => (
-              <PyDataFile program={program} model={model.model} label={model.label ?? model.name} />
+              <PyDataFile
+                program={program}
+                model={model.model}
+                label={model.label ?? model.name}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                scalarAliasNames={scalarGroupsByTopLevel.get(model.namespacePath[0])?.aliasNames}
+              />
             ))}
         </SourceDirectory>
       ))}
@@ -174,6 +209,59 @@ packages = [` +
 
   const output = render(tree);
   await writeOutput(output, outputDir);
+}
+
+function generateAtlasHcl(): string {
+  return `data "external_schema" "sqlmodel" {
+  program = [
+    "atlas-provider-sqlalchemy",
+    "--path", ".",
+    "--dialect", "postgresql"
+  ]
+}
+
+env "sqlmodel" {
+  src = data.external_schema.sqlmodel.url
+  dev = "docker://postgres/16/dev?search_path=public"
+  migration {
+    dir = "file://migrations"
+  }
+  format {
+    migrate {
+      diff = "{{ sql . \\"  \\" }}"
+    }
+  }
+}
+`;
+}
+
+function buildScalarGroups(
+  program: EmitContext<SqlModelEmitterOptions>["program"],
+  models: NormalizedOrmModel[],
+): ScalarGroup[] {
+  const byTopLevel = new Map<string, NormalizedOrmModel[]>();
+  for (const model of models) {
+    const topLevel = model.namespacePath[0];
+    if (!topLevel) continue;
+    const group = byTopLevel.get(topLevel) ?? [];
+    group.push(model);
+    byTopLevel.set(topLevel, group);
+  }
+
+  return [...byTopLevel.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([topLevel, groupModels]) => {
+      const scalars = collectAliasableScalarsForModels(
+        program,
+        groupModels.map((model) => model.model),
+      );
+      return {
+        topLevel,
+        scalars,
+        aliasNames: buildPythonScalarAliasNames(program, scalars),
+      };
+    })
+    .filter((group) => group.scalars.length > 0);
 }
 
 function buildPackageInfo(

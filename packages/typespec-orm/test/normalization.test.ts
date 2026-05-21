@@ -90,7 +90,8 @@ describe("normalizeOrmGraph", () => {
 
       namespace Demo.Users {
         @table
-        model User is Demo.Shared.AuditFields {
+        model User {
+          ...Demo.Shared.AuditFields;
           @key id: uuid;
           status: Demo.Shared.Status;
         }
@@ -282,5 +283,55 @@ describe("normalizeOrmGraph", () => {
     expect(selection.topLevelNamespaces).toEqual(["test"]);
     expect([...selection.byNamespace.keys()]).toEqual(["Test.Demo.Alpha", "Test.Demo.Zeta"]);
     expect(selection.models.map((model) => model.name)).toEqual(["Alpha", "ZetaForm"]);
+  });
+
+  it("selects only data models when kinds is ['data']", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+
+        @data("User Form")
+        model UserForm {
+          name: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      kinds: ["data"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["UserForm"]);
+    expect(selection.models.every((m) => m.kind === "data")).toBe(true);
+  });
+
+  it("selects only table models when kinds is ['table']", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+
+        @data("User Form")
+        model UserForm {
+          name: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      kinds: ["table"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["User"]);
+    expect(selection.models.every((m) => m.kind === "table")).toBe(true);
   });
 });

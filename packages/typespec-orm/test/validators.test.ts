@@ -501,4 +501,22 @@ describe("$onValidate diagnostics", () => {
     );
     expect(compositeErrors).toHaveLength(0);
   });
+
+  it("reports composite column referencing non-existent property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        name: string;
+        @index nameEmail: composite<"name", "email">;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/composite-column-not-found",
+    );
+    expect(diags).toHaveLength(1);
+  });
 });

@@ -1,0 +1,24 @@
+output-dir: "{cwd}/outputs/game-platform"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@qninhdt/typespec-sqlmodel"
+  - "@qninhdt/typespec-dbml"
+  - "@qninhdt/typespec-zod"
+options:
+  "@qninhdt/typespec-zod":
+    output-dir: "{cwd}/outputs/game-platform/zod"
+    standalone: true
+    library-name: "game-platform-example"
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/game-platform/ent"
+    standalone: true
+    library-name: "github.com/example/game-platform"
+    collection-strategy: "jsonb"
+  "@qninhdt/typespec-sqlmodel":
+    output-dir: "{cwd}/outputs/game-platform/sqlmodel"
+    standalone: true
+    library-name: "game-platform-example"
+    collection-strategy: "jsonb"
+  "@qninhdt/typespec-dbml":
+    output-dir: "{cwd}/outputs/game-platform/dbml"
+    split-by-namespace: false

@@ -1,7 +1,7 @@
 /**
  * Shared emitter utilities.
  *
- * Code that is identical (or nearly so) between the GORM and SQLModel emitters
+ * Code that is identical (or nearly so) between the Ent and SQLModel emitters
  * lives here so each emitter can import it instead of duplicating it.
  */
 
@@ -25,6 +25,7 @@ import {
   isKey,
   isUnique,
   camelToSnake,
+  getModelOwnProperties,
   resolveRelation,
 } from "./helpers.js";
 
@@ -51,7 +52,7 @@ export const NUMERIC_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * Remove duplicate string entries while preserving insertion order.
- * Used by GORM tag builders to avoid emitting `not null;not null`.
+ * Used by Ent tag builders to avoid emitting `not null;not null`.
  */
 export function deduplicateParts(parts: string[]): string[] {
   const seen = new Set<string>();
@@ -86,7 +87,7 @@ export interface CompositeTypeField {
  * constraint names in the format `[tableName]_[col1]_[col2]_..._[suffix]`
  * where suffix is "pk", "unique", or "idx".
  *
- * Previously duplicated across GORM and SQLModel emitters.
+ * Previously duplicated across Ent and SQLModel emitters.
  */
 export function collectCompositeTypeFields(
   program: Program,
@@ -177,15 +178,22 @@ export interface ClassifiedProperties {
  * Classify every property of `model` into ignored / relation / field buckets.
  *
  * This is the single source-of-truth for the property-scan loop that was
- * previously duplicated across the GORM and SQLModel emitters.
+ * previously duplicated across the Ent and SQLModel emitters.
  */
-export function classifyProperties(program: Program, model: Model): ClassifiedProperties {
+export function classifyProperties(
+  program: Program,
+  model: Model,
+  options?: { ownPropertiesOnly?: boolean },
+): ClassifiedProperties {
   const enumTypes = new Map<string, EnumMemberInfo[]>();
   const ignored: ClassifiedProperty[] = [];
   const relations: ClassifiedRelation[] = [];
   const fields: ClassifiedProperty[] = [];
 
-  for (const prop of walkPropertiesInherited(model)) {
+  const properties = options?.ownPropertiesOnly
+    ? getModelOwnProperties(model)
+    : walkPropertiesInherited(model);
+  for (const prop of properties) {
     // Collect enum types for code generation
     const enumInfo = getPropertyEnum(prop);
     if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {

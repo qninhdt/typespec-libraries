@@ -9,14 +9,17 @@ import {
   type Enum,
   type Model,
   type Program,
+  type Scalar,
   type Type,
   type Union,
 } from "@typespec/compiler";
 import {
   generatedHeader,
+  getModelOwnProperties,
   getInputTypeForProperty,
   getPlaceholder,
   getTitle,
+  isData,
 } from "@qninhdt/typespec-orm";
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
 import { shouldReference, toPascalCase } from "../utils.js";
@@ -45,7 +48,7 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
     props.model,
     schemaName,
   );
-  const metadataEntries = [...walkPropertiesInherited(props.model)]
+  const metadataEntries = getModelOwnProperties(props.model)
     .map((prop) => {
       const title = getTitle(props.program, prop);
       const placeholder = getPlaceholder(props.program, prop);
@@ -86,7 +89,7 @@ function renderPropertyName(name: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
-type ReferencedDeclarationType = Enum | Model | Union;
+type ReferencedDeclarationType = Enum | Model | Scalar | Union;
 
 interface ReferencedDeclaration {
   readonly type: ReferencedDeclarationType;
@@ -109,7 +112,6 @@ function collectReferencedDeclarations(
 
     switch (current.kind) {
       case "Enum":
-        declarations.set(getDeclarationKey(current), current);
         return;
       case "Model":
         if (current.baseModel) visit(current.baseModel);
@@ -120,7 +122,7 @@ function collectReferencedDeclarations(
         for (const prop of walkPropertiesInherited(current)) {
           visit(prop.type);
         }
-        if (current !== root && shouldReference(program, current)) {
+        if (current !== root && shouldReference(program, current) && !isData(program, current)) {
           declarations.set(getDeclarationKey(current), current);
         }
         return;
@@ -142,6 +144,7 @@ function collectReferencedDeclarations(
         return;
       case "Scalar":
         if (current.baseScalar) visit(current.baseScalar);
+        // Scalars are declared in _scalars.ts, not inlined in model files
         return;
     }
   }

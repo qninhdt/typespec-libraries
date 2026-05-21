@@ -25,3 +25,13 @@ export const TypeSpecOrmTestLibrary: TypeSpecTestLibrary = {
     },
   ],
 };
+
+export {
+  findOutputFile,
+  listAllFiles,
+  getOutputFileContent,
+  expectFileContains,
+  createTestHost,
+  createTestRunner,
+  createEmitterTestRunner,
+} from "./test-helpers.js";

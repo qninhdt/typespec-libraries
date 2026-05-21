@@ -62,10 +62,10 @@ export const $lib = createTypeSpecLibrary({
         default: "No models decorated with @table or @data were found. Nothing to emit.",
       },
     },
-    "unknown-format": {
+    "unknown-custom-scalar": {
       severity: "warning",
       messages: {
-        default: paramMessage`@format("${"format"}") on property "${"propName"}" has no Python/Pydantic equivalent and will be ignored.`,
+        default: paramMessage`Custom scalar "${"newType"}" on property "${"propName"}" has no Python/Pydantic equivalent and will be ignored.`,
       },
     },
     "foreign-key-target-not-table": {

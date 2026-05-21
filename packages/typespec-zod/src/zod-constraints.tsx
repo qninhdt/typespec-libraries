@@ -3,7 +3,7 @@
  */
 
 import { Children } from "@alloy-js/core/jsx-runtime";
-import { getFormat, getPattern, ModelProperty, Scalar, Type } from "@typespec/compiler";
+import { getPattern, ModelProperty, Scalar, Type } from "@typespec/compiler";
 import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
 import { callPart, shouldReference } from "./utils.js";
@@ -35,19 +35,43 @@ interface StringConstraints {
   minLength?: number;
   maxLength?: number;
   pattern?: string;
-  format?: string;
   doc?: string;
 }
+
+/**
+ * Custom scalars that have native Zod validation methods.
+ * For these, we skip the @pattern from the scalar definition in main.tsp
+ * since Zod's native method (e.g. .email()) already handles validation.
+ */
+const ZOD_NATIVE_SCALARS = new Set([
+  "uuid",
+  "email",
+  "url",
+  "ipv4",
+  "ipv6",
+  "ip",
+  "cidr",
+  "base64",
+  "cuid",
+  "cuid2",
+  "ulid",
+  "nanoid",
+  "jwt",
+  "emoji",
+]);
 
 function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
   const sources = getDecoratorSources($, type, member);
   const constraints: StringConstraints = {};
+  const isNativeScalar = ZOD_NATIVE_SCALARS.has(type.name);
   for (const source of [...sources].reverse()) {
     const decoratorConstraints: StringConstraints = {
       minLength: $.type.minLength(source),
       maxLength: $.type.maxLength(source),
-      pattern: getPattern($.program, source),
-      format: getFormat($.program, source),
+      // For native scalars, only take pattern from the member (user-applied),
+      // not from the scalar definition itself
+      pattern:
+        isNativeScalar && source.kind === "Scalar" ? undefined : getPattern($.program, source),
     };
 
     assignStringConstraints(constraints, decoratorConstraints);
@@ -63,9 +87,6 @@ function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
   }
   if (constraints.pattern !== undefined) {
     parts.push(callPart("regex", renderRegexLiteral(constraints.pattern)));
-  }
-  if (constraints.format !== undefined) {
-    parts.push(callPart(constraints.format));
   }
 
   return parts;
@@ -83,7 +104,6 @@ function assignStringConstraints(target: StringConstraints, source: StringConstr
   target.minLength = maxNumeric(target.minLength, source.minLength);
   target.maxLength = minNumeric(target.maxLength, source.maxLength);
   target.pattern = target.pattern ?? source.pattern;
-  target.format = target.format ?? source.format;
 }
 
 interface NumericConstraints {
@@ -193,6 +213,12 @@ function getDecoratorSources(
   if (!$.scalar.is(effectiveType)) {
     // Non-scalar, non-ModelProperty type (Model, Union, etc.) - just return member if present
     return effectiveMember ? [effectiveMember] : [];
+  }
+
+  // When the scalar is referenced as a separate declaration, its constraints
+  // are already in that declaration. Only include member-level (property) overrides.
+  if (effectiveMember && shouldReference($.program, effectiveType)) {
+    return [effectiveMember];
   }
 
   const sources: (Scalar | ModelProperty)[] = [
@@ -479,7 +505,7 @@ function arrayConstraints($: Typekit, type: Type, member?: ModelProperty) {
     parts.push(callPart("min", constraints.minItems));
   }
 
-  if (constraints.maxItems && constraints.maxItems > 0) {
+  if (constraints.maxItems !== undefined) {
     parts.push(callPart("max", constraints.maxItems));
   }
 

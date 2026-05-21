@@ -110,7 +110,8 @@ export {
   getMinValue,
   getMaxValue,
   getPattern,
-  getFormat,
+  getOrmScalarName,
+  getCustomScalarName,
   getDoc,
   getForeignKey,
   getForeignKeyConfig,
@@ -118,6 +119,9 @@ export {
   getMappedBy,
   getManyToMany,
   getCompositeFields,
+  isBuiltIn,
+  isCustomScalar,
+  collectCustomScalars,
   isAutoCreateTime,
   isAutoUpdateTime,
   getPrecision,
@@ -135,8 +139,11 @@ export {
   getNamespaceFullName,
   getNamespaceSegments,
   getTypeFullName,
+  collectOrmManagedModels,
   collectTableModels,
   collectTableMixins,
+  getModelOwnProperties,
+  isOrmManagedModel,
   // Auto-relation detection
   findPrimaryKey,
   unwrapArrayType,
@@ -208,3 +215,12 @@ export type {
   OrmSelector,
   OrmEmitterSelection,
 } from "./normalization.js";
+
+// ─── Emitter bootstrap ──────────────────────────────────────────────────────
+export { bootstrapEmitter, isBootstrapSuccess } from "./emitter-bootstrap.js";
+
+export type {
+  EmitterBootstrapConfig,
+  EmitterBootstrapResult,
+  BootstrapFailure,
+} from "./emitter-bootstrap.js";

@@ -20,23 +20,23 @@ It does not emit code by itself.
 
 ## Installation
 
-```sh
+`sh
 pnpm add -D @typespec/compiler @qninhdt/typespec-orm
-```
+`
 
 ## Importing The Library
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
-```
+`
 
 ## Core Concepts
 
 ### Namespaces are required
 
-`@table`, `@data`, and `@tableMixin` must be declared inside a namespace. Required referenced declarations must also be namespaced.
+`@table`, default form models, and `@tableMixin` must be declared inside a namespace. Required referenced declarations must also be namespaced.
 
 This matters because the shared ORM graph treats namespaces as the source of truth for:
 
@@ -80,7 +80,7 @@ The normalized graph is the contract between this package and the emitters. Each
 - resolved mixin sources
 - hard and soft dependencies on models, mixins, enums, and scalars
 
-That shared graph is what makes the emitters behave consistently. GORM, SQLModel, Zod, and DBML no longer perform their own disconnected model discovery passes.
+That shared graph is what makes the emitters behave consistently. Ent, SQLModel, Zod, and DBML no longer perform their own disconnected model discovery passes.
 
 ## Namespace Normalization Rules
 
@@ -93,9 +93,9 @@ Namespace handling is intentionally deterministic:
 
 Example:
 
-```typescript
+`typescript
 namespace Demo.GamePlatform.Content.Stories;
-```
+`
 
 normalizes to:
 
@@ -114,8 +114,8 @@ normalizes to:
 - `@tableMixin`
   Marks a model as a reusable ORM mixin.
 
-- `@data(label?)`
-  Marks a model as a non-table data shape for forms and DTOs.
+- Unmarked models
+  Any namespaced model without `@table` or `@tableMixin` is treated as a non-table data shape for forms and DTOs.
 
 ### Column and persistence decorators
 
@@ -174,14 +174,14 @@ normalizes to:
 
 `@@inputType` targets a scalar. When applied to a field, use `Field::type` or the source scalar for lookup-typed fields:
 
-```typescript
+`typescript
 @@inputType(CreateWorldForm.summary::type, "textarea");
 @@inputType(Demo.Worlds.World.prompt::type, "textarea");
-```
+`
 
 ## Basic Example
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -190,55 +190,56 @@ namespace Demo.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Accounts;
 
 @table
-model User is Demo.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Shared.Timestamped {
-  @unique code: string;
+model Badge {
+...Demo.Shared.Timestamped;
+@unique code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
 
 namespace Demo.Worlds;
 
 @table
-model World is Demo.Shared.Timestamped {
-  ownerId: uuid;
-  slug: string;
+model World {
+...Demo.Shared.Timestamped;
+ownerId: uuid;
+slug: string;
 
-  @foreignKey("ownerId")
-  owner: Demo.Accounts.User;
+@foreignKey("ownerId")
+owner: Demo.Accounts.User;
 }
 
 namespace Demo.Forms;
-
-@data("Create Invitation Form")
 model CreateInvitationForm {
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: Demo.Accounts.User.email;
+@title("Invitee Email")
+@placeholder("friend@example.com")
+inviteeEmail: Demo.Accounts.User.email;
 }
-```
+`
 
 ## Relation Semantics
 
@@ -246,48 +247,48 @@ model CreateInvitationForm {
 
 Owned relations are declared on the navigation property:
 
-```typescript
+`typescript
 authorId: uuid;
 
 @foreignKey("authorId")
 author: User;
-```
+`
 
 The optional second argument targets a non-`id` field:
 
-```typescript
+`typescript
 organizationCode: string;
 
 @foreignKey("organizationCode", "code")
 organization: Organization;
-```
+`
 
 ### Inverse relations
 
-```typescript
+`typescript
 @mappedBy("author")
 posts: Post[];
-```
+`
 
 ### Many-to-many shorthand
 
-```typescript
+`typescript
 @table
 model User {
-  @key id: uuid;
+@key id: uuid;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
 model Badge {
-  @key id: uuid;
+@key id: uuid;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
-```
+`
 
 Rules:
 
@@ -301,14 +302,13 @@ Rules:
 
 This package supports source-property reuse patterns such as:
 
-```typescript
-@data
+`typescript
 model PublicUser {
   email: Demo.GamePlatform.Accounts.User.email;
 }
-```
+`
 
-That lets `@data` models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
+That lets default form models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
 
 Use lookup types when you want:
 
@@ -322,13 +322,14 @@ Avoid lookup types when the derived model needs materially different semantics; 
 
 Emitters using this core support:
 
-```yaml
+`yaml
 include:
-  - "Demo.Worlds"
-  - "Demo.Forms"
-exclude:
-  - "Demo.Audit"
-```
+
+- "Demo.Worlds"
+- "Demo.Forms"
+  exclude:
+- "Demo.Audit"
+  `
 
 Selectors can match:
 

@@ -22,17 +22,19 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "clean:examples": "rm -rf outputs/gorm outputs/sqlmodel outputs/zod outputs/dbml",
-    "compile-examples": "pnpm run clean:examples && tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
-    "verify-generated": "pnpm run compile-examples && git diff --exit-code -- outputs",
-    "compile-examples:gorm": "rm -rf outputs/gorm && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
-    "compile-examples:sqlmodel": "rm -rf outputs/sqlmodel && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
-    "compile-examples:zod": "rm -rf outputs/zod && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",
-    "compile-examples:dbml": "rm -rf outputs/dbml && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-dbml",
-    "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
-    "format-examples:gorm": "gofmt -w outputs/gorm/",
-    "format-examples:sqlmodel": "ruff format outputs/sqlmodel/",
-    "format-examples:zod": "prettier --write outputs/zod/"
+    "clean:examples": "rm -rf outputs/file-vault outputs/game-platform outputs/ent outputs/sqlmodel outputs/zod outputs/dbml outputs/protobuf",
+    "compile-example:file-vault": "tsp compile examples/file-vault",
+    "compile-example:game-platform": "tsp compile examples/game-platform",
+    "compile-examples": "pnpm run clean:examples && sh -c 'pnpm run compile-example:file-vault & p1=$!; pnpm run compile-example:game-platform & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples",
+    "compile-examples:ent": "rm -rf outputs/file-vault/ent outputs/game-platform/ent && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-ent & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-ent & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:ent",
+    "compile-examples:sqlmodel": "rm -rf outputs/file-vault/sqlmodel outputs/game-platform/sqlmodel && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-sqlmodel & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-sqlmodel & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:sqlmodel",
+    "compile-examples:zod": "rm -rf outputs/file-vault/zod outputs/game-platform/zod && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-zod & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-zod & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:zod",
+    "compile-examples:dbml": "rm -rf outputs/file-vault/dbml outputs/game-platform/dbml && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-dbml & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-dbml & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))'",
+    "compile-examples:protobuf": "rm -rf outputs/file-vault/protobuf outputs/game-platform/protobuf && tsp compile examples/file-vault --emit @typespec/protobuf",
+    "format-examples": "pnpm run format-examples:ent && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
+    "format-examples:ent": "find outputs -path '*/ent/*' -name '*.go' -type f -exec gofmt -w {} +",
+    "format-examples:sqlmodel": "find outputs -path '*/sqlmodel' -type d -exec ruff format {} +",
+    "format-examples:zod": "find outputs -path '*/zod' -type d -exec prettier --write {} +"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -45,11 +47,13 @@
   },
   "dependencies": {
     "@qninhdt/typespec-dbml": "workspace:*",
-    "@qninhdt/typespec-gorm": "workspace:*",
+    "@qninhdt/typespec-ent": "workspace:*",
     "@qninhdt/typespec-orm": "workspace:*",
+    "@qninhdt/typespec-protobuf": "workspace:*",
     "@qninhdt/typespec-sqlmodel": "workspace:*",
     "@qninhdt/typespec-zod": "workspace:*",
-    "@typespec/compiler": "^1.12.0"
+    "@typespec/compiler": "^1.12.0",
+    "@typespec/protobuf": "^0.82.0"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

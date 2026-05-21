@@ -60,9 +60,7 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
     }
   }
 
-  // Handle built-in types
-  const typeName = type.kind.toLowerCase();
-  return DBML_TYPE_MAP[typeName];
+  return undefined;
 }
 
 /**
@@ -70,9 +68,9 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
  */
 export interface ColumnSettings {
   pk?: boolean;
+  increment?: boolean;
   notNull?: boolean;
   unique?: boolean;
-  increment?: boolean;
   default?: string;
   note?: string;
 }
@@ -84,7 +82,18 @@ export function formatColumnSettings(settings: ColumnSettings): string {
   if (settings.increment) parts.push("increment");
   if (settings.notNull) parts.push("not null");
   if (settings.unique) parts.push("unique");
-  if (settings.default) parts.push(`default: '${escapeDbmlSetting(settings.default)}'`);
+  if (settings.default !== undefined) {
+    const val = settings.default;
+    if (
+      /^[a-zA-Z_][\w]*\(.*\)$/.test(val) ||
+      /^-?\d+(\.\d+)?$/.test(val) ||
+      /^(true|false)$/i.test(val)
+    ) {
+      parts.push(`default: \`${val}\``);
+    } else {
+      parts.push(`default: '${escapeDbmlSetting(val)}'`);
+    }
+  }
   if (settings.note) {
     // Sanitize: strip quotes/backticks and collapse newlines to spaces
     const sanitized = settings.note.replaceAll(/['"`]/g, "").replaceAll(/\r?\n/g, " ");

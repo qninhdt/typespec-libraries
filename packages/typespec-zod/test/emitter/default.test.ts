@@ -8,7 +8,7 @@ describe("Zod emitter end-to-end", () => {
       @data("Registration Form")
       model RegisterForm {
         @title("Full Name") @minLength(1) name: string;
-        @title("Email") @format("email") email: string;
+        @title("Email") contact: email;
         @title("Password") @minLength(8) password: string;
       }
     `,
@@ -17,15 +17,15 @@ describe("Zod emitter end-to-end", () => {
 
     expect(output).toContain("export const RegisterFormSchema = z.object(");
     expect(output).toContain("name: z.string().min(1)");
-    expect(output).toContain("email: z.string().email()");
+    expect(output).toContain("contact: z.string().email()");
     expect(output).toContain("password: z.string().min(8)");
     expect(output).toContain("export type RegisterForm = z.infer<typeof RegisterFormSchema>;");
     expect(output).toContain("export const RegisterFormMeta = {");
     expect(output).toContain('name: { title: "Full Name" }');
-    expect(output).toContain('email: { title: "Email", inputType: "email" }');
+    expect(output).toContain('contact: { title: "Email", inputType: "email" }');
   });
 
-  it("emits enum-typed fields as schema references", async () => {
+  it("emits enum-typed fields inline", async () => {
     const output = await emitZodFile(
       `
       enum Status {
@@ -42,7 +42,7 @@ describe("Zod emitter end-to-end", () => {
     );
 
     expect(output).toContain("export const StatusFormSchema = z.object(");
-    expect(output).toContain("status: StatusSchema");
+    expect(output).toContain('status: z.enum(["active", "inactive"])');
     expect(output).not.toContain("status: z.any()");
   });
 
@@ -52,7 +52,7 @@ describe("Zod emitter end-to-end", () => {
       @data("User form")
       model UserForm {
         @minLength(1) @maxLength(255) name: string;
-        @format("email") email: string;
+        contact: email;
         @minValue(0) @maxValue(200) age?: int32;
         @pattern("^[A-Za-z]+$") code?: string;
         /** The user bio */
@@ -63,7 +63,7 @@ describe("Zod emitter end-to-end", () => {
     );
 
     expect(output).toContain("name: z.string().min(1).max(255)");
-    expect(output).toContain("email: z.string().email()");
+    expect(output).toContain("contact: z.string().email()");
     expect(output).toContain("age: z.number().int().nonnegative().lte(200).optional()");
     expect(output).toContain("code: z.string().regex(/^[A-Za-z]+$/).optional()");
     expect(output).toContain('bio: z.string().optional().describe("The user bio")');

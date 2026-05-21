@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emitPyFile } from "./utils.jsx";
+import { emitPyFile, renderPyOutput } from "./utils.jsx";
+import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
 
 describe("SQLModel field constraints", () => {
   it("generates index=True for @index", async () => {
@@ -95,6 +96,21 @@ describe("SQLModel field constraints", () => {
     expect(output).toContain('"0"');
   });
 
+  it("preserves empty string server defaults", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        displayName: string = "";
+      }
+    `,
+      "user.py",
+    );
+
+    expect(output).toContain('"server_default": ""');
+  });
+
   it("generates nullable=False in sa_column_kwargs for required fields", async () => {
     const output = await emitPyFile(
       `
@@ -156,13 +172,13 @@ describe("SQLModel field constraints", () => {
     expect(output).toContain("^[A-Z]+$");
   });
 
-  it("generates EmailStr for @format email", async () => {
+  it("generates EmailStr for email scalar", async () => {
     const output = await emitPyFile(
       `
       @table
       model User {
         @key id: uuid;
-        @format("email") email: string;
+        contact: email;
       }
     `,
       "user.py",
@@ -172,13 +188,13 @@ describe("SQLModel field constraints", () => {
     expect(output).toContain("from pydantic import");
   });
 
-  it("generates AnyUrl for @format url", async () => {
+  it("generates AnyUrl for url scalar", async () => {
     const output = await emitPyFile(
       `
       @table
       model User {
         @key id: uuid;
-        @format("url") website?: string;
+        website?: url;
       }
     `,
       "user.py",
@@ -345,5 +361,58 @@ describe("SQLModel value constraints", () => {
     );
     expect(output).toContain("min_length=1");
     expect(output).toContain("max_length=10");
+  });
+});
+
+describe("SQLModel user-defined scalars", () => {
+  it("inherits @minValue/@maxValue from custom scalar definition", async () => {
+    const output = await renderPyOutput(`
+      @minValue(18) @maxValue(150)
+      scalar AdultAge extends int32;
+
+      @table
+      model User {
+        @key id: uuid;
+        age: AdultAge;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+
+    expect(scalarsFile).toContain("ge=18");
+    expect(scalarsFile).toContain("le=150");
+  });
+
+  it("inherits @minLength/@maxLength from custom scalar definition", async () => {
+    const output = await renderPyOutput(`
+      @minLength(8) @maxLength(128)
+      scalar StrongPassword extends string;
+
+      @table
+      model User {
+        @key id: uuid;
+        password: StrongPassword;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+
+    expect(scalarsFile).toContain("min_length=8");
+    expect(scalarsFile).toContain("max_length=128");
+  });
+
+  it("inherits @pattern from custom scalar definition", async () => {
+    const output = await renderPyOutput(`
+      @pattern("^[A-Z]{3}-[0-9]+$")
+      scalar ProductCode extends string;
+
+      @table
+      model Product {
+        @key id: uuid;
+        code: ProductCode;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+
+    expect(scalarsFile).toContain("pattern=");
+    expect(scalarsFile).toContain("^[A-Z]{3}-[0-9]+$");
   });
 });

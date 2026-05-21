@@ -2,7 +2,7 @@ import { createPackage } from "@alloy-js/typescript";
 
 export const zod = createPackage({
   name: "zod",
-  version: "^3.23.0",
+  version: "^4.4.3",
   descriptor: {
     ".": {
       named: ["z"],

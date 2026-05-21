@@ -5,9 +5,9 @@ TypeSpec ORM and schema-generation tooling for teams that want one namespace-fir
 This repository contains:
 
 - `@qninhdt/typespec-orm`: shared decorators, relation resolution, validation, normalization, and selector filtering
-- `@qninhdt/typespec-gorm`: Go + GORM emitter for `@table` and `@data`
-- `@qninhdt/typespec-sqlmodel`: Python + SQLModel emitter for `@table` and `@data`
-- `@qninhdt/typespec-zod`: Zod emitter for `@data`
+- `@qninhdt/typespec-ent`: Go + Ent emitter for `@table` and default form models
+- `@qninhdt/typespec-sqlmodel`: Python + SQLModel emitter for `@table` and default form models
+- `@qninhdt/typespec-zod`: Zod emitter for default form and `@tableMixin` schemas
 - `@qninhdt/typespec-dbml`: DBML emitter for `@table`
 
 ## Why This Repo Exists
@@ -55,17 +55,17 @@ Unsupported persistence mappings, invalid relation shapes, conflicting selectors
 
 ## Repository Layout
 
-```text
+`text
 packages/
   typespec-orm/
-  typespec-gorm/
+  typespec-ent/
   typespec-sqlmodel/
   typespec-zod/
   typespec-dbml/
 examples/
 outputs/
 docs/
-```
+`
 
 Important directories:
 
@@ -78,24 +78,24 @@ Important directories:
 | Package                      | Input                                  | Output                       | Primary Responsibility                                             |
 | ---------------------------- | -------------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
 | `@qninhdt/typespec-orm`      | TypeSpec decorators and compiler state | none                         | Validation, normalization, relation resolution, selector filtering |
-| `@qninhdt/typespec-gorm`     | normalized ORM graph                   | Go packages for GORM         | Persisted models and DTOs for Go services                          |
+| `@qninhdt/typespec-ent`      | normalized ORM graph                   | Go packages for Ent          | Persisted models and DTOs for Go services                          |
 | `@qninhdt/typespec-sqlmodel` | normalized ORM graph                   | Python packages for SQLModel | Persisted models and DTOs for Python services                      |
-| `@qninhdt/typespec-zod`      | normalized ORM graph                   | Zod schemas + inferred types | Frontend and API validation for `@data` models                     |
+| `@qninhdt/typespec-zod`      | normalized ORM graph                   | Zod schemas + inferred types | Frontend and API validation for default form models                |
 | `@qninhdt/typespec-dbml`     | normalized ORM graph                   | DBML files                   | Database review and architecture documentation                     |
 
 ## Installation
 
 Install only the packages you need, but most users start with the ORM core plus one or more emitters:
 
-```sh
+`sh
 pnpm add -D \
   @typespec/compiler \
   @qninhdt/typespec-orm \
-  @qninhdt/typespec-gorm \
+  @qninhdt/typespec-ent \
   @qninhdt/typespec-sqlmodel \
   @qninhdt/typespec-zod \
   @qninhdt/typespec-dbml
-```
+`
 
 Emitter peer dependencies are documented in each package README.
 
@@ -103,18 +103,18 @@ Emitter peer dependencies are documented in each package README.
 
 The generator packages are TypeSpec build-time dependencies. The generated outputs have their own runtime expectations:
 
-| Target   | Typical runtime dependencies                                                                                 | Notes                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| GORM     | `gorm.io/gorm`, `github.com/google/uuid`, optionally `gorm.io/datatypes` and `github.com/shopspring/decimal` | standalone mode writes `go.mod`; non-standalone mode emits code only    |
-| SQLModel | `sqlmodel`, SQLAlchemy, Pydantic-compatible typing support                                                   | standalone mode writes `pyproject.toml` and package roots               |
-| Zod      | `zod`, TypeScript for package builds                                                                         | standalone mode writes `package.json`, `tsconfig.json`, and root barrel |
-| DBML     | none                                                                                                         | DBML is documentation output, not runtime code                          |
+| Target   | Typical runtime dependencies                                                                             | Notes                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Ent      | `entgo.io/ent`, `github.com/google/uuid`, optionally `encoding/json` and `github.com/shopspring/decimal` | standalone mode writes `go.mod`, `ent/generate.go`, and Atlas config    |
+| SQLModel | `sqlmodel`, SQLAlchemy, Pydantic-compatible typing support                                               | standalone mode writes `pyproject.toml` and package roots               |
+| Zod      | `zod`, TypeScript for package builds                                                                     | standalone mode writes `package.json`, `tsconfig.json`, and root barrel |
+| DBML     | none                                                                                                     | DBML is documentation output, not runtime code                          |
 
 ## End-to-End Example
 
 ### Schema
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -123,127 +123,128 @@ namespace Demo.Platform.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Platform.Accounts;
 
 @table
-model User is Demo.Platform.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Platform.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Platform.Shared.Timestamped {
-  @unique
-  @maxLength(80)
-  code: string;
+model Badge {
+...Demo.Platform.Shared.Timestamped;
+@unique
+@maxLength(80)
+code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
 
 namespace Demo.Platform.Forms;
-
-@data("Create Invitation Form")
 model CreateInvitationForm {
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: Demo.Platform.Accounts.User.email;
+@title("Invitee Email")
+@placeholder("friend@example.com")
+inviteeEmail: Demo.Platform.Accounts.User.email;
 }
-```
+`
 
 ### Compiler Configuration
 
-```yaml
+`yaml
 emit:
-  - "@qninhdt/typespec-gorm"
-  - "@qninhdt/typespec-sqlmodel"
-  - "@qninhdt/typespec-zod"
-  - "@qninhdt/typespec-dbml"
+
+- "@qninhdt/typespec-ent"
+- "@qninhdt/typespec-sqlmodel"
+- "@qninhdt/typespec-zod"
+- "@qninhdt/typespec-dbml"
 
 options:
-  "@qninhdt/typespec-gorm":
-    output-dir: "./outputs/gorm"
-    standalone: true
-    library-name: "github.com/acme/domain-models"
-    collection-strategy: "jsonb"
+"@qninhdt/typespec-ent":
+output-dir: "./outputs/ent"
+standalone: true
+library-name: "github.com/acme/domain-models"
+collection-strategy: "jsonb"
 
-  "@qninhdt/typespec-sqlmodel":
-    output-dir: "./outputs/sqlmodel"
-    standalone: true
-    library-name: "acme-models"
-    collection-strategy: "jsonb"
+"@qninhdt/typespec-sqlmodel":
+output-dir: "./outputs/sqlmodel"
+standalone: true
+library-name: "acme-models"
+collection-strategy: "jsonb"
 
-  "@qninhdt/typespec-zod":
-    output-dir: "./outputs/zod"
-    standalone: true
-    library-name: "@acme/forms"
+"@qninhdt/typespec-zod":
+output-dir: "./outputs/zod"
+standalone: true
+library-name: "@acme/forms"
 
-  "@qninhdt/typespec-dbml":
-    output-dir: "./outputs/dbml"
-    split-by-namespace: true
-```
+"@qninhdt/typespec-dbml":
+output-dir: "./outputs/dbml"
+split-by-namespace: true
+`
 
 ### Compile
 
-```sh
+`sh
 tsp compile .
-```
+`
 
 ## Shared Concepts Across Packages
 
-### `@table`, `@data`, and `@tableMixin`
+### `@table`, default form models, and `@tableMixin`
 
 - `@table` models participate in persistence emitters
-- `@data` models participate in form/DTO emitters
+- default form models participate in form/DTO emitters
 - `@tableMixin` models are reusable ORM fragments that are validated but never emitted as standalone tables
 
 ### Referenced-column foreign keys
 
 You can point a relation at something other than `id`:
 
-```typescript
+`typescript
 @table
 model Organization {
-  @key
-  @unique
-  code: string;
+@key
+@unique
+code: string;
 }
 
 @table
 model User {
-  organizationCode: string;
+organizationCode: string;
 
-  @foreignKey("organizationCode", "code")
-  organization: Organization;
+@foreignKey("organizationCode", "code")
+organization: Organization;
 }
-```
+`
 
 ### Named checks
 
-```typescript
+`typescript
 @check("users_credits_non_negative", "credits >= 0")
 credits: int32 = 0;
-```
+`
 
 ### Many-to-many shorthand
 
-```typescript
+`typescript
 @manyToMany("user_badges")
 badges?: Badge[];
-```
+`
 
 Both sides must opt in with the same join table name.
 
@@ -251,12 +252,13 @@ Both sides must opt in with the same join table name.
 
 Every emitter supports the same selector model:
 
-```yaml
+`yaml
 include:
-  - "Demo.Platform.Forms"
-exclude:
-  - "Demo.Platform.Audit"
-```
+
+- "Demo.Platform.Forms"
+  exclude:
+- "Demo.Platform.Audit"
+  `
 
 Selectors can target:
 
@@ -288,12 +290,13 @@ Practical guidance:
 
 ## Output Philosophy
 
-### GORM
+### Ent
 
-- namespace directories become Go package directories
-- standalone mode emits `go.mod` and a root `models.go`
-- `@manyToMany(...)` becomes GORM relationship tags
-- `@check(...)` becomes named check tags
+- `@table` and `@tableMixin` emit into the standard `ent/schema` package
+- standalone mode emits `go.mod`, `ent/generate.go`, and `atlas.hcl`
+- `@data` models remain namespace-derived Go DTO structs
+- `@manyToMany(...)` becomes Ent edge storage-key metadata
+- `@check(...)` becomes Ent SQL annotation metadata
 
 ### SQLModel
 
@@ -304,7 +307,7 @@ Practical guidance:
 
 ### Zod
 
-- only `@data` models are emitted
+- only default form models and `` schemas are emitted
 - standalone mode emits `src/...` plus a root `index.ts`
 - schemas, inferred types, and form metadata are emitted in a single render pass
 
@@ -315,7 +318,7 @@ Practical guidance:
 
 ## Feature Matrix
 
-| Feature                                | ORM Core | GORM                | SQLModel            | Zod             | DBML               |
+| Feature                                | ORM Core | Ent                 | SQLModel            | Zod             | DBML               |
 | -------------------------------------- | -------- | ------------------- | ------------------- | --------------- | ------------------ |
 | Namespace-first output                 | yes      | yes                 | yes                 | yes             | yes                |
 | Shared `include` / `exclude` selectors | yes      | yes                 | yes                 | yes             | yes                |
@@ -325,7 +328,7 @@ Practical guidance:
 | Named `@check(...)` constraints        | yes      | yes                 | yes                 | n/a             | preserved as notes |
 | `@manyToMany(...)` shorthand           | yes      | yes                 | yes                 | n/a             | yes                |
 | Form metadata                          | yes      | form tags           | Pydantic metadata   | `*Meta` exports | n/a                |
-| Alembic helper                         | n/a      | n/a                 | yes                 | n/a             | n/a                |
+| Atlas config                           | n/a      | yes                 | yes                 | n/a             | n/a                |
 | Namespace-split DBML                   | n/a      | n/a                 | n/a                 | n/a             | yes                |
 
 ## Example Project In This Repo
@@ -343,17 +346,16 @@ The checked-in example under [`examples/`](examples/) is deliberately more than 
 
 Useful commands:
 
-```sh
+`sh
 pnpm run compile-examples
-pnpm run verify-generated
-```
+pnpm run compile-example:file-vault
+pnpm run compile-example:game-platform
+`
 
 Generated outputs are checked into:
 
-- [`outputs/gorm`](outputs/gorm)
-- [`outputs/sqlmodel`](outputs/sqlmodel)
-- [`outputs/zod`](outputs/zod)
-- [`outputs/dbml`](outputs/dbml)
+- [`outputs/file-vault`](outputs/file-vault)
+- [`outputs/game-platform`](outputs/game-platform)
 
 ## Migration Notes
 
@@ -377,7 +379,7 @@ The migration path is usually straightforward:
 
 Common commands:
 
-```sh
+`sh
 pnpm install
 pnpm run build
 pnpm run test
@@ -385,8 +387,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm run format:check
 pnpm run compile-examples
-pnpm run verify-generated
-```
+`
 
 CI verifies:
 
@@ -397,14 +398,14 @@ CI verifies:
 - unit tests
 - example compilation
 - generated artifact drift
-- `go build` for generated GORM output
+- `go generate` / `go test` for generated Ent output
 - `python -m compileall` for generated SQLModel output
 - `tsc -p tsconfig.json` for generated Zod output
 
 ## Package Documentation
 
 - [`packages/typespec-orm/README.md`](packages/typespec-orm/README.md)
-- [`packages/typespec-gorm/README.md`](packages/typespec-gorm/README.md)
+- [`packages/typespec-ent/README.md`](packages/typespec-ent/README.md)
 - [`packages/typespec-sqlmodel/README.md`](packages/typespec-sqlmodel/README.md)
 - [`packages/typespec-zod/README.md`](packages/typespec-zod/README.md)
 - [`packages/typespec-dbml/README.md`](packages/typespec-dbml/README.md)

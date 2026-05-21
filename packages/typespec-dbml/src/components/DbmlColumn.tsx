@@ -7,15 +7,16 @@ import {
   getCheck,
   getColumnName,
   isKey,
-  isAutoIncrement,
   isAutoCreateTime,
   isAutoUpdateTime,
+  isAutoIncrement,
   isSoftDelete,
   isIgnored,
   isEnum,
   getPrecision,
   getDoc,
   getMaxLength,
+  getDefaultValue,
 } from "@qninhdt/typespec-orm";
 import { getDbmlType, formatColumnSettings, type ColumnSettings } from "./DbmlConstants.js";
 
@@ -34,6 +35,10 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
 
     const doc = getDoc(program, prop);
     const check = getCheck(program, prop);
+    const defaultValue = getDefaultValue(program, prop);
+    if (defaultValue !== undefined) {
+      settings.default = defaultValue;
+    }
     settings.note = joinNotes(doc, check ? `check ${check.name}: ${check.expression}` : undefined);
 
     const settingsStr = formatColumnSettings(settings);
@@ -53,8 +58,6 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   if (isKey(program, prop)) {
     settings.pk = true;
   }
-
-  // Auto increment
   if (isAutoIncrement(program, prop)) {
     settings.increment = true;
   }
@@ -64,6 +67,11 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   // Handle auto timestamps
   if (isAutoCreateTime(program, prop) || isAutoUpdateTime(program, prop)) {
     settings.default = "now()";
+  } else {
+    const defaultValue = getDefaultValue(program, prop);
+    if (defaultValue !== undefined) {
+      settings.default = defaultValue;
+    }
   }
 
   // Determine nullability:
@@ -73,7 +81,6 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   if (prop.optional) {
     settings.notNull = false;
     delete settings.pk;
-    delete settings.increment;
   } else if (isSoftDelete(program, prop)) {
     // soft-delete columns (e.g. deleted_at) start as NULL
     settings.notNull = false;

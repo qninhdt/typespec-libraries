@@ -14,7 +14,6 @@ import type {
 } from "@typespec/compiler";
 import {
   getDoc as tsGetDoc,
-  getFormat as tsGetFormat,
   getMaxItems as tsGetMaxItems,
   getMaxValueExclusive as tsGetMaxValueExclusive,
   getMaxLength as tsGetMaxLength,
@@ -51,6 +50,8 @@ import {
   InputTypeKey,
 } from "./lib.js";
 
+const ORM_NAMESPACE = "Qninhdt.Orm";
+
 // ─── Table helpers ───────────────────────────────────────────────────────────
 
 export function isTable(program: Program, model: Model): boolean {
@@ -59,6 +60,13 @@ export function isTable(program: Program, model: Model): boolean {
 
 export function isTableMixin(program: Program, model: Model): boolean {
   return program.stateMap(TableMixinKey).has(model);
+}
+
+export function isOrmManagedModel(program: Program, model: Model): boolean {
+  if (!model.name || !model.namespace) return false;
+  if (isBuiltIn(program, model)) return false;
+  const namespace = getNamespaceFullName(model.namespace, program.getGlobalNamespaceType());
+  return namespace !== undefined && namespace !== ORM_NAMESPACE;
 }
 
 export function getTableName(program: Program, model: Model): string {
@@ -238,9 +246,8 @@ export function getValidators(program: Program, prop: ModelProperty): ValidatorI
   const pattern = getPattern(program, prop);
   if (pattern) validators.push({ name: "pattern", args: pattern });
 
-  // Format
-  const format = getFormat(program, prop);
-  if (format) validators.push({ name: "format", args: format });
+  const customScalarName = getCustomScalarName(prop.type);
+  if (customScalarName) validators.push({ name: "customScalar", args: customScalarName });
 
   return validators;
 }
@@ -258,19 +265,50 @@ function lookupSourceProp(prop: ModelProperty): ModelProperty | undefined {
 }
 
 /**
+ * Walk the scalar chain of a property's type and return the first non-undefined
+ * result from the getter. This allows decorators on custom scalar definitions
+ * (e.g., `@minValue(18) scalar AdultAge extends int32`) to be inherited by
+ * properties using that scalar type.
+ *
+ * Walks the chain for any scalar so custom scalar decorators can be inherited
+ * uniformly. Emitters that have native handling for a scalar decide locally
+ * whether to use these inherited constraints.
+ */
+function scalarChainFallback<T>(
+  getter: (program: Program, target: Type) => T | undefined,
+  program: Program,
+  prop: ModelProperty,
+): T | undefined {
+  let current: Scalar | undefined = prop.type.kind === "Scalar" ? prop.type : undefined;
+  while (current) {
+    const result = getter(program, current);
+    if (result !== undefined) return result;
+    current = current.baseScalar;
+  }
+  return undefined;
+}
+
+/**
  * Create a getter that reads a TypeSpec intrinsic value from the property,
- * falling back to the lookup-source property when the direct read is undefined.
- * Eliminates the repeated `const src = lookupSourceProp(prop); return … ?? …`
- * boilerplate across all validation-getter wrappers.
+ * falling back to:
+ * 1. The lookup-source property (for `User.email` syntax)
+ * 2. The scalar chain (for `@minValue(18) scalar AdultAge extends int32`)
+ *
+ * This enables decorators defined on custom scalar types to be inherited
+ * by any property using that scalar.
  */
 function withLookupFallback<T>(
-  getter: (program: Program, target: ModelProperty) => T | undefined,
+  getter: (program: Program, target: Type) => T | undefined,
 ): (program: Program, prop: ModelProperty) => T | undefined {
   return (program, prop) => {
     const direct = getter(program, prop);
     if (direct !== undefined) return direct;
     const src = lookupSourceProp(prop);
-    return src ? getter(program, src) : undefined;
+    if (src) {
+      const lookupResult = getter(program, src);
+      if (lookupResult !== undefined) return lookupResult;
+    }
+    return scalarChainFallback(getter, program, prop);
   };
 }
 
@@ -283,13 +321,6 @@ export const getMinLength = withLookupFallback(tsGetMinLength);
 export const getMinValue = withLookupFallback(tsGetMinValue);
 export const getMaxValue = withLookupFallback(tsGetMaxValue);
 export const getPattern = withLookupFallback(tsGetPattern);
-
-/**
- * Returns the TypeSpec @format value, e.g. "email", "uri", "date-time".
- * Used to emit format-specific validators in target languages.
- * Falls back to the source property for lookup types.
- */
-export const getFormat = withLookupFallback(tsGetFormat);
 
 export interface ForeignKeyConfig {
   field: string;
@@ -415,7 +446,10 @@ export function isIgnored(program: Program, prop: ModelProperty): boolean {
 // ─── DataModel / Form-field helpers ────────────────────────────────────────
 
 export function isData(program: Program, model: Model): boolean {
-  return program.stateMap(DataKey).has(model);
+  return (
+    program.stateMap(DataKey).has(model) ||
+    (isOrmManagedModel(program, model) && !isTable(program, model) && !isTableMixin(program, model))
+  );
 }
 
 export function getDataLabel(program: Program, model: Model): string | undefined {
@@ -427,13 +461,12 @@ export function getTitle(program: Program, prop: ModelProperty): string | undefi
 }
 
 export function collectDataModels(program: Program): { model: Model; label: string }[] {
-  const result: { model: Model; label: string }[] = [];
-  for (const [node, label] of program.stateMap(DataKey)) {
-    if ((node as { kind?: string }).kind === "Model") {
-      result.push({ model: node as Model, label: label as string });
-    }
-  }
-  return result;
+  return collectOrmManagedModels(program)
+    .filter((model) => isData(program, model))
+    .map((model) => ({ model, label: getDataLabel(program, model) ?? model.name }))
+    .sort((a, b) =>
+      getTypeFullName(program, a.model).localeCompare(getTypeFullName(program, b.model)),
+    );
 }
 
 export function getPlaceholder(program: Program, prop: ModelProperty): string | undefined {
@@ -442,6 +475,31 @@ export function getPlaceholder(program: Program, prop: ModelProperty): string | 
 
 export function getInputType(program: Program, scalar: Scalar): string | undefined {
   return program.stateMap(InputTypeKey).get(scalar) as string | undefined;
+}
+
+export function collectOrmManagedModels(program: Program): Model[] {
+  const models: Model[] = [];
+  const visit = (namespace: Namespace) => {
+    for (const model of namespace.models.values()) {
+      if (isOrmManagedModel(program, model)) {
+        models.push(model);
+      }
+    }
+    for (const child of namespace.namespaces.values()) {
+      visit(child);
+    }
+  };
+
+  visit(program.getGlobalNamespaceType());
+  return models.sort((a, b) =>
+    getTypeFullName(program, a).localeCompare(getTypeFullName(program, b)),
+  );
+}
+
+export function getModelOwnProperties(model: Model): ModelProperty[] {
+  return [...model.properties.values()].filter(
+    (prop) => !(prop as { sourceProperty?: ModelProperty }).sourceProperty,
+  );
 }
 
 function getInputTypeForScalar(program: Program, scalar: Scalar): string | undefined {
@@ -456,19 +514,12 @@ function getInputTypeForScalar(program: Program, scalar: Scalar): string | undef
   return undefined;
 }
 
-function inferInputTypeFromFormat(format: string | undefined): string | undefined {
-  switch (format) {
+function inferInputTypeFromCustomScalar(customScalarName: string | undefined): string | undefined {
+  switch (customScalarName) {
     case "email":
       return "email";
-    case "uri":
     case "url":
       return "url";
-    case "date":
-      return "date";
-    case "time":
-      return "time";
-    case "password":
-      return "password";
     default:
       return undefined;
   }
@@ -486,7 +537,7 @@ export function getInputTypeForProperty(program: Program, prop: ModelProperty): 
     }
   }
 
-  return inferInputTypeFromFormat(getFormat(program, prop));
+  return inferInputTypeFromCustomScalar(getCustomScalarName(prop.type));
 }
 
 // ─── Doc helper ──────────────────────────────────────────────────────────────
@@ -514,6 +565,10 @@ export interface EnumMemberInfo {
   name: string;
   /** String value - uses explicit value or falls back to member name */
   value: string;
+  /** Raw enum value before stringification. */
+  rawValue?: string | number;
+  /** Whether the enum value was authored as a number or string. */
+  valueKind?: "string" | "number";
 }
 
 /**
@@ -529,9 +584,12 @@ export function isEnum(type: Type): type is Enum {
 export function getEnumMembers(enumType: Enum): EnumMemberInfo[] {
   const members: EnumMemberInfo[] = [];
   for (const [, member] of enumType.members) {
+    const rawValue = member.value === undefined ? member.name : member.value;
     members.push({
       name: member.name,
-      value: member.value === undefined ? member.name : String(member.value),
+      value: String(rawValue),
+      rawValue,
+      valueKind: typeof rawValue === "number" ? "number" : "string",
     });
   }
   return members;
@@ -575,8 +633,117 @@ export function getScalarChain(scalar: Scalar): string[] {
   return chain;
 }
 
-/** Custom scalars defined in @qninhdt/typespec-orm */
-const CUSTOM_SCALARS = new Set(["uuid", "text", "jsonb", "serial", "bigserial"]);
+/** ORM-defined semantic scalars with emitter-specific native handling. */
+const ORM_SEMANTIC_SCALARS = new Set([
+  // Semantic string scalars (url is TypeSpec built-in, the rest are ours)
+  "email",
+  "url",
+  "ipv4",
+  "ipv6",
+  "ip",
+  "cidr",
+  "mac",
+  "base64",
+  "hostname",
+  // ID/token scalars
+  "cuid",
+  "cuid2",
+  "ulid",
+  "nanoid",
+  "jwt",
+  "emoji",
+  // Semantic numeric scalars
+  "latitude",
+  "longitude",
+]);
+
+/**
+ * Walk the scalar chain and return the first ORM semantic scalar name.
+ * For other custom scalars (for example `scalar AdultAge extends int32`),
+ * returns undefined.
+ */
+export function getOrmScalarName(type: Type): string | undefined {
+  if (type.kind === "ModelProperty") return getOrmScalarName(type.type);
+  if (type.kind !== "Scalar") return undefined;
+  const chain = getScalarChain(type);
+  for (const name of chain) {
+    if (ORM_SEMANTIC_SCALARS.has(name)) return name;
+  }
+  return undefined;
+}
+
+/**
+ * Returns the scalar name for any non-built-in, non-DB scalar.
+ * This includes ORM semantic scalars and user-defined scalars.
+ */
+export function getCustomScalarName(type: Type): string | undefined {
+  if (type.kind === "ModelProperty") return getCustomScalarName(type.type);
+  if (type.kind !== "Scalar") return undefined;
+
+  const dbType = resolveDbType(type);
+  if (dbType && DB_SCALARS.has(dbType)) return undefined;
+
+  const chain = getScalarChain(type);
+  const baseName = chain.at(-1);
+  if (baseName && STANDARD_SCALAR_MAP[baseName] !== undefined) {
+    return type.name;
+  }
+
+  return undefined;
+}
+
+/**
+ * Returns true if the given type is defined in the built-in TypeSpec namespace.
+ */
+export function isBuiltIn(program: Program, type: Type): boolean {
+  if (type.kind === "ModelProperty" && type.model) {
+    type = type.model;
+  }
+
+  if (!("namespace" in type) || type.namespace === undefined) {
+    return false;
+  }
+
+  const globalNs = program.getGlobalNamespaceType();
+  let tln = type.namespace;
+  if (tln === globalNs) {
+    return false;
+  }
+
+  while (tln.namespace !== globalNs) {
+    tln = tln.namespace!;
+  }
+
+  return tln === globalNs.namespaces.get("TypeSpec");
+}
+
+/**
+ * Returns true if the scalar is a custom scalar.
+ * A custom scalar is not a TypeSpec built-in primitive and not a DB-specific scalar.
+ */
+export function isCustomScalar(program: Program, type: Type): boolean {
+  if (type.kind !== "Scalar") return false;
+  if (getOrmScalarName(type) !== undefined) return true;
+  if (isBuiltIn(program, type)) return false;
+  const dbType = resolveDbType(type);
+  if (dbType && DB_SCALARS.has(dbType)) return false;
+  return true;
+}
+
+/**
+ * Collect all custom scalars referenced by a TypeSpec model.
+ */
+export function collectCustomScalars(program: Program, model: Model): Set<Scalar> {
+  const scalars = new Set<Scalar>();
+  for (const prop of walkPropertiesInherited(model)) {
+    let current: Type | undefined = prop.type;
+    if (current.kind === "ModelProperty") current = current.type;
+    if (current.kind === "Scalar" && isCustomScalar(program, current)) {
+      scalars.add(current);
+    }
+  }
+  return scalars;
+}
 
 /** Standard TypeSpec scalar → canonical DB type mapping */
 const STANDARD_SCALAR_MAP: Record<string, string> = {
@@ -606,10 +773,16 @@ const STANDARD_SCALAR_MAP: Record<string, string> = {
   url: "string",
 };
 
+/** DB-specific scalars that need custom column type handling */
+const DB_SCALARS = new Set(["uuid", "text", "jsonb", "serial", "bigserial"]);
+
 /**
  * Resolve a TypeSpec type to a canonical database type name.
  * Returns undefined for non-scalar types.
  * Unwraps lookup types (ModelProperty references) to find the underlying scalar.
+ *
+ * Semantic scalars (email, ipv4, etc.) resolve to their base DB type (string, float64).
+ * Only DB-specific scalars (uuid, text, jsonb, serial, bigserial) return their custom names.
  */
 export function resolveDbType(type: Type): string | undefined {
   // Unwrap lookup types: User.email → email.type (the actual Scalar)
@@ -620,7 +793,7 @@ export function resolveDbType(type: Type): string | undefined {
   const chain = getScalarChain(type);
 
   for (const name of chain) {
-    if (CUSTOM_SCALARS.has(name)) return name;
+    if (DB_SCALARS.has(name)) return name;
   }
 
   for (const name of chain) {

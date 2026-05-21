@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { Program, Scalar, Type } from "@typespec/compiler";
 import {
   ZodCustomEmitOptions,
-  defaultZodOptions,
   getEmitOptionsForType,
   getEmitOptionsForTypeKind,
   getZodOptions,
@@ -57,10 +56,6 @@ describe("ZodCustomEmitOptions", () => {
 });
 
 describe("getZodOptions", () => {
-  it("returns default options when program is missing", () => {
-    expect(getZodOptions(undefined)).toEqual({});
-  });
-
   it("reads emitter options from compiler output", () => {
     const program = createProgramStub({
       getCompilerOptions: () => ({
@@ -76,16 +71,6 @@ describe("getZodOptions", () => {
     expect(getZodOptions(program)).toEqual({
       standalone: true,
       "library-name": "demo-lib",
-    });
-  });
-
-  it("exposes the documented defaults", () => {
-    expect(defaultZodOptions).toEqual({
-      "output-dir": undefined,
-      standalone: false,
-      "library-name": undefined,
-      include: undefined,
-      exclude: undefined,
     });
   });
 });
