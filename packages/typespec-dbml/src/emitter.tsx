@@ -20,7 +20,7 @@ import { getDbmlType } from "./components/DbmlConstants.js";
 import { DbmlTable } from "./components/DbmlTable.jsx";
 import { generateEnumDefinition } from "./components/DbmlEnum.jsx";
 import { generateRelationFields } from "./components/DbmlRelationField.jsx";
-import type { DbmlEmitterOptions } from "./lib.js";
+import { reportDiagnostic, type DbmlEmitterOptions } from "./lib.js";
 
 interface ClassifiedTableEntry {
   normalized: NormalizedOrmModel;
@@ -84,7 +84,15 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
   );
 
   const output = render(tree);
-  await writeOutput(output, outputDir);
+  try {
+    await writeOutput(output, outputDir);
+  } catch (e) {
+    reportDiagnostic(context.program, {
+      code: "emit-write-failed",
+      target: context.program.getGlobalNamespaceType(),
+      format: { message: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }
 
 function buildSingleDocument(

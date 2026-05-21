@@ -6,9 +6,10 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // AuditExportCheckpoint Outbox checkpoint for exporting audit events to external SIEM/storage.

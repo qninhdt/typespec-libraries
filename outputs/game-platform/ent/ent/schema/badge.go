@@ -6,9 +6,10 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // Badge Account badge or achievement marker attached to player profiles.

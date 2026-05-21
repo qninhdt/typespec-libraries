@@ -6,9 +6,10 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // AssistantConversation User-facing conversation. Tool calls are runtime events, not primary tables.

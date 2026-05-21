@@ -74,7 +74,7 @@ jobs:
         run: pnpm run compile-examples
 
       - name: Verify Generated Go
-        working-directory: outputs/gorm
+        working-directory: outputs/game-platform/ent
         run: go build -mod=mod ./...
 
       - name: Verify Generated Python

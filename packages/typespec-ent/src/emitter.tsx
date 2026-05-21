@@ -42,6 +42,7 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
+  const dialect = options.dialect ?? "postgres";
   const tables = selection.models.filter((model) => model.kind === "table");
   const schemaModels = selection.models.filter(
     (model) => model.kind === "table" || model.kind === "mixin",
@@ -51,7 +52,7 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
     <SourceDirectory path=".">
       {tables.length > 0 && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
-          {generateAtlasHcl()}
+          {generateAtlasHcl(dialect)}
         </SourceFile>
       )}
       {isStandalone && (
@@ -122,7 +123,15 @@ package ent
   );
 
   const output = render(tree);
-  await writeOutput(output, outputDir);
+  try {
+    await writeOutput(output, outputDir);
+  } catch (e) {
+    reportDiagnostic(context.program, {
+      code: "emit-write-failed",
+      target: context.program.getGlobalNamespaceType(),
+      format: { fileName: outputDir, error: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }
 
 function generateEnumsFile(models: NormalizedOrmModel[]): string | undefined {
@@ -147,12 +156,18 @@ ${enumLines.join("\n")}
 `;
 }
 
-function generateAtlasHcl(): string {
+function generateAtlasHcl(dialect: string): string {
+  const devUrl = dialect === "mysql"
+    ? "docker://mysql/8/dev"
+    : dialect === "sqlite"
+      ? "sqlite://file?mode=memory"
+      : "docker://postgres/16/dev?search_path=public";
+
   return `env "ent" {
   schema {
     src = "ent://ent/schema"
   }
-  dev = "docker://postgres/16/dev?search_path=public"
+  dev = "${devUrl}"
   migration {
     dir = "file://migrations"
   }

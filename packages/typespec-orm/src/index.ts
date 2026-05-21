@@ -223,4 +223,5 @@ export type {
   EmitterBootstrapConfig,
   EmitterBootstrapResult,
   BootstrapFailure,
+  Dialect,
 } from "./emitter-bootstrap.js";

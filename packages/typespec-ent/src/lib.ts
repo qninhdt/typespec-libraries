@@ -13,6 +13,8 @@ export interface EntEmitterOptions {
   exclude?: string[];
   /** Explicit persistence strategy for collection fields */
   "collection-strategy"?: "jsonb" | "postgres";
+  /** Target database dialect (default: postgres) */
+  dialect?: "postgres" | "mysql" | "sqlite";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
@@ -25,6 +27,7 @@ const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
     "collection-strategy": { type: "string", nullable: true },
+    dialect: { type: "string", nullable: true },
   },
   required: [],
 };
@@ -39,7 +42,7 @@ export const $lib = createTypeSpecLibrary({
       },
     },
     "unsupported-type": {
-      severity: "error",
+      severity: "warning",
       messages: {
         default: paramMessage`Type "${"typeName"}" on property "${"propName"}" could not be mapped to a Go type.`,
       },
@@ -60,12 +63,6 @@ export const $lib = createTypeSpecLibrary({
       severity: "warning",
       messages: {
         default: "No models decorated with @table or @data were found. Nothing to emit.",
-      },
-    },
-    "unknown-custom-scalar": {
-      severity: "warning",
-      messages: {
-        default: paramMessage`Custom scalar "${"newType"}" on property "${"propName"}" has no Go validate-tag equivalent and will be ignored.`,
       },
     },
   },

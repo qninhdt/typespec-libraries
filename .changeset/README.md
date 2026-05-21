@@ -54,10 +54,10 @@ A typical file looks like this:
 ```md
 ---
 "@qninhdt/typespec-orm": minor
-"@qninhdt/typespec-gorm": patch
+"@qninhdt/typespec-ent": patch
 ---
 
-Add @manyToMany shorthand validation to the shared ORM core and emit GORM many2many tags.
+Add @manyToMany shorthand validation to the shared ORM core and emit Ent edge storage-key metadata.
 ```
 
 Guidance for writing the summary:

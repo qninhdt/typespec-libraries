@@ -6,11 +6,12 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"github.com/google/uuid"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // Invitation Invitation record linking a user email to a shared world. Demonstrates cross-namespace lookup types and relations on the same table.

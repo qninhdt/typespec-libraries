@@ -6,10 +6,11 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // Tag Tag used to classify and filter content pool entries. The (world_id, name) pair is unique per world.

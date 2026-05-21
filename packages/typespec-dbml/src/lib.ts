@@ -2,7 +2,7 @@
  * @qninhdt/typespec-dbml library definition.
  */
 
-import { createTypeSpecLibrary, type JSONSchemaType } from "@typespec/compiler";
+import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface DbmlEmitterOptions {
   /** Output directory override handled by TypeSpec */
@@ -32,8 +32,23 @@ const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
 
 export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-dbml",
-  diagnostics: {},
+  diagnostics: {
+    "unsupported-type": {
+      severity: "warning",
+      messages: {
+        default: `Column skipped: type could not be mapped to a DBML type.`,
+      },
+    },
+    "emit-write-failed": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Failed to write DBML output: ${"message"}.`,
+      },
+    },
+  },
   emitter: {
     options: EmitterOptionsSchema,
   },
 } as const);
+
+export const { reportDiagnostic } = $lib;

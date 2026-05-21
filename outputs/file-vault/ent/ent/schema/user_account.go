@@ -6,9 +6,10 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // UserAccount Primary account record owned by the identity service.

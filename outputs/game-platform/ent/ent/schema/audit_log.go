@@ -4,14 +4,16 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"github.com/google/uuid"
-	"time"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // AuditLog Immutable audit-log entry. Lives in its own namespace even though it references other bounded contexts.

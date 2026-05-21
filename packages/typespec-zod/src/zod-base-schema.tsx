@@ -37,6 +37,7 @@ import {
   shouldReference,
   zodMemberExpr,
 } from "./utils.js";
+import { reportDiagnostic } from "./lib.js";
 
 /**
  * Returns the identifier parts for the base Zod schema for a given TypeSpec
@@ -69,6 +70,10 @@ export function zodBaseSchemaParts(type: Type) {
     case "Tuple":
       return tupleBaseType(type);
     default:
+      reportDiagnostic($.program, {
+        code: "unsupported-type",
+        target: type,
+      });
       return zodMemberExpr(callPart("any"));
   }
 }
@@ -116,6 +121,10 @@ function scalarBaseType($: Typekit, type: Scalar): Children {
     return durationScalarBaseType($, type);
   }
 
+  reportDiagnostic($.program, {
+    code: "unsupported-type",
+    target: type,
+  });
   return zodMemberExpr(callPart("any"));
 }
 

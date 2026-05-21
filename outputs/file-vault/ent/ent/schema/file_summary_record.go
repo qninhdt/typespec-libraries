@@ -6,10 +6,11 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // FileSummaryRecord Latest summary surfaced in file details and search snippets.

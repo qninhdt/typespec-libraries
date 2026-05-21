@@ -6,6 +6,7 @@ import type { ModelProperty, Program, Enum } from "@typespec/compiler";
 import {
   getCheck,
   getColumnName,
+  getCompositeFields,
   isKey,
   isAutoCreateTime,
   isAutoUpdateTime,
@@ -19,6 +20,7 @@ import {
   getDefaultValue,
 } from "@qninhdt/typespec-orm";
 import { getDbmlType, formatColumnSettings, type ColumnSettings } from "./DbmlConstants.js";
+import { reportDiagnostic } from "../lib.js";
 
 export function generateColumnLine(program: Program, prop: ModelProperty): string {
   // Skip ignored properties
@@ -48,6 +50,12 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   const dbmlType = getDbmlType(program, prop.type);
 
   if (!dbmlType) {
+    if (!getCompositeFields(program, prop)) {
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        target: prop,
+      });
+    }
     return "";
   }
 

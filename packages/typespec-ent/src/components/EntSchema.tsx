@@ -11,6 +11,7 @@ import {
   getArrayElementType,
   getCheck,
   getColumnName,
+  getCompositeFields,
   getDefaultValue,
   getDoc,
   getMaxLength,
@@ -34,7 +35,7 @@ import {
 import { goStringLiteral } from "./EntConstants.js";
 import { resolvePostgresArrayElementType } from "./ent-postgres-types.js";
 import { buildImportBlock } from "./ent-imports.js";
-import type { EntEmitterOptions } from "../lib.js";
+import { reportDiagnostic, type EntEmitterOptions } from "../lib.js";
 
 export interface EntModelFileProps {
   readonly program: Program;
@@ -202,6 +203,13 @@ function buildEntField(
     prop.type.kind !== "Enum" &&
     !isArrayType(prop.type)
   ) {
+    if (!getCompositeFields(program, prop)) {
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        target: prop,
+        format: { typeName: prop.type.kind, propName: prop.name },
+      });
+    }
     return undefined;
   }
 

@@ -6,8 +6,9 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/field"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // SearchIndexCheckpoint Checkpoint for async index workers.

@@ -81,6 +81,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
+  const dialect = options.dialect ?? "postgres";
   const tables = selection.models.filter((model) => model.kind === "table");
 
   const manyToManyAssociations = collectManyToManyAssociations(
@@ -110,7 +111,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
     <SourceDirectory path=".">
       {tables.length > 0 && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
-          {generateAtlasHcl()}
+          {generateAtlasHcl(dialect)}
         </SourceFile>
       )}
       {isStandalone && (
@@ -209,21 +210,36 @@ packages = [` +
   );
 
   const output = render(tree);
-  await writeOutput(output, outputDir);
+  try {
+    await writeOutput(output, outputDir);
+  } catch (e) {
+    reportDiagnostic(context.program, {
+      code: "emit-write-failed",
+      target: context.program.getGlobalNamespaceType(),
+      format: { fileName: outputDir, error: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }
 
-function generateAtlasHcl(): string {
+function generateAtlasHcl(dialect: string): string {
+  const atlasDialect = dialect === "mysql" ? "mysql" : dialect === "sqlite" ? "sqlite" : "postgresql";
+  const devUrl = dialect === "mysql"
+    ? "docker://mysql/8/dev"
+    : dialect === "sqlite"
+      ? "sqlite://file?mode=memory"
+      : "docker://postgres/16/dev?search_path=public";
+
   return `data "external_schema" "sqlmodel" {
   program = [
     "atlas-provider-sqlalchemy",
     "--path", ".",
-    "--dialect", "postgresql"
+    "--dialect", "${atlasDialect}"
   ]
 }
 
 env "sqlmodel" {
   src = data.external_schema.sqlmodel.url
-  dev = "docker://postgres/16/dev?search_path=public"
+  dev = "${devUrl}"
   migration {
     dir = "file://migrations"
   }

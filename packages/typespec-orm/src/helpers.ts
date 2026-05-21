@@ -878,8 +878,13 @@ export function camelToPascal(name: string): string {
 /** Derive table name from model name: PascalCase → snake_case plural */
 export function deriveTableName(modelName: string): string {
   const snake = camelToSnake(modelName);
-  if (snake.endsWith("s") || snake.endsWith("x") || snake.endsWith("z")) return snake + "es";
   if (snake.endsWith("sh") || snake.endsWith("ch")) return snake + "es";
+  if (snake.endsWith("s") || snake.endsWith("x")) return snake + "es";
+  if (snake.endsWith("z")) {
+    const beforeZ = snake.at(-2) ?? "";
+    if (/[aeiou]/.test(beforeZ)) return snake + "zes";
+    return snake + "es";
+  }
   // Only convert trailing -y to -ies when preceded by a consonant
   if (snake.endsWith("y") && snake.length > 1 && !/[aeiou]/.test(snake.at(-2) ?? "")) {
     return snake.slice(0, -1) + "ies";

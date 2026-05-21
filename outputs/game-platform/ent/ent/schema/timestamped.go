@@ -4,12 +4,13 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"entgo.io/ent/schema/mixin"
 	"github.com/google/uuid"
-	"time"
 )
 
 // Timestamped Base model with common timestamp fields for audit trails. This is a reusable table mixin and is never emitted by itself.

@@ -6,11 +6,12 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"github.com/google/uuid"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // AssistantMessage Persisted conversation message for product history and context rebuild.

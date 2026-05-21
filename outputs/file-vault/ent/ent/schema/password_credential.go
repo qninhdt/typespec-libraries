@@ -6,10 +6,11 @@ package schema
 import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/entsql"
-	entschema "entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"github.com/google/uuid"
+
+	entschema "entgo.io/ent/schema"
 )
 
 // PasswordCredential Password credential for accounts using local authentication.

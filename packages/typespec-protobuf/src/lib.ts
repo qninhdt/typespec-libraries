@@ -1,4 +1,4 @@
-import { createTypeSpecLibrary, type JSONSchemaType } from "@typespec/compiler";
+import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface ProtoEmitterOptions {
   "output-dir"?: string;
@@ -42,6 +42,12 @@ export const $lib = createTypeSpecLibrary({
       severity: "error",
       messages: {
         default: `Duplicate proto field number detected.`,
+      },
+    },
+    "emit-write-failed": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Failed to write proto output: ${"message"}.`,
       },
     },
   },

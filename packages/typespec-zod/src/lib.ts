@@ -2,7 +2,7 @@
  * @qninhdt/typespec-zod library definition.
  */
 
-import { createTypeSpecLibrary, type JSONSchemaType } from "@typespec/compiler";
+import { createTypeSpecLibrary, paramMessage, type JSONSchemaType } from "@typespec/compiler";
 
 export interface ZodEmitterOptions {
   /** Output directory override handled by TypeSpec */
@@ -37,6 +37,18 @@ export const $lib = createTypeSpecLibrary({
       severity: "error",
       messages: {
         default: "standalone mode requires 'library-name' option",
+      },
+    },
+    "unsupported-type": {
+      severity: "warning",
+      messages: {
+        default: `Type could not be mapped to a Zod schema and will be emitted as z.any().`,
+      },
+    },
+    "emit-write-failed": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Failed to write Zod output: ${"message"}.`,
       },
     },
   },

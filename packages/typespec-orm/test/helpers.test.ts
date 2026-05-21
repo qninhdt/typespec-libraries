@@ -108,8 +108,8 @@ describe("deriveTableName", () => {
     expect(deriveTableName("Match")).toBe("matches");
   });
 
-  it("pluralizes -z ending by adding -es", () => {
-    expect(deriveTableName("Quiz")).toBe("quizes");
+  it("pluralizes -z ending by doubling z and adding -es", () => {
+    expect(deriveTableName("Quiz")).toBe("quizzes");
   });
 
   it("handles single-word model name", () => {

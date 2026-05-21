@@ -1,5 +1,6 @@
 import type { Program, Type, Scalar, Model, ModelProperty } from "@typespec/compiler";
 import { getScalarChain } from "@qninhdt/typespec-orm";
+import { reportDiagnostic } from "./lib.js";
 
 export interface ProtoTypeRef {
   name: string;
@@ -64,7 +65,7 @@ const ORM_NUMERIC_SCALARS: Record<string, ProtoTypeRef> = {
 
 export function resolveProtoType(program: Program, type: Type): ProtoTypeRef {
   if (type.kind === "Scalar") {
-    return resolveScalarType(type);
+    return resolveScalarType(program, type);
   }
 
   if (type.kind === "Model") {
@@ -79,10 +80,14 @@ export function resolveProtoType(program: Program, type: Type): ProtoTypeRef {
     return resolvePropertyType(program, type);
   }
 
+  reportDiagnostic(program, {
+    code: "proto-unsupported-type",
+    target: type,
+  });
   return { name: "string" };
 }
 
-function resolveScalarType(scalar: Scalar): ProtoTypeRef {
+function resolveScalarType(program: Program, scalar: Scalar): ProtoTypeRef {
   const chain = getScalarChain(scalar);
 
   for (const name of chain) {
@@ -97,6 +102,10 @@ function resolveScalarType(scalar: Scalar): ProtoTypeRef {
     }
   }
 
+  reportDiagnostic(program, {
+    code: "proto-unsupported-type",
+    target: scalar,
+  });
   return { name: "string" };
 }
 

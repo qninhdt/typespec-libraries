@@ -57,6 +57,9 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                       types: "./dist/*.d.ts",
                     },
                   },
+                  scripts: {
+                    build: "tsc",
+                  },
                   dependencies: {
                     zod: "^4.4.3",
                   },
@@ -79,7 +82,6 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                     outDir: "./dist",
                     rootDir: "./src",
                     declaration: true,
-                    emitDeclarationOnly: true,
                     esModuleInterop: true,
                     strict: true,
                     skipLibCheck: true,
@@ -124,5 +126,13 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   );
 
   const output = render(tree);
-  await writeOutput(output, outputDir);
+  try {
+    await writeOutput(output, outputDir);
+  } catch (e) {
+    reportDiagnostic(context.program, {
+      code: "emit-write-failed",
+      target: context.program.getGlobalNamespaceType(),
+      format: { message: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }

@@ -1,6 +1,6 @@
 import type { EmitContext, Model, Namespace, Program } from "@typespec/compiler";
 import { isTable, isTableMixin } from "@qninhdt/typespec-orm";
-import { ProtoPackageKey, ProtoFieldKey, ProtoImportKey, ProtoMapKey } from "./lib.js";
+import { ProtoPackageKey, ProtoFieldKey, ProtoImportKey, ProtoMapKey, reportDiagnostic } from "./lib.js";
 import type { ProtoEmitterOptions } from "./lib.js";
 import { resolveProtoType, collectImports, type ProtoTypeRef } from "./type-mapping.js";
 import { resolveProtoEnum, camelToSnakeCase, type ProtoEnum } from "./enum-mapping.js";
@@ -36,8 +36,16 @@ export async function $onEmit(context: EmitContext<ProtoEmitterOptions>): Promis
 
   for (const file of files) {
     const fullPath = join(outputDir, file.filePath);
-    await mkdir(dirname(fullPath), { recursive: true });
-    await writeFile(fullPath, file.content, "utf-8");
+    try {
+      await mkdir(dirname(fullPath), { recursive: true });
+      await writeFile(fullPath, file.content, "utf-8");
+    } catch (e) {
+      reportDiagnostic(program, {
+        code: "emit-write-failed",
+        target: program.getGlobalNamespaceType(),
+        format: { message: e instanceof Error ? e.message : String(e) },
+      });
+    }
   }
 }
 
