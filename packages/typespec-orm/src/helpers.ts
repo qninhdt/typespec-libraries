@@ -44,11 +44,22 @@ import {
   OnDeleteKey,
   OnUpdateKey,
   IgnoreKey,
+  SchemaKey,
+  DefaultExpressionKey,
+  VersionKey,
+  AuditKey,
+  TenantIdKey,
+  TagsKey,
+  OwnerKey,
+  ClassificationKey,
   DataKey,
   TitleKey,
   PlaceholderKey,
   InputTypeKey,
+  ModelUniquesKey,
 } from "./lib.js";
+import { truncatePgIdentifier } from "./identifier-policy.js";
+import type { ModelIndexSpec } from "./decorators.js";
 
 const ORM_NAMESPACE = "Qninhdt.Orm";
 
@@ -123,14 +134,14 @@ export function isIndex(program: Program, prop: ModelProperty): boolean {
 export function getIndexName(program: Program, prop: ModelProperty): string {
   const stored = program.stateMap(IndexKey).get(prop) as string | undefined;
   if (stored !== undefined && stored !== "") {
-    return stored;
+    return truncatePgIdentifier(stored);
   }
   // Auto-derive index name: [tableName]_[columnName]_idx
   const model = prop.model;
   if (!model) return "";
   const tableName = getTableName(program, model);
   const columnName = getColumnName(program, prop);
-  return `${tableName}_${columnName}_idx`;
+  return truncatePgIdentifier(`${tableName}_${columnName}_idx`);
 }
 
 export function isUnique(program: Program, prop: ModelProperty): boolean {
@@ -143,7 +154,7 @@ export function getUniqueName(program: Program, prop: ModelProperty): string {
   if (!model) return "";
   const tableName = getTableName(program, model);
   const columnName = getColumnName(program, prop);
-  return `${tableName}_${columnName}_unique`;
+  return truncatePgIdentifier(`${tableName}_${columnName}_unique`);
 }
 
 export interface CheckConstraintInfo {
@@ -382,23 +393,28 @@ export function getCompositeFields(program: Program, prop: ModelProperty): strin
 }
 
 function getCompositeScalarName(type: Scalar): string | undefined {
-  return type.name || (type as any).node?.id?.escapedText;
+  if (type.name) return type.name;
+  const node = (type as Scalar & { node?: { id?: { escapedText?: string } } }).node;
+  return node?.id?.escapedText;
 }
 
 function getCompositeTemplateColumns(type: Scalar): string[] | undefined {
-  const args = (type as any).templateMapper?.args;
+  const mapper = (type as Scalar & { templateMapper?: { args?: unknown } }).templateMapper;
+  const args = mapper?.args;
   if (!args || !Array.isArray(args)) {
     return undefined;
   }
 
   const columns: string[] = [];
   for (const arg of args) {
-    if (!arg || typeof arg !== "object" || !arg.type) {
+    if (!arg || typeof arg !== "object" || !("type" in arg)) {
       continue;
     }
 
-    const typeObj = arg.type;
-    if (typeObj.kind === "String" && typeObj.value) {
+    const typeObj = (arg as { type: unknown }).type as
+      | { kind: string; value?: string }
+      | undefined;
+    if (typeObj?.kind === "String" && typeObj.value) {
       columns.push(typeObj.value);
     }
   }
@@ -435,6 +451,103 @@ export function getOnDelete(program: Program, prop: ModelProperty): string | und
 
 export function getOnUpdate(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(OnUpdateKey).get(prop) as string | undefined;
+}
+
+/**
+ * Returns the PostgreSQL schema for a `@table` model.
+ * Looks up the model first, then walks up the namespace chain.
+ * Returns `undefined` when no `@schema` decorator applies (default `public`).
+ */
+export function getSchemaName(program: Program, target: Model): string | undefined {
+  const direct = program.stateMap(SchemaKey).get(target) as string | undefined;
+  if (direct !== undefined) return direct;
+  let ns = target.namespace;
+  while (ns) {
+    const found = program.stateMap(SchemaKey).get(ns) as string | undefined;
+    if (found !== undefined) return found;
+    ns = ns.namespace;
+  }
+  return undefined;
+}
+
+/** Returns the SQL default expression set via `@defaultExpression`, if any. */
+export function getDefaultExpression(
+  program: Program,
+  prop: ModelProperty,
+): string | undefined {
+  return program.stateMap(DefaultExpressionKey).get(prop) as string | undefined;
+}
+
+/** Returns true when the property carries `@version` for optimistic locking. */
+export function isVersionColumn(program: Program, prop: ModelProperty): boolean {
+  return program.stateMap(VersionKey).has(prop);
+}
+
+/** Returns the audit role (`"createdBy"` / `"updatedBy"`) set via `@audit`, if any. */
+export function getAuditRole(
+  program: Program,
+  prop: ModelProperty,
+): "createdBy" | "updatedBy" | undefined {
+  return program.stateMap(AuditKey).get(prop) as "createdBy" | "updatedBy" | undefined;
+}
+
+/** Returns true when the property carries `@tenantId`. */
+export function isTenantIdColumn(program: Program, prop: ModelProperty): boolean {
+  return program.stateMap(TenantIdKey).has(prop);
+}
+
+/** Finds the `@version` column on a model, or undefined. */
+export function findVersionProperty(program: Program, model: Model): ModelProperty | undefined {
+  for (const prop of model.properties.values()) {
+    if (isVersionColumn(program, prop)) return prop;
+  }
+  return undefined;
+}
+
+/** Finds the `@tenantId` column on a model, or undefined. */
+export function findTenantIdProperty(program: Program, model: Model): ModelProperty | undefined {
+  for (const prop of model.properties.values()) {
+    if (isTenantIdColumn(program, prop)) return prop;
+  }
+  return undefined;
+}
+
+// ─── Catalog metadata helpers ────────────────────────────────────────────────
+
+/** Returns the tags applied to a model or property via `@tag`. Empty array if none. */
+export function getTags(program: Program, target: Model | ModelProperty): readonly string[] {
+  return (program.stateMap(TagsKey).get(target) as string[] | undefined) ?? [];
+}
+
+/** True when the model or property carries the given tag (or any namespace ancestor for models). */
+export function hasTag(
+  program: Program,
+  target: Model | ModelProperty,
+  tag: string,
+): boolean {
+  return getTags(program, target).includes(tag);
+}
+
+/** Returns the owning team set via `@owner`, walking up the namespace chain for models. */
+export function getOwner(program: Program, target: Model | Namespace): string | undefined {
+  const direct = program.stateMap(OwnerKey).get(target) as string | undefined;
+  if (direct !== undefined) return direct;
+  let ns: Namespace | undefined =
+    "namespace" in target ? (target.namespace as Namespace | undefined) : undefined;
+  while (ns) {
+    const found = program.stateMap(OwnerKey).get(ns) as string | undefined;
+    if (found !== undefined) return found;
+    ns = ns.namespace;
+  }
+  return undefined;
+}
+
+/** Returns the classification level set via `@classification`. */
+export function getClassification(
+  program: Program,
+  target: Model | ModelProperty,
+): string | undefined {
+  return program.stateMap(ClassificationKey).get(target) as string | undefined;
 }
 
 // ─── Ignore field helper ─────────────────────────────────────────────────────
@@ -497,8 +610,11 @@ export function collectOrmManagedModels(program: Program): Model[] {
 }
 
 export function getModelOwnProperties(model: Model): ModelProperty[] {
+  // `sourceProperty` is an internal compiler field that marks props inherited via
+  // `...Mixin` spread. There is no public API for "own props only", so we depend
+  // on it directly; if the compiler renames it this returns inherited props too.
   return [...model.properties.values()].filter(
-    (prop) => !(prop as { sourceProperty?: ModelProperty }).sourceProperty,
+    (prop) => (prop as { sourceProperty?: ModelProperty }).sourceProperty === undefined,
   );
 }
 
@@ -710,8 +826,8 @@ export function isBuiltIn(program: Program, type: Type): boolean {
     return false;
   }
 
-  while (tln.namespace !== globalNs) {
-    tln = tln.namespace!;
+  while (tln && tln.namespace && tln.namespace !== globalNs) {
+    tln = tln.namespace;
   }
 
   return tln === globalNs.namespaces.get("TypeSpec");
@@ -945,24 +1061,43 @@ export function unwrapArrayType(type: Type): Model | undefined {
   return undefined;
 }
 
+interface PropertyReferenceMaps {
+  byName: Map<string, ModelProperty>;
+  byColumn: Map<string, ModelProperty>;
+}
+
+const propertyReferenceCache = new WeakMap<
+  Program,
+  WeakMap<Model, PropertyReferenceMaps>
+>();
+
+function getPropertyReferenceMaps(program: Program, model: Model): PropertyReferenceMaps {
+  let perProgram = propertyReferenceCache.get(program);
+  if (!perProgram) {
+    perProgram = new WeakMap<Model, PropertyReferenceMaps>();
+    propertyReferenceCache.set(program, perProgram);
+  }
+  let cached = perProgram.get(model);
+  if (cached) return cached;
+  const byName = new Map<string, ModelProperty>();
+  const byColumn = new Map<string, ModelProperty>();
+  for (const prop of walkPropertiesInherited(model)) {
+    if (!byName.has(prop.name)) byName.set(prop.name, prop);
+    const columnName = getColumnName(program, prop);
+    if (columnName && !byColumn.has(columnName)) byColumn.set(columnName, prop);
+  }
+  cached = { byName, byColumn };
+  perProgram.set(model, cached);
+  return cached;
+}
+
 export function resolvePropertyReference(
   program: Program,
   model: Model,
   reference: string,
 ): ModelProperty | undefined {
-  for (const prop of walkPropertiesInherited(model)) {
-    if (prop.name === reference) {
-      return prop;
-    }
-  }
-
-  for (const prop of walkPropertiesInherited(model)) {
-    if (getColumnName(program, prop) === reference) {
-      return prop;
-    }
-  }
-
-  return undefined;
+  const maps = getPropertyReferenceMaps(program, model);
+  return maps.byName.get(reference) ?? maps.byColumn.get(reference);
 }
 
 export function resolvePropertyByName(model: Model, name: string): ModelProperty | undefined {
@@ -1011,7 +1146,18 @@ export function arePropertyTypesCompatible(
 }
 
 export function isRelationLocalKeyUnique(program: Program, prop: ModelProperty): boolean {
-  return isKey(program, prop) || isUnique(program, prop);
+  if (isKey(program, prop) || isUnique(program, prop)) return true;
+  const owner = prop.model;
+  if (!owner) return false;
+  const columnName = getColumnName(program, prop);
+  const uniques =
+    (program.stateMap(ModelUniquesKey).get(owner) as ModelIndexSpec[] | undefined) ?? [];
+  for (const spec of uniques) {
+    if (spec.columns.length !== 1) continue;
+    const only = spec.columns[0];
+    if (only === prop.name || only === columnName) return true;
+  }
+  return false;
 }
 
 function isModelReferenceTo(type: Type, expected: Model): boolean {
@@ -1378,7 +1524,7 @@ function resolveMappedByRelation(context: {
   };
 }
 
-function resolveMappedByTarget(
+export function resolveMappedByTarget(
   program: Program,
   prop: ModelProperty,
   arrayElement: Model | undefined,

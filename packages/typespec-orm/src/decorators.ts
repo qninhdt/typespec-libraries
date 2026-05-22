@@ -1,4 +1,4 @@
-import type { DecoratorContext, Model, ModelProperty, Scalar } from "@typespec/compiler";
+import type { DecoratorContext, Model, ModelProperty, Namespace, Scalar } from "@typespec/compiler";
 import {
   TableKey,
   TableMixinKey,
@@ -17,6 +17,16 @@ import {
   OnDeleteKey,
   OnUpdateKey,
   IgnoreKey,
+  SchemaKey,
+  DefaultExpressionKey,
+  VersionKey,
+  AuditKey,
+  TenantIdKey,
+  ModelIndexesKey,
+  ModelUniquesKey,
+  TagsKey,
+  OwnerKey,
+  ClassificationKey,
   DataKey,
   TitleKey,
   PlaceholderKey,
@@ -148,6 +158,153 @@ export function $onUpdate(context: DecoratorContext, target: ModelProperty, acti
 
 export function $ignore(context: DecoratorContext, target: ModelProperty): void {
   context.program.stateMap(IgnoreKey).set(target, true);
+}
+
+// ─── @schema ─────────────────────────────────────────────────────────────────
+
+/**
+ * PostgreSQL schema scope for a `@table` model or namespace. Model-level value
+ * wins over a namespace-level value.
+ */
+export function $schema(
+  context: DecoratorContext,
+  target: Model | Namespace,
+  name: string,
+): void {
+  context.program.stateMap(SchemaKey).set(target, name);
+}
+
+// ─── @defaultExpression ──────────────────────────────────────────────────────
+
+/**
+ * Stores a SQL default expression for a column. Emitters render this as
+ * `server_default=text(...)` (SQLModel) or equivalent on each target.
+ */
+export function $defaultExpression(
+  context: DecoratorContext,
+  target: ModelProperty,
+  expression: string,
+): void {
+  context.program.stateMap(DefaultExpressionKey).set(target, expression);
+}
+
+// ─── @version ────────────────────────────────────────────────────────────────
+
+/**
+ * Marks a column as the optimistic-locking version. Emitters render this as
+ * `__mapper_args__ = {"version_id_col": ...}` (SQLModel) or hooks (Ent).
+ * Only one column per model may carry this decorator (validated downstream).
+ */
+export function $version(context: DecoratorContext, target: ModelProperty): void {
+  context.program.stateMap(VersionKey).set(target, true);
+}
+
+// ─── @audit ──────────────────────────────────────────────────────────────────
+
+/**
+ * Marks a column as an audit field. `role` selects which lifecycle hook
+ * the emitter wires: "createdBy" / "updatedBy".
+ */
+export function $audit(
+  context: DecoratorContext,
+  target: ModelProperty,
+  role: "createdBy" | "updatedBy",
+): void {
+  context.program.stateMap(AuditKey).set(target, role);
+}
+
+// ─── @tenantId ───────────────────────────────────────────────────────────────
+
+/**
+ * Marks a column as the tenant scope. Downstream emitters use this to scaffold
+ * multi-tenant policies / row-level security helpers.
+ */
+export function $tenantId(context: DecoratorContext, target: ModelProperty): void {
+  context.program.stateMap(TenantIdKey).set(target, true);
+}
+
+// ─── @tag / @owner / @classification (catalog metadata) ──────────────────────
+
+/**
+ * Tag a model or property for selector matching. Multiple `@tag` decorators
+ * accumulate. Tags can be referenced via emitter `include`/`exclude` selectors.
+ */
+export function $tag(
+  context: DecoratorContext,
+  target: Model | ModelProperty,
+  name: string,
+): void {
+  const map = context.program.stateMap(TagsKey);
+  const existing = (map.get(target) as string[] | undefined) ?? [];
+  if (!existing.includes(name)) {
+    existing.push(name);
+  }
+  map.set(target, existing);
+}
+
+/**
+ * Records the owning team / squad for a model or namespace. Catalog tools
+ * read this to attach SLA + on-call metadata to the generated schema.
+ */
+export function $owner(
+  context: DecoratorContext,
+  target: Model | Namespace,
+  team: string,
+): void {
+  context.program.stateMap(OwnerKey).set(target, team);
+}
+
+/**
+ * Records data classification for a model or column (e.g. "public",
+ * "internal", "pii", "secret"). Catalog tools and downstream policies
+ * consume this verbatim — emitters do not normalize the value.
+ */
+export function $classification(
+  context: DecoratorContext,
+  target: Model | ModelProperty,
+  level: string,
+): void {
+  context.program.stateMap(ClassificationKey).set(target, level);
+}
+
+// ─── @@tableIndex / @@tableUnique (model-level augments) ─────────────────────
+
+export interface ModelIndexSpec {
+  columns: string[];
+  name?: string;
+}
+
+/**
+ * Model-level multi-column index. Use as `@@tableIndex(MyModel, ["a", "b"])`.
+ * Replaces the fragile `composite<col1, col2>` scalar trick with a first-class
+ * augment that supports any number of columns and an optional explicit name.
+ */
+export function $tableIndex(
+  context: DecoratorContext,
+  target: Model,
+  columns: string[],
+  name?: string,
+): void {
+  const map = context.program.stateMap(ModelIndexesKey);
+  const existing = (map.get(target) as ModelIndexSpec[] | undefined) ?? [];
+  existing.push({ columns, name });
+  map.set(target, existing);
+}
+
+/**
+ * Model-level multi-column unique constraint. Use as
+ * `@@tableUnique(MyModel, ["a", "b"])`.
+ */
+export function $tableUnique(
+  context: DecoratorContext,
+  target: Model,
+  columns: string[],
+  name?: string,
+): void {
+  const map = context.program.stateMap(ModelUniquesKey);
+  const existing = (map.get(target) as ModelIndexSpec[] | undefined) ?? [];
+  existing.push({ columns, name });
+  map.set(target, existing);
 }
 
 // ─── @data ────────────────────────────────────────────────────────────────

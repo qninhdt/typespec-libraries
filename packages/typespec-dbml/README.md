@@ -2,7 +2,7 @@
 
 TypeSpec emitter that generates DBML from `@qninhdt/typespec-orm` table models.
 
-This emitter is meant for schema review, architecture visualization, and keeping DBML aligned with the same TypeSpec schema used by the runtime emitters.
+This PostgreSQL-oriented emitter is meant for schema review, architecture visualization, and keeping DBML aligned with the same TypeSpec schema used by the runtime emitters.
 
 ## When To Use This Emitter
 
@@ -67,6 +67,7 @@ Notes:
 - `filename` applies to single-file mode only
 - in split mode, the final namespace segment becomes the file name
 - filtering uses the same shared dependency rules as the code emitters
+- unsupported column types fail emission instead of producing empty column lines
 
 ## Selector Behavior
 
@@ -242,6 +243,7 @@ Because the files are generated from the same normalized graph as the runtime em
 - DBML output is not a migration tool; it is a review/documentation artifact
 - if you need payload fields on a join, model the junction table explicitly instead of relying on shorthand
 - selector filtering still enforces dependency closure, even though the output is documentation-focused
+- unsupported column mappings are errors by default
 
 ## Verification
 

@@ -1,6 +1,6 @@
 # @qninhdt/typespec-ent
 
-TypeSpec emitter that generates Ent schemas and Go DTO structs.
+TypeSpec emitter that generates PostgreSQL-oriented Ent schemas and Go DTO structs.
 
 This emitter consumes `@qninhdt/typespec-orm` models and generates:
 
@@ -39,7 +39,7 @@ Generated Go code is aimed at modern Ent projects.
 - UUID fields use `github.com/google/uuid`
 - decimal fields may pull in `github.com/shopspring/decimal`
 - data-model `jsonb` fields use `encoding/json`
-- every table selection writes an Atlas `atlas.hcl` using `ent://ent/schema`
+- every table selection writes a PostgreSQL Atlas `atlas.hcl` using `ent://ent/schema`
 
 The repo currently verifies generated output with Go `1.22`.
 
@@ -235,7 +235,7 @@ For Ent, shorthand join tables are inferred from relationship metadata rather th
 - `"jsonb"`: emit `field.JSON(...)`
 - `"postgres"`: emit native PostgreSQL array types where supported
 
-Unsupported collection shapes fail with diagnostics.
+Unsupported collection shapes fail with error diagnostics.
 
 ## Generated Module Contract
 
@@ -278,7 +278,7 @@ What you should expect from non-standalone output:
 - `standalone-requires-library-name`
   Standalone mode cannot write a usable Go module without `library-name`.
 - `unsupported-type`
-  The source TypeSpec field could not be mapped to a Go type or Ent field representation.
+  The source TypeSpec field could not be mapped to a Go type or Ent field representation and emission fails.
 - `missing-back-reference`
   A one-to-many relation has no inverse many-to-one. Ent may still compile, but automatic FK behavior can be incomplete.
 - `unknown-format`
@@ -297,7 +297,7 @@ The repo verifies generated Go output with:
 `sh
 pnpm run compile-examples
 cd outputs/ent
-go build -mod=mod ./...
+go build -mod=mod ./outputs/file-vault/ent/... && go build -mod=mod ./outputs/game-platform/ent/...
 `
 
 ## Related Docs

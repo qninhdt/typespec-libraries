@@ -40,6 +40,30 @@ describe("Zod emitter entrypoint", () => {
     await expect(readdir(outDir)).resolves.toEqual([]);
   });
 
+  it("reports unsupported field types as errors", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @data
+      model Broken {
+        payload: composite<"left", "right">;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "zod-emitter-unsupported-"));
+
+    await $onEmit({
+      program: runner.program,
+      options: {},
+      emitterOutputDir: outDir,
+    } as never);
+
+    expect(
+      runner.program.diagnostics.some(
+        (diag) =>
+          diag.code === "@qninhdt/typespec-zod/unsupported-type" && diag.severity === "error",
+      ),
+    ).toBe(true);
+  });
+
   it("emits standalone package files for data models", async () => {
     const runner = await createTestRunner();
     await runner.compile(`

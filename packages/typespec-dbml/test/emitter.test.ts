@@ -27,7 +27,32 @@ describe("DBML emitter entrypoint", () => {
 
     const schema = await readFile(join(outDir, "schema.dbml"), "utf8");
     expect(schema).toContain("Table users");
-    expect(schema).toContain("email varchar(255)");
+    expect(schema).toContain("email text");
+  });
+
+  it("reports unsupported column types as errors", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Broken {
+        @key id: uuid;
+        payload: unknown;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "dbml-emitter-unsupported-"));
+
+    await emit({
+      program: runner.program,
+      options: {},
+      emitterOutputDir: outDir,
+    } as never);
+
+    expect(
+      runner.program.diagnostics.some(
+        (diag) =>
+          diag.code === "@qninhdt/typespec-dbml/unsupported-type" && diag.severity === "error",
+      ),
+    ).toBe(true);
   });
 
   it("emits namespace-split documents when requested", async () => {

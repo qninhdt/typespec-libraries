@@ -18,6 +18,8 @@ import {
   getDoc,
   getMaxLength,
   getDefaultValue,
+  getDefaultExpression,
+  getEnumMembers,
 } from "@qninhdt/typespec-orm";
 import { getDbmlType, formatColumnSettings, type ColumnSettings } from "./DbmlConstants.js";
 import { reportDiagnostic } from "../lib.js";
@@ -32,14 +34,21 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
 
   // Handle enum types - use enum name directly
   if (isEnum(prop.type)) {
-    const enumName = (prop.type as Enum).name;
+    const enumType = prop.type as Enum;
+    const enumName = enumType.name;
     const settings: ColumnSettings = {};
 
     const doc = getDoc(program, prop);
     const check = getCheck(program, prop);
     const defaultValue = getDefaultValue(program, prop);
     if (defaultValue !== undefined) {
-      settings.default = defaultValue;
+      const resolved = resolveEnumDefault(program, prop, enumType, defaultValue);
+      if (resolved !== undefined) {
+        settings.default = resolved;
+      }
+    }
+    if (!prop.optional) {
+      settings.notNull = true;
     }
     settings.note = joinNotes(doc, check ? `check ${check.name}: ${check.expression}` : undefined);
 
@@ -76,9 +85,14 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   if (isAutoCreateTime(program, prop) || isAutoUpdateTime(program, prop)) {
     settings.default = "now()";
   } else {
-    const defaultValue = getDefaultValue(program, prop);
-    if (defaultValue !== undefined) {
-      settings.default = defaultValue;
+    const expr = getDefaultExpression(program, prop);
+    if (expr !== undefined) {
+      settings.default = expr;
+    } else {
+      const defaultValue = getDefaultValue(program, prop);
+      if (defaultValue !== undefined) {
+        settings.default = defaultValue;
+      }
     }
   }
 
@@ -92,7 +106,8 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
   } else if (isSoftDelete(program, prop)) {
     // soft-delete columns (e.g. deleted_at) start as NULL
     settings.notNull = false;
-  } else {
+  } else if (!settings.pk) {
+    // pk implies not null in DBML, so don't repeat
     settings.notNull = true;
   }
 
@@ -106,15 +121,22 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
 }
 
 function resolveColumnType(program: Program, prop: ModelProperty, dbmlType: string): string {
-  if (dbmlType === "varchar") {
-    const maxLength = getMaxLength(program, prop) ?? 255;
-    return `varchar(${maxLength})`;
+  const isArray = dbmlType.endsWith("[]");
+  const baseType = isArray ? dbmlType.slice(0, -2) : dbmlType;
+  const suffix = isArray ? "[]" : "";
+
+  if (baseType === "text" || baseType === "varchar") {
+    const maxLength = getMaxLength(program, prop);
+    if (maxLength !== undefined) {
+      return `varchar(${maxLength})${suffix}`;
+    }
+    return `${baseType}${suffix}`;
   }
 
-  if (dbmlType === "decimal") {
+  if (baseType === "numeric" || baseType === "decimal") {
     const precision = getPrecision(program, prop);
     if (precision) {
-      return `decimal(${precision.precision}, ${precision.scale ?? 0})`;
+      return `${baseType}(${precision.precision}, ${precision.scale ?? 0})${suffix}`;
     }
   }
 
@@ -124,4 +146,29 @@ function resolveColumnType(program: Program, prop: ModelProperty, dbmlType: stri
 function joinNotes(...parts: Array<string | undefined>): string | undefined {
   const defined = parts.filter((item): item is string => !!item);
   return defined.length > 0 ? defined.join(" | ") : undefined;
+}
+
+function resolveEnumDefault(
+  program: Program,
+  prop: ModelProperty,
+  enumType: Enum,
+  defaultValue: string,
+): string | undefined {
+  const members = getEnumMembers(enumType);
+  // Match by member name (canonical) first, then by stringified member value.
+  const byName = members.find((m) => m.name === defaultValue);
+  if (byName) return byName.name;
+  const byValue = members.find((m) => m.value === defaultValue);
+  if (byValue) return byValue.name;
+
+  reportDiagnostic(program, {
+    code: "invalid-enum-default",
+    target: prop,
+    format: {
+      value: defaultValue,
+      enumName: enumType.name,
+      members: members.map((m) => m.name).join(", ") || "(none)",
+    },
+  });
+  return undefined;
 }

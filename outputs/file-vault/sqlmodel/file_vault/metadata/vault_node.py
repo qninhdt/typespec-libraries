@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.soft_deletable_entity import SoftDeletableEntity
 
@@ -61,12 +62,15 @@ class VaultNode(SoftDeletableEntity, table=True):
 
     vault_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("vault_spaces.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
-    parent_id: UUID | None = Field(default=None, index=True)
+    parent_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True), index=True)
+    )
     kind: VaultNodeKind = Field(sa_column=Column(SAEnum(VaultNodeKind), nullable=False))
     name: str = Field(max_length=240, sa_column_kwargs={"nullable": False})
     normalized_name: str = Field(max_length=240, sa_column_kwargs={"nullable": False})
@@ -84,9 +88,16 @@ class VaultNode(SoftDeletableEntity, table=True):
         default=None, sa_column=Column(DateTime(timezone=True))
     )
     created_by: UUID = Field(
-        index=True, foreign_key="user_accounts.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("user_accounts.id"),
+            nullable=False,
+            index=True,
+        )
     )
-    updated_by: UUID | None = Field(default=None)
+    updated_by: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
 
     # ─── Relationships ─────────────────────
     vault: VaultSpace | None = Relationship()

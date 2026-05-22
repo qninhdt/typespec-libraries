@@ -88,7 +88,7 @@ export class ZodCustomEmitOptionsClass {
   /**
    * @internal
    */
-  [getEmitOptionsForTypeKindSym](program: Program, typeKind: Type["kind"]) {
+  [getEmitOptionsForTypeKindSym](_program: Program, typeKind: Type["kind"]) {
     return this.#typeKindEmitOptions.get(typeKind);
   }
 }
@@ -200,7 +200,19 @@ export function getEmitOptionsForTypeKind(
 }
 
 export function getZodOptions(program: any): ZodEmitterOptions {
-  return program
-    ? (program.getCompilerOptions()?.emitterOutput?.["@qninhdt/typespec-zod"] ?? {})
-    : {};
+  let raw: ZodEmitterOptions = {};
+  if (program) {
+    // Real TypeSpec Program exposes `compilerOptions.options[emitterName]`.
+    const direct = program.compilerOptions?.options?.["@qninhdt/typespec-zod"];
+    // Test fixtures stub the older `getCompilerOptions().emitterOutput[...]` shape.
+    const stubbed =
+      typeof program.getCompilerOptions === "function"
+        ? program.getCompilerOptions()?.emitterOutput?.["@qninhdt/typespec-zod"]
+        : undefined;
+    raw = direct ?? stubbed ?? {};
+  }
+  return {
+    ...raw,
+    "int64-strategy": raw["int64-strategy"] ?? "string",
+  };
 }

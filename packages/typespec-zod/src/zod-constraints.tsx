@@ -71,11 +71,7 @@ function stringConstraints($: Typekit, type: Scalar, member?: ModelProperty) {
 }
 
 function renderRegexLiteral(pattern: string): string {
-  if (/[\r\n\u2028\u2029]/.test(pattern)) {
-    return `new RegExp(${JSON.stringify(pattern)})`;
-  }
-
-  return `/${pattern.replaceAll("/", "\\/")}/`;
+  return `new RegExp(${JSON.stringify(pattern)})`;
 }
 
 function assignStringConstraints(target: StringConstraints, source: StringConstraints) {

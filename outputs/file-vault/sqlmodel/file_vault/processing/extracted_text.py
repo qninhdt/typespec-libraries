@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Column, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -20,6 +21,7 @@ class ExtractedText(Entity, table=True):
 
     file_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("file_metadata.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

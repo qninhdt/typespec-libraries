@@ -6,6 +6,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, Enum as SAEnum, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -29,6 +30,7 @@ class AssistantMessage(Entity, table=True):
 
     conversation_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("assistant_conversations.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

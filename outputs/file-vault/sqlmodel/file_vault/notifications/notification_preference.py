@@ -5,8 +5,8 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID
 from enum import Enum
 
-from sqlalchemy import Column, Enum as SAEnum, ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Enum as SAEnum, ForeignKey, text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -37,6 +37,7 @@ class NotificationPreference(Entity, table=True):
 
     account_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("user_accounts.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -46,11 +47,9 @@ class NotificationPreference(Entity, table=True):
         sa_column=Column(SAEnum(NotificationChannel), nullable=False)
     )
     enabled: bool = Field(
-        sa_column_kwargs={"nullable": False, "server_default": "true"}
+        sa_column_kwargs={"nullable": False, "server_default": text("true")}
     )
-    quiet_hours_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB)
-    )
+    quiet_hours_json: Any | None = Field(default=None, sa_column=Column(JSONB))
 
     # ─── Relationships ─────────────────────
     account: UserAccount | None = Relationship()

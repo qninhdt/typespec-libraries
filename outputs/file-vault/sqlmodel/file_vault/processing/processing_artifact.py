@@ -6,7 +6,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, Enum as SAEnum, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -33,6 +33,7 @@ class ProcessingArtifact(Entity, table=True):
 
     job_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("processing_jobs.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -40,15 +41,18 @@ class ProcessingArtifact(Entity, table=True):
     )
     file_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("file_metadata.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
     kind: ArtifactKind = Field(sa_column=Column(SAEnum(ArtifactKind), nullable=False))
-    storage_object_id: UUID | None = Field(default=None)
+    storage_object_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     text_value: str | None = Field(default=None, sa_column=Column(Text))
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metadata_json: Any | None = Field(default=None, sa_column=Column(JSONB))
 
     # ─── Relationships ─────────────────────
     job: ProcessingJob | None = Relationship()

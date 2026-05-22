@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.metadata.v1")
+@package({
+  name: "filevault.metadata.v1",
+})
 namespace FileVault.Metadata;
 
-@protoService
+@Protobuf.service
 interface MetadataService {
   createFolder(...CreateFolderRequest): NodeView;
 

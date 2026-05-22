@@ -15,6 +15,15 @@ export interface ZodEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /**
+   * How to render TypeSpec `int64`/`uint64` (and other >32-bit integer)
+   * scalars. Defaults to `"string"` to preserve precision over JSON.
+   *
+   * - `"bigint"`: emit `z.bigint()`. Cannot be JSON-serialized natively.
+   * - `"string"`: emit `z.string().regex(/^-?\d+$/)`. Lossless across JSON.
+   * - `"number"`: emit `z.number().int()`. Values >2^53 lose precision.
+   */
+  "int64-strategy"?: "bigint" | "string" | "number";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
@@ -26,6 +35,11 @@ const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "int64-strategy": {
+      type: "string",
+      enum: ["bigint", "string", "number"],
+      nullable: true,
+    },
   },
   required: [],
 };
@@ -40,9 +54,9 @@ export const $lib = createTypeSpecLibrary({
       },
     },
     "unsupported-type": {
-      severity: "warning",
+      severity: "error",
       messages: {
-        default: `Type could not be mapped to a Zod schema and will be emitted as z.any().`,
+        default: `Type could not be mapped to a Zod schema.`,
       },
     },
     "emit-write-failed": {

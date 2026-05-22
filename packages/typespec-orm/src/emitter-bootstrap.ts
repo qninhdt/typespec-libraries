@@ -7,15 +7,12 @@ import {
   type OrmEmitterSelection,
 } from "./normalization.js";
 
-export type Dialect = "postgres" | "mysql" | "sqlite";
-
 export interface EmitterBootstrapConfig {
   kinds: Array<"table" | "data" | "mixin">;
   include?: string[];
   exclude?: string[];
   standalone?: boolean;
   libraryName?: string;
-  dialect?: Dialect;
 }
 
 export interface EmitterBootstrapResult {
@@ -25,7 +22,6 @@ export interface EmitterBootstrapResult {
   namespaceGroups: NormalizedOrmModel[][];
   isStandalone: boolean;
   libraryName: string | undefined;
-  dialect: Dialect;
 }
 
 export type BootstrapFailure =
@@ -65,7 +61,6 @@ export function bootstrapEmitter<T extends object>(
     namespaceGroups,
     isStandalone,
     libraryName: config.libraryName,
-    dialect: config.dialect ?? "postgres",
   };
 }
 

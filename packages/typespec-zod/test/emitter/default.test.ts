@@ -17,7 +17,7 @@ describe("Zod emitter end-to-end", () => {
 
     expect(output).toContain("export const RegisterFormSchema = z.object(");
     expect(output).toContain("name: z.string().min(1)");
-    expect(output).toContain("contact: z.string().email()");
+    expect(output).toContain("contact: z.email()");
     expect(output).toContain("password: z.string().min(8)");
     expect(output).toContain("export type RegisterForm = z.infer<typeof RegisterFormSchema>;");
     expect(output).toContain("export const RegisterFormMeta = {");
@@ -63,9 +63,9 @@ describe("Zod emitter end-to-end", () => {
     );
 
     expect(output).toContain("name: z.string().min(1).max(255)");
-    expect(output).toContain("contact: z.string().email()");
+    expect(output).toContain("contact: z.email()");
     expect(output).toContain("age: z.number().int().nonnegative().lte(200).optional()");
-    expect(output).toContain("code: z.string().regex(/^[A-Za-z]+$/).optional()");
+    expect(output).toContain('code: z.string().regex(new RegExp("^[A-Za-z]+$")).optional()');
     expect(output).toContain('bio: z.string().optional().describe("The user bio")');
   });
 

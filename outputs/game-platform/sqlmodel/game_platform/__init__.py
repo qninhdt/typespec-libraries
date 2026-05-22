@@ -10,7 +10,7 @@ from . import forms
 from . import shared
 from . import worlds
 
-metadata = SQLModel.metadata
+target_metadata = SQLModel.metadata
 
 __all__ = [
     "accounts",
@@ -20,5 +20,5 @@ __all__ = [
     "forms",
     "shared",
     "worlds",
-    "metadata",
+    "target_metadata",
 ]

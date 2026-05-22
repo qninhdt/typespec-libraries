@@ -22,7 +22,8 @@ func (Timestamped) Fields() []ent.Field {
 	return []ent.Field{
 		field.UUID("id", uuid.UUID{}).
 			Default(uuid.New).
-			Comment("Unique identifier shared by most persisted records."),
+			Comment("Unique identifier shared by most persisted records.").
+			Immutable(),
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().

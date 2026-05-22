@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -39,11 +40,19 @@ class ShareGrant(Entity, table=True):
 
     resource_node_id: UUID = Field(
         sa_column=Column(
-            ForeignKey("vault_nodes.id", ondelete="CASCADE"), nullable=False, index=True
+            PG_UUID(as_uuid=True),
+            ForeignKey("vault_nodes.id", ondelete="CASCADE"),
+            nullable=False,
+            index=True,
         )
     )
     granted_by: UUID = Field(
-        index=True, foreign_key="user_accounts.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("user_accounts.id"),
+            nullable=False,
+            index=True,
+        )
     )
     subject_kind: ShareSubjectKind = Field(
         sa_column=Column(SAEnum(ShareSubjectKind), nullable=False)

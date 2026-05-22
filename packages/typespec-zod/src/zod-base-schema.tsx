@@ -38,6 +38,7 @@ import {
   zodMemberExpr,
 } from "./utils.js";
 import { reportDiagnostic } from "./lib.js";
+import { getZodOptions } from "./context/zod-options.js";
 
 /**
  * Returns the identifier parts for the base Zod schema for a given TypeSpec
@@ -74,7 +75,7 @@ export function zodBaseSchemaParts(type: Type) {
         code: "unsupported-type",
         target: type,
       });
-      return zodMemberExpr(callPart("any"));
+      return zodMemberExpr(callPart("never"));
   }
 }
 
@@ -109,7 +110,7 @@ function scalarBaseType($: Typekit, type: Scalar): Children {
     return zodMemberExpr(idPart("coerce"), callPart("date"));
   }
   if ($.scalar.extendsPlainTime(type)) {
-    return zodMemberExpr(callPart("string"), callPart("time"));
+    return zodMemberExpr(idPart("iso"), callPart("time"));
   }
   if ($.scalar.extendsUtcDateTime(type)) {
     return datetimeScalarBaseType($, type);
@@ -125,7 +126,7 @@ function scalarBaseType($: Typekit, type: Scalar): Children {
     code: "unsupported-type",
     target: type,
   });
-  return zodMemberExpr(callPart("any"));
+  return zodMemberExpr(callPart("never"));
 }
 
 function enumBaseType(type: Enum) {
@@ -223,7 +224,7 @@ function modelBaseType(type: Model) {
     return (
       <MemberExpression>
         <MemberExpression.Part refkey={refkey(sourceModels[0], refkeySym)} />
-        <MemberExpression.Part id="safeExtend" />
+        <MemberExpression.Part id="extend" />
         <MemberExpression.Part args={[memberObject]} />
       </MemberExpression>
     );
@@ -332,7 +333,7 @@ function unionBaseType(type: Union) {
 
 function intrinsicBaseType(type: Type) {
   if (type.kind !== "Intrinsic") {
-    return zodMemberExpr(callPart("any"));
+    return zodMemberExpr(callPart("never"));
   }
 
   switch (type.name) {
@@ -345,7 +346,7 @@ function intrinsicBaseType(type: Type) {
     case "void":
       return zodMemberExpr(callPart("void"));
     default:
-      return zodMemberExpr(callPart("any"));
+      return zodMemberExpr(callPart("never"));
   }
 }
 
@@ -356,43 +357,62 @@ function numericScalarBaseType($: Typekit, type: Scalar): Children {
 
   const usesNumberSchema =
     $.scalar.extendsInt32(type) || $.scalar.extendsUint32(type) || $.scalar.extendsSafeint(type);
-  return usesNumberSchema
-    ? zodMemberExpr(callPart("number"), callPart("int"))
-    : zodMemberExpr(callPart("bigint"));
+  if (usesNumberSchema) {
+    return zodMemberExpr(callPart("number"), callPart("int"));
+  }
+
+  const strategy = getZodOptions($.program)["int64-strategy"] ?? "string";
+  switch (strategy) {
+    case "bigint":
+      return zodMemberExpr(callPart("bigint"));
+    case "number":
+      // Note: values >2^53 will lose precision when parsed as JS number.
+      return zodMemberExpr(callPart("number"), callPart("int"));
+    case "string":
+    default:
+      return zodMemberExpr(callPart("string"), callPart("regex", "/^-?\\d+$/"));
+  }
 }
 
 function stringScalarBaseType($: Typekit, type: Scalar): Children {
   // Check scalar name directly for DB scalars that have Zod native methods
-  if (type.name === "uuid") return zodMemberExpr(callPart("string"), callPart("uuid"));
+  if (type.name === "uuid") return zodMemberExpr(callPart("uuid"));
 
   switch (type.name) {
-    // Zod has native support for these validators
+    // Zod 4 has top-level functions for these validators
     case "email":
-      return zodMemberExpr(callPart("string"), callPart("email"));
+      return zodMemberExpr(callPart("email"));
     case "url":
-      return zodMemberExpr(callPart("string"), callPart("url"));
+      return zodMemberExpr(callPart("url"));
     case "ipv4":
-      return zodMemberExpr(callPart("string"), callPart("ipv4"));
+      return zodMemberExpr(callPart("ipv4"));
     case "ipv6":
-      return zodMemberExpr(callPart("string"), callPart("ipv6"));
+      return zodMemberExpr(callPart("ipv6"));
     case "ip":
-      return zodMemberExpr(callPart("string"), callPart("ip"));
+      // Zod 4 removed `z.ip()` in favor of separate ipv4/ipv6 functions.
+      return zodMemberExpr(
+        callPart("union", <ArrayExpression>
+          <For each={["ipv4", "ipv6"]} comma line>
+            {(name: string) => zodMemberExpr(callPart(name))}
+          </For>
+        </ArrayExpression>),
+      );
     case "cidr":
-      return zodMemberExpr(callPart("string"), callPart("cidr"));
+      return zodMemberExpr(callPart("cidr"));
     case "base64":
-      return zodMemberExpr(callPart("string"), callPart("base64"));
+      return zodMemberExpr(callPart("base64"));
     case "cuid":
-      return zodMemberExpr(callPart("string"), callPart("cuid"));
+      return zodMemberExpr(callPart("cuid"));
     case "cuid2":
-      return zodMemberExpr(callPart("string"), callPart("cuid2"));
+      return zodMemberExpr(callPart("cuid2"));
     case "ulid":
-      return zodMemberExpr(callPart("string"), callPart("ulid"));
+      return zodMemberExpr(callPart("ulid"));
     case "nanoid":
-      return zodMemberExpr(callPart("string"), callPart("nanoid"));
+      return zodMemberExpr(callPart("nanoid"));
     case "jwt":
-      return zodMemberExpr(callPart("string"), callPart("jwt"));
+      return zodMemberExpr(callPart("jwt"));
     case "emoji":
-      return zodMemberExpr(callPart("string"), callPart("emoji"));
+      return zodMemberExpr(callPart("emoji"));
     // No native Zod method — constraints from decorators on the scalar
     // (e.g. @pattern on mac/hostname) will be applied via zodConstraintsParts.
     case "mac":
@@ -402,7 +422,7 @@ function stringScalarBaseType($: Typekit, type: Scalar): Children {
   }
 
   return $.scalar.extendsUrl(type)
-    ? zodMemberExpr(callPart("string"), callPart("url"))
+    ? zodMemberExpr(callPart("url"))
     : zodMemberExpr(callPart("string"));
 }
 
@@ -416,7 +436,7 @@ function datetimeScalarBaseType($: Typekit, type: Scalar): Children {
     return scalarBaseType($, encoding.type);
   }
   if (encoding.encoding === "rfc3339") {
-    return zodMemberExpr(callPart("string"), callPart("datetime"));
+    return zodMemberExpr(idPart("iso"), callPart("datetime"));
   }
   return scalarBaseType($, encoding.type);
 }
@@ -428,14 +448,14 @@ function offsetDateTimeScalarBaseType($: Typekit, type: Scalar): Children {
   }
 
   return encoding.encoding === "rfc3339"
-    ? zodMemberExpr(callPart("string"), callPart("datetime"))
+    ? zodMemberExpr(idPart("iso"), callPart("datetime"))
     : scalarBaseType($, encoding.type);
 }
 
 function durationScalarBaseType($: Typekit, type: Scalar): Children {
   const encoding = $.scalar.getEncoding(type);
   if (!encoding || encoding.encoding === "ISO8601") {
-    return zodMemberExpr(callPart("string"), callPart("duration"));
+    return zodMemberExpr(idPart("iso"), callPart("duration"));
   }
   return scalarBaseType($, encoding.type);
 }

@@ -38,7 +38,7 @@ func (Subscription) Fields() []ent.Field {
 	return []ent.Field{
 		field.Enum("plan").Values("free", "basic", "premium", "enterprise").
 			Comment("Selected plan tier."),
-		field.Other("monthly_price", decimal.Decimal{}).SchemaType(map[string]string{dialect.Postgres: "numeric"}).
+		field.Other("monthly_price", decimal.Decimal{}).
 			SchemaType(map[string]string{dialect.Postgres: "numeric(10,2)"}).
 			Comment("Monthly price stored as NUMERIC(10,2) to avoid floating-point drift."),
 		field.Time("start_date").

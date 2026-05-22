@@ -6,7 +6,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, Enum as SAEnum, ForeignKey, Index, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.timestamped import Timestamped
 
@@ -87,7 +87,7 @@ class World(Timestamped, table=True):
         )
     )
     # Optional JSON settings payload for custom generation behavior.
-    settings: dict[str, Any] | None = Field(
+    settings: Any | None = Field(
         default=None,
         sa_column=Column(
             JSONB,
@@ -96,6 +96,7 @@ class World(Timestamped, table=True):
     )
     owner_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
             nullable=False,
             index=True,

@@ -6,6 +6,7 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -21,6 +22,7 @@ class AuthSession(Entity, table=True):
 
     account_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("user_accounts.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

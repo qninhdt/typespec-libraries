@@ -5,8 +5,8 @@ from uuid import UUID
 from typing import Any
 from enum import Enum
 
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy import Column, Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 from ..shared.entity import Entity
 
@@ -24,14 +24,18 @@ class AuditEvent(Entity, table=True):
 
     __tablename__ = "audit_events"  # type: ignore
 
-    actor_id: UUID | None = Field(default=None, index=True)
+    actor_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True), index=True)
+    )
     action: str = Field(max_length=160, sa_column_kwargs={"nullable": False})
     resource_type: str = Field(max_length=80, sa_column_kwargs={"nullable": False})
-    resource_id: UUID | None = Field(default=None)
+    resource_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     severity: AuditSeverity = Field(
         sa_column=Column(SAEnum(AuditSeverity), nullable=False, server_default="info")
     )
     request_id: str | None = Field(default=None, max_length=255)
     ip_address_hash: str | None = Field(default=None, max_length=255)
     user_agent_hash: str | None = Field(default=None, max_length=255)
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metadata_json: Any | None = Field(default=None, sa_column=Column(JSONB))

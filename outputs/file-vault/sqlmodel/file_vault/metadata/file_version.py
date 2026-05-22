@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Column, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -28,17 +29,25 @@ class FileVersion(Entity, table=True):
 
     file_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("file_metadata.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
     version_number: int = Field(sa_column_kwargs={"nullable": False})
-    storage_object_id: UUID = Field(index=True, sa_column_kwargs={"nullable": False})
+    storage_object_id: UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    )
     size_bytes: int = Field(sa_column_kwargs={"nullable": False})
     sha256: str = Field(max_length=128, sa_column_kwargs={"nullable": False})
     created_by: UUID = Field(
-        index=True, foreign_key="user_accounts.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("user_accounts.id"),
+            nullable=False,
+            index=True,
+        )
     )
 
     # ─── Relationships ─────────────────────

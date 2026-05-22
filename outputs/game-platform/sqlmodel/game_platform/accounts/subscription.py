@@ -15,7 +15,9 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Numeric,
+    text,
 )
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.timestamped import Timestamped
 
@@ -81,12 +83,13 @@ class Subscription(Timestamped, table=True):
     is_active: bool = Field(
         sa_column_kwargs={
             "nullable": False,
-            "server_default": "true",
+            "server_default": text("true"),
             "comment": "Fast boolean used by feature gates and entitlement checks.",
         }
     )
     user_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
             nullable=False,
             index=True,

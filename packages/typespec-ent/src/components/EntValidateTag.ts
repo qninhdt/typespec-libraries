@@ -197,26 +197,38 @@ function appendScalarFallbackValidators(
   },
 ): void {
   let current: Scalar | undefined = scalar;
+  let hasPattern = direct.hasPattern;
+  let hasMaxLength = direct.hasMaxLength;
+  let hasMinLength = direct.hasMinLength;
+  let hasMaxValue = direct.hasMaxValue;
+  let hasMinValue = direct.hasMinValue;
   while (current) {
     const pattern = tsGetPattern(program, current);
-    if (pattern && !direct.hasPattern) {
+    if (pattern && !hasPattern) {
       parts.push(`regexp=${pattern}`);
-      return;
+      hasPattern = true;
     }
     const maxLen = tsGetMaxLength(program, current);
-    if (maxLen !== undefined && !direct.hasMaxLength) parts.push(`max=${maxLen}`);
+    if (maxLen !== undefined && !hasMaxLength) {
+      parts.push(`max=${maxLen}`);
+      hasMaxLength = true;
+    }
     const minLen = tsGetMinLength(program, current);
-    if (minLen !== undefined && !direct.hasMinLength) parts.push(`min=${minLen}`);
+    if (minLen !== undefined && !hasMinLength) {
+      parts.push(`min=${minLen}`);
+      hasMinLength = true;
+    }
     const maxVal = tsGetMaxValue(program, current);
-    if (maxVal !== undefined && !direct.hasMaxValue) parts.push(`lte=${maxVal}`);
+    if (maxVal !== undefined && !hasMaxValue) {
+      parts.push(`lte=${maxVal}`);
+      hasMaxValue = true;
+    }
     const minVal = tsGetMinValue(program, current);
-    if (minVal !== undefined && !direct.hasMinValue) parts.push(`gte=${minVal}`);
-    if (
-      maxLen !== undefined ||
-      minLen !== undefined ||
-      maxVal !== undefined ||
-      minVal !== undefined
-    ) {
+    if (minVal !== undefined && !hasMinValue) {
+      parts.push(`gte=${minVal}`);
+      hasMinValue = true;
+    }
+    if (hasPattern && hasMaxLength && hasMinLength && hasMaxValue && hasMinValue) {
       return;
     }
     current = current.baseScalar;

@@ -25,5 +25,5 @@ class ApprovalRequestView(BaseModel):
     action: str = Field(...)
     resource_type: str = Field(...)
     resource_id: UUID = Field(...)
-    proposal_json: dict[str, Any] = Field(...)
+    proposal_json: Any = Field(...)
     decision: ApprovalDecisionCode = Field(...)

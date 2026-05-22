@@ -8,10 +8,11 @@ import { Typekit } from "@typespec/compiler/typekit";
 import { useTsp } from "@typespec/emitter-framework";
 import { ValueExpression } from "@typespec/emitter-framework/typescript";
 import { callPart } from "./utils.js";
+import { getZodOptions } from "./context/zod-options.js";
 
 export function zodMemberParts(member?: ModelProperty) {
   const { $ } = useTsp();
-  return [...optionalParts(member), ...defaultParts($, member)];
+  return [...defaultParts($, member), ...optionalParts(member)];
 }
 
 function defaultParts($: Typekit, member?: ModelProperty) {
@@ -52,14 +53,24 @@ function renderNumericDefault(
   member: ModelProperty,
   value: { toString(): string },
 ): string {
-  if (usesBigIntSchema($, member)) {
-    return `${value.toString()}n`;
+  const wide = isWideIntegerSchema($, member);
+  if (!wide) {
+    return value.toString();
   }
 
-  return value.toString();
+  const strategy = getZodOptions($.program)["int64-strategy"] ?? "string";
+  switch (strategy) {
+    case "bigint":
+      return `${value.toString()}n`;
+    case "string":
+      return JSON.stringify(value.toString());
+    case "number":
+    default:
+      return value.toString();
+  }
 }
 
-function usesBigIntSchema($: Typekit, member: ModelProperty): boolean {
+function isWideIntegerSchema($: Typekit, member: ModelProperty): boolean {
   let type = member.type;
   while (type.kind === "ModelProperty") {
     type = type.type;

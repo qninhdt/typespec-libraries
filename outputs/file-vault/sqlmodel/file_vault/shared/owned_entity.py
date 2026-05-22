@@ -3,6 +3,8 @@
 
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 from .soft_deletable_entity import SoftDeletableEntity
 
@@ -10,4 +12,6 @@ from .soft_deletable_entity import SoftDeletableEntity
 class OwnedEntity(SoftDeletableEntity):
     """Base for rows owned by an account."""
 
-    owner_id: UUID = Field(index=True, sa_column_kwargs={"nullable": False})
+    owner_id: UUID = Field(
+        sa_column=Column(PG_UUID(as_uuid=True), nullable=False, index=True)
+    )

@@ -4,7 +4,6 @@ import { z } from "zod";
 export const CreateInvitationFormSchema = z
   .object({
     inviteeEmail: z
-      .string()
       .email()
       .max(320)
 

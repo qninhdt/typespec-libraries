@@ -245,9 +245,9 @@ That keeps validation, TypeScript inference, and form hints sourced from one sch
 
 ## Important Boundaries
 
-- only default form models and `` schemas are emitted
+- only default form models and `@tableMixin` schemas are emitted
 - relation-heavy `@table` models are not the target of this emitter
-- if a default form model references a shape that cannot be represented cleanly as Zod output, fix the source schema instead of expecting silent fallback behavior
+- if a default form model references a shape that cannot be represented cleanly as Zod output, emission fails; fix the source schema instead of expecting silent fallback behavior
 
 ## Common Diagnostics And Gotchas
 
@@ -255,6 +255,8 @@ That keeps validation, TypeScript inference, and form hints sourced from one sch
   Standalone package generation requires `library-name`.
 - filtered dependency failures
   A selected default form model still needs every required dependency included by the selector set.
+- `unsupported-type`
+  The TypeSpec field could not be mapped to a Zod schema and emission fails.
 - table-only shapes leaking into forms
   If a public form model starts to mirror a full persistence model, prefer writing an explicit default form model rather than reusing relation-heavy table shapes directly.
 
@@ -270,7 +272,8 @@ The repo verifies generated Zod output with:
 
 `sh
 pnpm run compile-examples
-pnpm --dir outputs/zod exec tsc -p tsconfig.json
+pnpm --dir outputs/file-vault/zod exec tsc -p tsconfig.json
+pnpm --dir outputs/game-platform/zod exec tsc -p tsconfig.json
 `
 
 ## Related Docs

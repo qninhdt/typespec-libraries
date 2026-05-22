@@ -4,7 +4,6 @@ import { z } from "zod";
 export const TimestampedSchema = z
   .object({
     id: z
-      .string()
       .uuid()
       .describe("Unique identifier shared by most persisted records."),
     createdAt: z.coerce

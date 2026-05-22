@@ -5,7 +5,7 @@ export const CreateWorldFormSchema = z
   .object({
     name: z.string().max(200),
     prompt: z.string(),
-    ownerEmail: z.string().email().max(320),
+    ownerEmail: z.email().max(320),
     starterTag: z.string().max(100),
     featuredNpc: z.string().max(200),
     summary: z

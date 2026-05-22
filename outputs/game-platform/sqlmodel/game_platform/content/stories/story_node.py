@@ -5,7 +5,7 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Column, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ...shared.world_owned import WorldOwned
 
@@ -31,19 +31,19 @@ class StoryNode(WorldOwned, table=True):
         },
     )
     # Content pool inherited from all ancestors.
-    pool: dict[str, Any] = Field(
+    pool: Any = Field(
         sa_column=Column(
             JSONB, nullable=False, comment="Content pool inherited from all ancestors."
         )
     )
     # Content introduced by this specific node.
-    new_content: dict[str, Any] = Field(
+    new_content: Any = Field(
         sa_column=Column(
             JSONB, nullable=False, comment="Content introduced by this specific node."
         )
     )
     # IDs of lazily-expanded child nodes.
-    child_ids: dict[str, Any] = Field(
+    child_ids: Any = Field(
         sa_column=Column(
             JSONB, nullable=False, comment="IDs of lazily-expanded child nodes."
         )
@@ -58,19 +58,20 @@ class StoryNode(WorldOwned, table=True):
     )
     parent_id: UUID | None = Field(
         default=None,
-        sa_column=Column(ForeignKey("story_nodes.id", ondelete="CASCADE"), index=True),
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("story_nodes.id", ondelete="CASCADE"),
+            index=True,
+        ),
     )
 
     # ─── Relationships ─────────────────────
     # Owning world.
     world: World | None = Relationship()
     # Parent story node.
-    parent: "StoryNode | None" = Relationship(
+    parent: StoryNode | None = Relationship(
         back_populates="children",
         sa_relationship_kwargs={"remote_side": "StoryNode.id"},
     )
     # Child nodes reachable from this node.
-    children: list[StoryNode] = Relationship(
-        back_populates="parent",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
-    )
+    children: list[StoryNode] = Relationship(back_populates="parent")

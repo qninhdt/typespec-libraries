@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -33,17 +34,23 @@ class UploadSession(Entity, table=True):
 
     account_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("user_accounts.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
     bucket_id: UUID = Field(
-        index=True,
-        foreign_key="storage_buckets.id",
-        sa_column_kwargs={"nullable": False},
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("storage_buckets.id"),
+            nullable=False,
+            index=True,
+        )
     )
-    storage_object_id: UUID | None = Field(default=None, index=True)
+    storage_object_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True), index=True)
+    )
     file_name: str = Field(max_length=240, sa_column_kwargs={"nullable": False})
     expected_size_bytes: int = Field(sa_column_kwargs={"nullable": False})
     state: UploadState = Field(

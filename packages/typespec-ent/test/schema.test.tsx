@@ -107,12 +107,135 @@ describe("Ent schema generation", () => {
 
     expect(user).toContain('edge.To("posts", Post.Type)');
     expect(user).toContain('StorageKey(edge.Column("owner_id"))');
-    expect(user).toContain('edge.To("badges", Badge.Type)');
-    expect(user).toContain('StorageKey(edge.Table("user_badges"))');
+    // Badge < User alphabetically, so Badge owns the join table; the User
+    // side becomes the inverse and emits edge.From(...).Ref("users").
+    expect(user).toContain('edge.From("badges", Badge.Type)');
+    expect(user).toContain('Ref("users")');
     expect(post).toContain('edge.From("owner", User.Type)');
     expect(post).toContain('Ref("posts")');
     expect(post).toContain('Field("owner_id")');
     expect(post).toContain("Required()");
     expect(post).toContain("Annotations(entsql.OnDelete(entsql.Cascade))");
+  });
+
+  it("emits @onDelete annotation; @onUpdate is recorded but not surfaced (entsql lacks OnUpdate)", async () => {
+    const post = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("owner")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        ownerId: uuid;
+        @foreignKey("ownerId")
+        @onDelete("CASCADE")
+        @onUpdate("CASCADE")
+        owner: User;
+      }
+    `,
+      "post.go",
+    );
+
+    expect(post).toContain("entsql.OnDelete(entsql.Cascade)");
+    expect(post).not.toContain("entsql.OnUpdate(");
+  });
+
+  it("emits no entsql annotation when only @onUpdate is set (Ent SDK has no OnUpdate)", async () => {
+    const post = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("owner")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        ownerId: uuid;
+        @foreignKey("ownerId")
+        @onUpdate("SET NULL")
+        owner?: User;
+      }
+    `,
+      "post.go",
+    );
+
+    expect(post).not.toContain("entsql.OnUpdate(");
+    expect(post).not.toContain("entsql.OnDelete(");
+  });
+
+  it("does not emit a column for @ignore'd properties", async () => {
+    const output = await emitGoFile(
+      `
+      @table("users")
+      model User {
+        @key id: uuid;
+        email: string;
+        @ignore secrets: Record<unknown>;
+      }
+    `,
+      "user.go",
+    );
+
+    expect(output).toContain('field.UUID("id"');
+    expect(output).toContain('field.String("email")');
+    expect(output).not.toContain("secrets");
+    expect(output).not.toContain('field.JSON("secrets"');
+  });
+
+  it("emits asymmetric many-to-many edges (To on owner, From on inverse)", async () => {
+    const a = await emitGoFile(
+      `
+      @table
+      model AModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        bs: BModel[];
+      }
+      @table
+      model BModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        as: AModel[];
+      }
+    `,
+      "a_model.go",
+    );
+    const b = await emitGoFile(
+      `
+      @table
+      model AModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        bs: BModel[];
+      }
+      @table
+      model BModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        as: AModel[];
+      }
+    `,
+      "b_model.go",
+    );
+
+    // AModel < BModel, so AModel owns the relation
+    expect(a).toContain('edge.To("bs", BModel.Type)');
+    expect(a).toContain('StorageKey(edge.Table("a_b_join")');
+    expect(a).toContain("edge.Columns(");
+    expect(a).not.toContain('edge.From("bs"');
+
+    // BModel is the inverse side
+    expect(b).toContain('edge.From("as", AModel.Type)');
+    expect(b).toContain('Ref("bs")');
+    expect(b).not.toContain('edge.To("as"');
+    expect(b).not.toContain("StorageKey(edge.Table(");
   });
 });

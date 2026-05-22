@@ -5,7 +5,6 @@ package collaboration
 
 // CreateInvitationForm Form payload for creating an invitation. Omits `@table`, so no DB schema is generated.
 type CreateInvitationForm struct {
-
 	// Email address of the invited collaborator. Inherits validators from Accounts.User.email.
 	InviteeEmail string `validate:"required,max=320" json:"inviteeEmail" form:"inviteeEmail,title=Invitee Email,placeholder=friend@example.com"`
 	// Name of the world to share. Inherits validators from Worlds.World.name.

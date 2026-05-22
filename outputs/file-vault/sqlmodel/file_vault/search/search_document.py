@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -33,6 +33,7 @@ class SearchDocument(Entity, table=True):
 
     file_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("file_metadata.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -41,6 +42,7 @@ class SearchDocument(Entity, table=True):
     )
     owner_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("user_accounts.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -58,7 +60,7 @@ class SearchDocument(Entity, table=True):
     content_version: int = Field(
         sa_column_kwargs={"nullable": False, "server_default": "1"}
     )
-    tags_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    tags_json: Any | None = Field(default=None, sa_column=Column(JSONB))
 
     # ─── Relationships ─────────────────────
     file: FileMetadata | None = Relationship()

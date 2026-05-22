@@ -56,7 +56,7 @@ describe("Zod string constraints", () => {
       "User.ts",
     );
 
-    expect(output).toContain(".regex(/^a\\/b$/)");
+    expect(output).toContain('.regex(new RegExp("^a/b$"))');
   });
 
   it("generates .email() for email scalar", async () => {

@@ -5,6 +5,7 @@ import {
   getMaxValue,
   getPattern,
   type Model,
+  type ModelProperty,
   type Program,
   type Scalar,
   walkPropertiesInherited,
@@ -18,13 +19,47 @@ export function pythonStringLiteral(value: string): string {
   return JSON.stringify(value);
 }
 
+const SQL_CALL_EXPRESSION = /^[A-Za-z_]\w*\s*\(.*\)$/;
+
+export function renderServerDefault(
+  _program: Program,
+  prop: ModelProperty,
+  value: string,
+  saImports: Set<string>,
+): string {
+  const propType = prop.type;
+  const scalarName =
+    propType.kind === "Scalar" ? (getOrmScalarName(propType) ?? propType.name) : undefined;
+
+  if (scalarName === "boolean" && (value === "true" || value === "false")) {
+    saImports.add("sqlalchemy.text");
+    return `text(${pythonStringLiteral(value)})`;
+  }
+
+  if (typeof value === "string" && SQL_CALL_EXPRESSION.test(value.trim())) {
+    saImports.add("sqlalchemy.text");
+    return `text(${pythonStringLiteral(value)})`;
+  }
+
+  return pythonStringLiteral(value);
+}
+
 export function pythonTripleQuotedString(value: string): string {
   return `"""${value.replaceAll("\\", "\\\\").replaceAll('"""', '\\"\\"\\"')}"""`;
 }
 
+const PYTHON_KEYWORDS = new Set([
+  "False", "None", "True", "and", "as", "assert", "async", "await",
+  "break", "class", "continue", "def", "del", "elif", "else", "except",
+  "finally", "for", "from", "global", "if", "import", "in", "is",
+  "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
+  "while", "with", "yield", "match", "case",
+]);
+
 export function toPythonIdentifier(name: string): string {
   const normalized = name.replaceAll(/[^\w]/g, "_");
-  return /^\d/.test(normalized) ? `_${normalized}` : normalized;
+  const prefixed = /^\d/.test(normalized) ? `_${normalized}` : normalized;
+  return PYTHON_KEYWORDS.has(prefixed) ? `${prefixed}_` : prefixed;
 }
 
 export function serializeColumnKwargs(columnArgs: string[]): string {
@@ -55,7 +90,9 @@ export function promoteFieldArgsToColumn(
         saImports.add("sqlalchemy.ForeignKey");
         columnArgs.unshift(`ForeignKey("${match[1]}")`);
       }
-    } else if (a.startsWith("nullable=") || a.startsWith("server_default=")) {
+    } else if (a.startsWith("nullable=")) {
+      columnArgs.push(a);
+    } else if (a.startsWith("server_default=")) {
       continue;
     } else {
       filtered.push(a);

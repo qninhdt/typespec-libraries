@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -38,6 +39,7 @@ class NotificationDelivery(Entity, table=True):
 
     notification_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("notifications.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

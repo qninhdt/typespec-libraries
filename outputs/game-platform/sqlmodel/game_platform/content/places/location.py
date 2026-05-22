@@ -34,7 +34,7 @@ class Location(WorldOwned, table=True):
         )
     )
     # Bounding box or point stored as GeoJSON.
-    coordinates: dict[str, Any] | None = Field(
+    coordinates: Any | None = Field(
         default=None,
         sa_column=Column(JSONB, comment="Bounding box or point stored as GeoJSON."),
     )

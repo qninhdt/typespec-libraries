@@ -9,7 +9,6 @@ import (
 
 // PublicUser Public user record with sensitive and operational fields removed. Kept explicit so generated form schemas stay free of table-only relations.
 type PublicUser struct {
-
 	// Unique identifier shared by most persisted records.
 	ID uuid.UUID `validate:"required" json:"id"`
 	// Email address used for login and invitations. Other namespaces reference this via lookup types.

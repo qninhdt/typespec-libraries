@@ -9,8 +9,10 @@ import type { Children } from "@alloy-js/core/jsx-runtime";
 import {
   getMaxLength as tsGetMaxLength,
   getMaxValue as tsGetMaxValue,
+  getMaxValueExclusive as tsGetMaxValueExclusive,
   getMinLength as tsGetMinLength,
   getMinValue as tsGetMinValue,
+  getMinValueExclusive as tsGetMinValueExclusive,
   getPattern as tsGetPattern,
   type Model,
   type ModelProperty,
@@ -24,8 +26,10 @@ import {
   getOrmScalarName,
   getMaxLength,
   getMaxValue,
+  getMaxValueExclusive,
   getMinLength,
   getMinValue,
+  getMinValueExclusive,
   getPattern,
   getPlaceholder,
   getEnumMembers,
@@ -351,11 +355,19 @@ function pushValidationFieldArgs(
   const minLen = usesScalarAlias ? tsGetMinLength(program, prop) : getMinLength(program, prop);
   const minVal = usesScalarAlias ? tsGetMinValue(program, prop) : getMinValue(program, prop);
   const maxVal = usesScalarAlias ? tsGetMaxValue(program, prop) : getMaxValue(program, prop);
+  const minValExcl = usesScalarAlias
+    ? tsGetMinValueExclusive(program, prop)
+    : getMinValueExclusive(program, prop);
+  const maxValExcl = usesScalarAlias
+    ? tsGetMaxValueExclusive(program, prop)
+    : getMaxValueExclusive(program, prop);
   const pattern = usesScalarAlias ? tsGetPattern(program, prop) : getPattern(program, prop);
 
   if (maxLen !== undefined) fieldArgs.push(`max_length=${maxLen}`);
   if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);
-  if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
-  if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
+  if (minValExcl !== undefined) fieldArgs.push(`gt=${minValExcl}`);
+  else if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
+  if (maxValExcl !== undefined) fieldArgs.push(`lt=${maxValExcl}`);
+  else if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
   if (pattern !== undefined) fieldArgs.push(`pattern=${pythonStringLiteral(pattern)}`);
 }

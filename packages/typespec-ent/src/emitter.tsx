@@ -42,7 +42,6 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
-  const dialect = options.dialect ?? "postgres";
   const tables = selection.models.filter((model) => model.kind === "table");
   const schemaModels = selection.models.filter(
     (model) => model.kind === "table" || model.kind === "mixin",
@@ -52,10 +51,10 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
     <SourceDirectory path=".">
       {tables.length > 0 && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
-          {generateAtlasHcl(dialect)}
+          {generateAtlasHcl()}
         </SourceFile>
       )}
-      {isStandalone && (
+      {isStandalone && tables.length > 0 && (
         <>
           <SourceFile path="go.mod" filetype="go" printWidth={9999}>
             {`module ${libraryName}
@@ -97,6 +96,7 @@ package ent
       {namespaceGroups.map((models) => {
         const dataModels = models.filter((model) => model.kind === "data");
         const enumFile = generateEnumsFile(dataModels);
+        if (!enumFile && dataModels.length === 0) return null;
         return (
           <SourceDirectory path={models[0].namespaceDir}>
             {enumFile && (
@@ -129,7 +129,7 @@ package ent
     reportDiagnostic(context.program, {
       code: "emit-write-failed",
       target: context.program.getGlobalNamespaceType(),
-      format: { fileName: outputDir, error: e instanceof Error ? e.message : String(e) },
+      format: { outputDir, error: e instanceof Error ? e.message : String(e) },
     });
   }
 }
@@ -156,24 +156,18 @@ ${enumLines.join("\n")}
 `;
 }
 
-function generateAtlasHcl(dialect: string): string {
-  const devUrl = dialect === "mysql"
-    ? "docker://mysql/8/dev"
-    : dialect === "sqlite"
-      ? "sqlite://file?mode=memory"
-      : "docker://postgres/16/dev?search_path=public";
-
+function generateAtlasHcl(): string {
   return `env "ent" {
   schema {
     src = "ent://ent/schema"
   }
-  dev = "${devUrl}"
+  dev = "docker://postgres/16/dev?search_path=public"
   migration {
     dir = "file://migrations"
   }
   format {
     migrate {
-      diff = "{{ sql . \\"  \\" }}"
+      diff = "{{ sql . \"  \" }}"
     }
   }
 }

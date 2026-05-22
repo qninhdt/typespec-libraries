@@ -24,6 +24,7 @@ import {
   getColumnName,
   getCompositeFields,
   getDefaultValue,
+  getDefaultExpression,
   getDoc,
   getForeignKeyConfig,
   getMaxLength,
@@ -65,6 +66,7 @@ import {
   serializeColumnKwargs,
   getNativePydanticType,
 } from "./PyConstants.js";
+import { renderServerDefault } from "./py-field-utils.js";
 
 export interface ResolvedForeignKeyFieldInfo {
   targetTable: string;
@@ -133,14 +135,6 @@ export function generateField(
 
   const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
 
-  if (!dbType || mapping.pyType === "Any") {
-    reportDiagnostic(program, {
-      code: "unsupported-type",
-      format: { typeName: dbType ?? prop.type.kind, propName: prop.name },
-      target: prop,
-    });
-  }
-
   for (const imp of mapping.imports) stdImports.add(imp);
 
   let pyType = mapping.pyType;
@@ -152,7 +146,8 @@ export function generateField(
   const isIndexed = isIndex(program, prop);
   // Skip unique=True if field is part of composite unique (handled by __table_args__)
   const isUnq = isUnique(program, prop) && !isPartOfCompositeUnique;
-  const defaultVal = getDefaultValue(program, prop);
+  const defaultExpr = getDefaultExpression(program, prop);
+  const defaultVal = defaultExpr ?? getDefaultValue(program, prop);
   const fk = getForeignKeyConfig(program, prop);
   const prec = getPrecision(program, prop);
   const autoCreate = isAutoCreateTime(program, prop);
@@ -207,6 +202,17 @@ export function generateField(
     pyType = `${pyType} | None`;
   }
 
+  // After custom-scalar overrides have had a chance to resolve, fire an
+  // `unsupported-type` diagnostic if we still don't know how to map the
+  // underlying TypeSpec type to a Python/SQLAlchemy type.
+  if (!dbType && !usesScalarAlias && !usesNativeScalar) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      format: { typeName: prop.type.kind, propName: prop.name },
+      target: prop,
+    });
+  }
+
   const fieldArgs: string[] = [];
   const columnArgs: string[] = [];
 
@@ -227,10 +233,11 @@ export function generateField(
   }
 
   // Nullable
-  if (!isOptional && !isPk) {
+  // PK implies not-null in SQLAlchemy, so don't repeat.
+  if (!isPk && !isOptional) {
     columnArgs.push("nullable=False");
   }
-  if (isOptional || isSoft) {
+  if ((isOptional || isSoft) && !isPk) {
     needsField.value = true;
     fieldArgs.push("default=None");
   }
@@ -257,7 +264,7 @@ export function generateField(
     if (propMaxLen !== undefined) {
       needsField.value = true;
       fieldArgs.push(`max_length=${propMaxLen}`);
-    } else if (!usesScalarAlias && dbType === "string") {
+    } else if (!usesScalarAlias && !usesNativeScalar && dbType === "string") {
       needsField.value = true;
       fieldArgs.push("max_length=255");
     }
@@ -314,7 +321,9 @@ export function generateField(
   // Default value (non-auto-timestamp)
   if (defaultVal !== undefined && !isPk && !autoCreate && !autoUpdate) {
     needsColumn.value = true;
-    columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
+    columnArgs.push(
+      `server_default=${renderServerDefault(program, prop, defaultVal, saImports)}`,
+    );
   }
 
   // Foreign key with cascade constraints
@@ -502,7 +511,9 @@ function generateArrayField(
   const defaultVal = getDefaultValue(program, prop);
   if (defaultVal !== undefined && !isPk) {
     needsColumn.value = true;
-    columnArgs.push(`server_default=${pythonStringLiteral(defaultVal)}`);
+    columnArgs.push(
+      `server_default=${renderServerDefault(program, prop, defaultVal, saImports)}`,
+    );
   }
 
   // Doc comment

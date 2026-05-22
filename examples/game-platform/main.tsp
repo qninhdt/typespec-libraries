@@ -27,7 +27,7 @@
  * - `User.credits` and `Subscription.monthlyPrice` carry named `@check(...)` constraints
  * - `User.badges` and `Badge.users` use `@manyToMany("user_badges")`
  * - `CreateInvitationForm` and `CreateWorldForm` export rich Zod metadata
- * - SQLModel package roots expose `metadata = SQLModel.metadata` for Alembic
+ * - SQLModel package roots expose `target_metadata = SQLModel.metadata` for Alembic
  * - DBML can be emitted as namespace-split files
  *
  * Useful selector experiments:

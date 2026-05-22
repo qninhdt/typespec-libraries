@@ -35,7 +35,7 @@ class Npc(WorldOwned, table=True):
         )
     )
     # Optional structured traits used during prompt assembly.
-    traits: dict[str, Any] | None = Field(
+    traits: Any | None = Field(
         default=None,
         sa_column=Column(
             JSONB, comment="Optional structured traits used during prompt assembly."

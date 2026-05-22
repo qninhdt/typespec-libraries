@@ -3,6 +3,8 @@
 
 from uuid import UUID
 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 from .timestamped import Timestamped
 
@@ -12,9 +14,10 @@ class WorldOwned(Timestamped):
 
     # Foreign key to the owning world.
     world_id: UUID = Field(
-        index=True,
-        sa_column_kwargs={
-            "nullable": False,
-            "comment": "Foreign key to the owning world.",
-        },
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            nullable=False,
+            comment="Foreign key to the owning world.",
+            index=True,
+        )
     )

@@ -6,7 +6,7 @@ const packagesDir = "packages";
 const packageNames = [
   "typespec-orm",
   "typespec-dbml",
-  "typespec-gorm",
+  "typespec-ent",
   "typespec-sqlmodel",
   "typespec-zod",
 ];

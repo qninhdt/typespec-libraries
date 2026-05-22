@@ -6,7 +6,7 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, func, Index, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -41,10 +41,11 @@ class AuditLog(SQLModel, table=True):
     )
     # Primary key of the changed entity.
     entity_id: UUID = Field(
-        sa_column_kwargs={
-            "nullable": False,
-            "comment": "Primary key of the changed entity.",
-        }
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            nullable=False,
+            comment="Primary key of the changed entity.",
+        )
     )
     # Action performed: create, update, or delete.
     action: str = Field(
@@ -55,13 +56,14 @@ class AuditLog(SQLModel, table=True):
         },
     )
     # Optional JSON snapshot or diff.
-    diff: dict[str, Any] | None = Field(
+    diff: Any | None = Field(
         default=None, sa_column=Column(JSONB, comment="Optional JSON snapshot or diff.")
     )
     # Nullable so audit history survives account deletion.
     actor_id: UUID | None = Field(
         default=None,
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("users.id", ondelete="SET NULL", onupdate="CASCADE"),
             comment="Nullable so audit history survives account deletion.",
             index=True,

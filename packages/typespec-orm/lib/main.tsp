@@ -258,6 +258,79 @@ extern dec onUpdate(
  */
 extern dec ignore(target: ModelProperty);
 
+// ─── Schema (PostgreSQL schema scope) ────────────────────────────────────────
+
+/**
+ * Specifies the PostgreSQL schema name for a `@table` model or for an entire namespace. Tables placed in a `@schema("billing")` namespace land in the `billing` schema instead of `public`. The decorator can be applied to either a model or its containing namespace; a model-level value wins.
+ */
+extern dec schema(target: Model | Namespace, name: valueof string);
+
+// ─── Default SQL expression ──────────────────────────────────────────────────
+
+/**
+ * Specifies a SQL expression used as the column default. Unlike a TypeSpec literal default (`= 0`), this lets you reference SQL functions like `gen_random_uuid()` or `now()` that the database evaluates at insert time. Mutually exclusive with literal defaults.
+ */
+extern dec defaultExpression(target: ModelProperty, expression: valueof string);
+
+// ─── Optimistic locking & audit / multi-tenant decorators ────────────────────
+
+/**
+ * Marks a property as the optimistic-locking version column. Emitters scaffold a
+ * `version_id_col` mapper arg (SQLModel) or equivalent hook (Ent). Only one
+ * column per model may carry this decorator.
+ */
+extern dec version(target: ModelProperty);
+
+/**
+ * Marks a property as an audit field. The role selects which lifecycle the
+ * column tracks: `"createdBy"` is set on insert; `"updatedBy"` is refreshed on
+ * every update. Emitters wire this through their event/hook surface.
+ */
+extern dec audit(target: ModelProperty, role: valueof "createdBy" | "updatedBy");
+
+/**
+ * Marks a property as the tenant-scope foreign key. Downstream emitters use
+ * this to scaffold multi-tenant policy / row-level security helpers. Only one
+ * column per model may carry this decorator.
+ */
+extern dec tenantId(target: ModelProperty);
+
+// ─── @@tableIndex / @@tableUnique (model-level augments) ─────────────────────
+
+/**
+ * Multi-column index on a model. Use the augment form on a table:
+ * `@@tableIndex(MyTable, ["a", "b"])`.
+ */
+extern dec tableIndex(target: Model, columns: valueof string[], name?: valueof string);
+
+/**
+ * Multi-column unique constraint on a model. Use the augment form:
+ * `@@tableUnique(MyTable, ["a", "b"])`.
+ */
+extern dec tableUnique(target: Model, columns: valueof string[], name?: valueof string);
+
+// ─── Catalog metadata ────────────────────────────────────────────────────────
+
+/**
+ * Tag a model or property for selector matching. Multiple `@tag` decorators
+ * accumulate. Tags surface to catalog tooling and can drive emitter
+ * `include` / `exclude` selectors.
+ */
+extern dec tag(target: Model | ModelProperty, name: valueof string);
+
+/**
+ * Records the owning team for a model or namespace. Catalog tools read this
+ * to attach SLA + on-call metadata to the generated schema.
+ */
+extern dec owner(target: Model | Namespace, team: valueof string);
+
+/**
+ * Records the data-classification level for a model or column (e.g. `"pii"`,
+ * `"internal"`). Treated as opaque metadata by emitters; consumed by catalog
+ * tooling and downstream policy.
+ */
+extern dec classification(target: Model | ModelProperty, level: valueof string);
+
 // ─── Data / Form Decorators ───────────────────────────────────────────────────
 
 /**

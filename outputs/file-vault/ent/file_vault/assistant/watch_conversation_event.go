@@ -3,12 +3,8 @@
 
 package assistant
 
-import (
-	"time"
-)
-
 // WatchConversationEvent WatchConversationEvent
 type WatchConversationEvent struct {
-	OccurredAt time.Time      `validate:"required" json:"occurredAt"`
-	Event      AssistantEvent `json:"event"`
+	OccurredAtIso string         `validate:"required" json:"occurredAtIso"`
+	Event         AssistantEvent `json:"event"`
 }

@@ -112,6 +112,9 @@ function collectReferencedDeclarations(
 
     switch (current.kind) {
       case "Enum":
+        if (shouldReference(program, current)) {
+          declarations.set(getDeclarationKey(current), current);
+        }
         return;
       case "Model":
         if (current.baseModel) visit(current.baseModel);

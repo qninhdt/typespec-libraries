@@ -1,17 +1,21 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.assistant.v1")
+@package({
+  name: "filevault.assistant.v1",
+})
 namespace FileVault.Assistant;
 
 model WatchConversationEvent {
-  occurredAt: utcDateTime;
+  @field(1)
+  occurredAtIso: string;
 
+  @field(2)
   event: AssistantEvent;
 }
 
-@protoService
+@Protobuf.service
 interface AssistantService {
   startConversation(...StartConversationRequest): AssistantReply;
 

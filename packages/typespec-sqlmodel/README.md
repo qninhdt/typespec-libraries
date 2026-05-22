@@ -17,8 +17,8 @@ It is designed for:
 
 - namespace-derived Python package layouts
 - explicit relation mapping
-- strict persistence behavior
-- easy migration setup through `metadata = SQLModel.metadata`
+- strict persistence behavior that fails unsupported mappings by default
+- easy migration setup through `target_metadata = SQLModel.metadata`
 
 ## Installation
 
@@ -37,9 +37,9 @@ pnpm add -D \
 Generated Python output targets the SQLModel and SQLAlchemy ecosystem.
 
 - standalone mode writes `pyproject.toml`
-- package roots export `metadata = SQLModel.metadata`
+- package roots export `target_metadata = SQLModel.metadata`
 - many-to-many shorthand generates `__associations__.py`
-- collection persistence may rely on SQLAlchemy dialect-specific types depending on the configured strategy
+- collection persistence uses PostgreSQL-oriented JSONB or ARRAY types depending on the configured strategy
 
 The repo currently verifies generated output with Python `3.10+`.
 
@@ -120,9 +120,9 @@ Rules:
 
 - namespace segments become Python package directories
 - `__init__.py` files are generated at every emitted package level
-- top-level package roots expose `metadata = SQLModel.metadata`
+- top-level package roots expose `target_metadata = SQLModel.metadata`
 
-That root-level `metadata` export is the intended Alembic integration point.
+That root-level `target_metadata` export is the intended Alembic integration point.
 
 ## Generated Package Contract
 
@@ -132,7 +132,7 @@ Standalone output typically includes:
 - namespace package folders with generated `__init__.py`
 - one module per emitted model
 - a top-level `__associations__.py` for shorthand many-to-many tables
-- a root package export for `metadata = SQLModel.metadata`
+- a root package export for `target_metadata = SQLModel.metadata`
 
 Non-standalone mode emits only the code tree and skips package metadata files.
 
@@ -235,7 +235,7 @@ Top-level package roots expose:
 `py
 from sqlmodel import SQLModel
 
-metadata = SQLModel.metadata
+target_metadata = SQLModel.metadata
 `
 
 This makes it straightforward to wire the generated package into Alembic.
@@ -243,9 +243,7 @@ This makes it straightforward to wire the generated package into Alembic.
 Example:
 
 `py
-from demo import metadata
-
-target_metadata = metadata
+from demo import target_metadata
 `
 
 ### Collection persistence
@@ -284,13 +282,14 @@ When you need payload columns on the join itself, define an explicit junction ta
 - many-to-many shorthand is for simple join tables without payload columns
 - if a join table needs extra data, model it explicitly
 - non-standalone mode emits code only and skips package metadata
+- DB cascade actions are emitted on foreign keys; ORM `delete-orphan` ownership is not inferred unless a future explicit ownership decorator exists
 
 ## Common Diagnostics And Gotchas
 
 - `standalone-requires-library-name`
   Standalone mode needs `library-name` to write a coherent Python distribution manifest.
 - `unsupported-type`
-  The TypeSpec field could not be mapped to a SQLModel or SQLAlchemy field.
+  The TypeSpec field could not be mapped to a SQLModel or SQLAlchemy field and emission fails.
 - `missing-back-reference`
   A collection relation has no inverse owner. SQLAlchemy may require additional manual configuration if you keep the model shape as-is.
 - `foreign-key-target-not-table`
@@ -299,7 +298,7 @@ When you need payload columns on the join itself, define an explicit junction ta
 Practical guidance:
 
 - keep generated packages importable on their own before wiring them into application code
-- use the exported root `metadata` in Alembic instead of manually assembling model imports
+- use the exported root `target_metadata` in Alembic instead of manually assembling model imports
 - prefer explicit data models for public-facing API shapes rather than exposing persistence models directly
 
 ## Verification
@@ -308,7 +307,7 @@ The repo verifies generated Python output with:
 
 `sh
 pnpm run compile-examples
-python -m compileall outputs/sqlmodel
+python -m compileall outputs/file-vault/sqlmodel outputs/game-platform/sqlmodel
 `
 
 ## Related Docs

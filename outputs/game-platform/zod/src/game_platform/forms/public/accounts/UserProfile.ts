@@ -4,11 +4,9 @@ import { z } from "zod";
 export const UserProfileSchema = z
   .object({
     id: z
-      .string()
       .uuid()
       .describe("Unique identifier shared by most persisted records."),
     email: z
-      .string()
       .email()
       .max(320)
 
@@ -18,7 +16,6 @@ export const UserProfileSchema = z
       .max(100)
       .describe("Display name shown throughout the UI."),
     avatarUrl: z
-      .string()
       .url()
       .max(512)
       .optional()

@@ -3,7 +3,7 @@
  *
  * Each subdirectory represents a service boundary. Tables model each service's
  * own database. Data models represent service DTOs and gRPC messages. Service
- * files apply independent protobuf packages, so the built-in protobuf emitter
+ * files apply independent protobuf packages, so the upstream protobuf emitter
  * produces one proto module per service instead of one monolithic file.
  */
 import "./shared/mixins.tsp";

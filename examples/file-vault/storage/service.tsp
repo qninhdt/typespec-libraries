@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.storage.v1")
+@package({
+  name: "filevault.storage.v1",
+})
 namespace FileVault.Storage;
 
-@protoService
+@Protobuf.service
 interface StorageService {
   beginUpload(...BeginUploadRequest): BeginUploadResponse;
 

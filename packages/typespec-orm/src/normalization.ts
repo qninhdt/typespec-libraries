@@ -132,7 +132,17 @@ export function selectorMatchesName(
   );
 }
 
+const normalizedGraphCache = new WeakMap<Program, NormalizedOrmGraph>();
+
 export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
+  const cached = normalizedGraphCache.get(program);
+  if (cached) return cached;
+  const graph = computeNormalizedOrmGraph(program);
+  normalizedGraphCache.set(program, graph);
+  return graph;
+}
+
+function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
   const entities = new Map<Model, NormalizedOrmModel>();
   const globalNamespace = program.getGlobalNamespaceType();
   const namespaceReported = new Set<string>();
@@ -271,7 +281,7 @@ export function selectModelsForEmitter(
   }
 
   const topLevelNamespaces = [...new Set(selected.map((model) => model.namespacePath[0]))]
-    .filter(Boolean)
+    .filter((segment): segment is string => Boolean(segment))
     .sort((left, right) => left.localeCompare(right));
 
   return { models: selected, byNamespace, topLevelNamespaces };
@@ -483,6 +493,7 @@ function collectTypeDependencies(
       }
       return;
     default:
+      // Intrinsic/scalar/literal/operation/etc. — no transitive ORM dependency.
       return;
   }
 }

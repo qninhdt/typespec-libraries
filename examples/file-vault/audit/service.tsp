@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.audit.v1")
+@package({
+  name: "filevault.audit.v1",
+})
 namespace FileVault.Audit;
 
-@protoService
+@Protobuf.service
 interface AuditService {
   recordEvent(...RecordAuditEventRequest): AuditEventView;
 

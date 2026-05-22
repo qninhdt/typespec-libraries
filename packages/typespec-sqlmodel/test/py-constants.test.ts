@@ -92,7 +92,7 @@ describe("promoteFieldArgsToColumn", () => {
     expect(saImports.has("sqlalchemy.ForeignKey")).toBe(true);
   });
 
-  it("drops nullable and server_default args", () => {
+  it("moves nullable to columnArgs and drops server_default", () => {
     const columnArgs: string[] = [];
     const saImports = new Set<string>();
     const result = promoteFieldArgsToColumn(
@@ -101,7 +101,7 @@ describe("promoteFieldArgsToColumn", () => {
       saImports,
     );
     expect(result).toEqual([]);
-    expect(columnArgs).toEqual([]);
+    expect(columnArgs).toEqual(["nullable=True"]);
   });
 
   it("keeps unrecognized args in filtered output", () => {

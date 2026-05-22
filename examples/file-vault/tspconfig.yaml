@@ -4,7 +4,7 @@ emit:
   - "@qninhdt/typespec-sqlmodel"
   - "@qninhdt/typespec-dbml"
   - "@qninhdt/typespec-zod"
-  - "@qninhdt/typespec-protobuf"
+  - "@typespec/protobuf"
 options:
   "@qninhdt/typespec-zod":
     output-dir: "{cwd}/outputs/file-vault/zod"
@@ -23,5 +23,5 @@ options:
   "@qninhdt/typespec-dbml":
     output-dir: "{cwd}/outputs/file-vault/dbml"
     split-by-namespace: false
-  "@qninhdt/typespec-protobuf":
-    output-dir: "{cwd}/outputs/file-vault/protobuf"
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/protobuf"

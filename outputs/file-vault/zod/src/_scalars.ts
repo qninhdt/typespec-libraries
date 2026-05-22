@@ -8,5 +8,5 @@ export const StrongPasswordSchema = z
   .string()
   .min(8)
   .max(128)
-  .regex(/^(?=.*[A-Z])(?=.*[0-9]).*$/)
+  .regex(new RegExp("^(?=.*[A-Z])(?=.*[0-9]).*$"))
   .brand("StrongPassword")

@@ -8,6 +8,7 @@ import {
   classifyProperties,
   collectManyToManyAssociations,
   getColumnName,
+  getSchemaName,
   getTableName,
   normalizeOrmGraph,
   selectModelsForEmitter,
@@ -21,6 +22,12 @@ import { DbmlTable } from "./components/DbmlTable.jsx";
 import { generateEnumDefinition } from "./components/DbmlEnum.jsx";
 import { generateRelationFields } from "./components/DbmlRelationField.jsx";
 import { reportDiagnostic, type DbmlEmitterOptions } from "./lib.js";
+
+function qualifyDbmlTable(program: EmitContext<DbmlEmitterOptions>["program"], model: Model): string {
+  const schema = getSchemaName(program, model);
+  const table = getTableName(program, model);
+  return schema ? `${schema}.${table}` : table;
+}
 
 interface ClassifiedTableEntry {
   normalized: NormalizedOrmModel;
@@ -274,8 +281,12 @@ function renderAssociationRefs(
   program: EmitContext<DbmlEmitterOptions>["program"],
   association: ManyToManyAssociation,
 ): string[] {
+  const leftQualified = qualifyDbmlTable(program, association.leftModel);
+  const rightQualified = qualifyDbmlTable(program, association.rightModel);
+  const joinSchema = getSchemaName(program, association.leftModel) ?? getSchemaName(program, association.rightModel);
+  const joinQualified = joinSchema ? `${joinSchema}.${association.tableName}` : association.tableName;
   return [
-    `Ref: ${association.tableName}.${association.leftJoinColumn} > ${getTableName(program, association.leftModel)}.${getColumnName(program, association.leftKey)}`,
-    `Ref: ${association.tableName}.${association.rightJoinColumn} > ${getTableName(program, association.rightModel)}.${getColumnName(program, association.rightKey)}`,
+    `Ref: ${joinQualified}.${association.leftJoinColumn} > ${leftQualified}.${getColumnName(program, association.leftKey)}`,
+    `Ref: ${joinQualified}.${association.rightJoinColumn} > ${rightQualified}.${getColumnName(program, association.rightKey)}`,
   ];
 }

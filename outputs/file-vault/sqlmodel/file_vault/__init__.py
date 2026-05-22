@@ -12,7 +12,7 @@ from . import shared
 from . import sharing
 from . import storage
 
-metadata = SQLModel.metadata
+target_metadata = SQLModel.metadata
 
 __all__ = [
     "assistant",
@@ -25,5 +25,5 @@ __all__ = [
     "shared",
     "sharing",
     "storage",
-    "metadata",
+    "target_metadata",
 ]

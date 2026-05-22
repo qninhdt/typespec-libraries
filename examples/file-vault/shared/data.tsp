@@ -1,10 +1,12 @@
 import "@qninhdt/typespec-orm";
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
 using Qninhdt.Orm;
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.shared.v1")
+@package({
+  name: "filevault.shared.v1",
+})
 namespace FileVault.Shared;
 
 // ─── Custom Scalars ─────────────────────────────────────────────────────────
@@ -28,29 +30,40 @@ scalar SearchQuery extends string;
 
 // ─── Data Models ────────────────────────────────────────────────────────────
 model ActorRef {
+  @field(1)
   id: uuid;
 
+  @field(2)
   displayName: DisplayName;
 
+  @field(3)
   email?: email;
 }
 model PageRequest {
+  @field(1)
   pageSize: PageSize;
 
+  @field(2)
   pageToken?: string;
 }
 model PageInfo {
+  @field(1)
   nextPageToken?: string;
 
+  @field(2)
   totalCount?: uint64;
 }
 model StringPair {
+  @field(1)
   key: string;
 
+  @field(2)
   value: string;
 }
 model Ack {
+  @field(1)
   ok: boolean;
 
+  @field(2)
   message?: string;
 }

@@ -6,6 +6,6 @@ package identity
 // SignInRequest SignInRequest
 type SignInRequest struct {
 	Email       string  `validate:"required,email" json:"email"`
-	Password    string  `validate:"required,regexp=^(?=.*[A-Z])(?=.*[0-9]).*$" json:"password"`
+	Password    string  `validate:"required,regexp=^(?=.*[A-Z])(?=.*[0-9]).*$,max=128,min=8" json:"password"`
 	DeviceLabel *string `validate:"omitempty" json:"deviceLabel,omitempty"`
 }

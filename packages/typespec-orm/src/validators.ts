@@ -28,6 +28,8 @@ import {
   isAutoCreateTime,
   isAutoUpdateTime,
   isIgnored,
+  isVersionColumn,
+  isTenantIdColumn,
   getPrecision,
   getForeignKey,
   getForeignKeyConfig,
@@ -43,6 +45,7 @@ import {
   isRelationLocalKeyUnique,
   resolvePropertyReference,
   resolvePropertyByName,
+  resolveMappedByTarget,
   unwrapArrayType,
 } from "./helpers.js";
 
@@ -84,6 +87,9 @@ export function $onValidate(program: Program): void {
   // 3. @onDelete/@onUpdate on non-relation scalar props
   validateCascadeOnScalar(program, tableModels);
 
+  // 3b. FK columns missing an index → predictable PG hot-spot
+  validateForeignKeyIndex(program, tableModels);
+
   // 4. Relation-specific validation shared by all emitters
   validateRelations(program, tableModels);
 
@@ -120,6 +126,8 @@ function validateDuplicateTableNames(
 function validateModel(program: Program, model: Model): void {
   let idCount = 0;
   let softDeleteCount = 0;
+  let versionCount = 0;
+  let tenantIdCount = 0;
   const columnNames = new Map<string, string>(); // columnName → propName
   const constraintNames = new Map<string, string>(); // constraintName -> decorator
 
@@ -136,6 +144,9 @@ function validateModel(program: Program, model: Model): void {
 
     // Count @softDelete
     if (isSoftDelete(program, prop)) softDeleteCount++;
+
+    if (isVersionColumn(program, prop)) versionCount++;
+    if (isTenantIdColumn(program, prop)) tenantIdCount++;
 
     // Duplicate column names
     if (!isIgnored(program, prop)) {
@@ -190,6 +201,20 @@ function validateModel(program: Program, model: Model): void {
   if (softDeleteCount > 1) {
     reportDiagnostic(program, {
       code: "multiple-soft-deletes",
+      target: model,
+    });
+  }
+
+  if (versionCount > 1) {
+    reportDiagnostic(program, {
+      code: "multiple-version-columns",
+      target: model,
+    });
+  }
+
+  if (tenantIdCount > 1) {
+    reportDiagnostic(program, {
+      code: "multiple-tenant-id-columns",
       target: model,
     });
   }
@@ -332,6 +357,25 @@ function reportInvalidDecoratorType(
 
 // ─── Cascade on non-relation check ───────────────────────────────────────────
 
+/** Warn on @foreignKey columns that have no index — PG never auto-creates one. */
+function validateForeignKeyIndex(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  for (const { model } of tableModels) {
+    for (const prop of walkPropertiesInherited(model)) {
+      if (prop.type.kind === "Model") continue;
+      if (!getForeignKey(program, prop)) continue;
+      if (isKey(program, prop) || isUnique(program, prop) || isIndex(program, prop)) continue;
+      reportDiagnostic(program, {
+        code: "foreign-key-without-index",
+        target: prop,
+        format: { propName: prop.name },
+      });
+    }
+  }
+}
+
 /** Check if @onDelete or @onUpdate is used on non-relation scalar properties */
 function validateCascadeOnScalar(
   program: Program,
@@ -413,7 +457,7 @@ function validateRelationProperty(
   }
 
   const arrayTarget = unwrapArrayType(prop.type);
-  const targetModel = getMappedByTargetModel(program, prop, arrayTarget);
+  const targetModel = resolveMappedByTarget(program, prop, arrayTarget);
 
   if (!targetModel) {
     return;
@@ -568,22 +612,6 @@ function buildRelationPairKey(joinTable: string, leftName: string, rightName: st
   return `${joinTable}:${rightName}:${leftName}`;
 }
 
-function getMappedByTargetModel(
-  program: Program,
-  prop: ModelProperty,
-  arrayTarget: Model | undefined,
-): Model | undefined {
-  if (arrayTarget && isTable(program, arrayTarget)) {
-    return arrayTarget;
-  }
-
-  if (prop.type.kind === "Model" && isTable(program, prop.type as Model)) {
-    return prop.type as Model;
-  }
-
-  return undefined;
-}
-
 function validateOwnedRelation(
   program: Program,
   model: Model,
@@ -644,7 +672,8 @@ function validateOwnedRelation(
     });
   }
 
-  if (getOnDelete(program, relationProp) === "SET NULL" && !localProperty.optional) {
+  const onDelete = getOnDelete(program, relationProp)?.trim().toUpperCase().replace(/[\s_-]+/g, " ");
+  if (onDelete === "SET NULL" && !localProperty.optional) {
     reportDiagnostic(program, {
       code: "foreign-key-set-null-non-nullable",
       target: relationProp,

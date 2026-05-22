@@ -14,13 +14,9 @@ export const FileViewSchema = z.object({
   ]),
   mediaType: z.string(),
   extension: z.string().optional(),
-  sizeBytes: z.bigint(),
+  sizeBytes: z.string().regex(/^-?\d+$/),
   sha256: z.string(),
-  currentVersionId: z
-    .string()
-    .uuid()
-    .optional()
-    .describe("UUID type - maps to uuid column in PostgreSQL"),
+  currentVersionId: z.uuid().optional(),
   labels: z.array(z.string()),
 })
 export type FileView = z.infer<typeof FileViewSchema>;

@@ -42,6 +42,31 @@ describe("SQLModel emitter entrypoint", () => {
     ).toBe(true);
   });
 
+  it("reports unsupported field types as errors", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Broken {
+        @key id: uuid;
+        payload: unknown;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "sqlmodel-emitter-unsupported-"));
+
+    await emit({
+      program: runner.program,
+      options: {},
+      emitterOutputDir: outDir,
+    } as never);
+
+    expect(
+      runner.program.diagnostics.some(
+        (diag) =>
+          diag.code === "@qninhdt/typespec-sqlmodel/unsupported-type" && diag.severity === "error",
+      ),
+    ).toBe(true);
+  });
+
   it("emits standalone files for tables and data models", async () => {
     const runner = await createTestRunner();
     await runner.compile(`

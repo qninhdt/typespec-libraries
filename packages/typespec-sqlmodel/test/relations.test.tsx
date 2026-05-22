@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emitPyFile } from "./utils.jsx";
 
 describe("SQLModel one-to-many relationships", () => {
-  it("generates Relationship with back_populates and cascade", async () => {
+  it("generates Relationship with back_populates and FK cascade", async () => {
     const output = await emitPyFile(
       `
       @table
@@ -33,7 +33,7 @@ describe("SQLModel one-to-many relationships", () => {
     expect(output).toContain("Relationship");
   });
 
-  it('generates cascade="all, delete-orphan" for CASCADE parent', async () => {
+  it("does not infer delete-orphan ownership from DB cascade", async () => {
     const output = await emitPyFile(
       `
       @table
@@ -54,7 +54,8 @@ describe("SQLModel one-to-many relationships", () => {
       "user.py",
     );
 
-    expect(output).toContain('"cascade": "all, delete-orphan"');
+    expect(output).toContain('Relationship(back_populates="user")');
+    expect(output).not.toContain("delete-orphan");
   });
 
   it("FK field has foreign_key reference to target table's PK", async () => {

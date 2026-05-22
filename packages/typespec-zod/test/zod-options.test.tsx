@@ -71,6 +71,7 @@ describe("getZodOptions", () => {
     expect(getZodOptions(program)).toEqual({
       standalone: true,
       "library-name": "demo-lib",
+      "int64-strategy": "string",
     });
   });
 });

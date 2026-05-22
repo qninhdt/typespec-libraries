@@ -6,6 +6,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, Enum as SAEnum, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -32,13 +33,16 @@ class FileMetadata(Entity, table=True):
 
     node_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("vault_nodes.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
             unique=True,
         )
     )
-    current_version_id: UUID | None = Field(default=None, index=True)
+    current_version_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True), index=True)
+    )
     category: FileCategory = Field(
         sa_column=Column(SAEnum(FileCategory), nullable=False, server_default="unknown")
     )

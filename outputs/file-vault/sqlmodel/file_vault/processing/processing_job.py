@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -43,12 +43,15 @@ class ProcessingJob(Entity, table=True):
 
     file_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("file_metadata.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
-    version_id: UUID | None = Field(default=None, index=True)
+    version_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True), index=True)
+    )
     kind: ProcessingKind = Field(
         sa_column=Column(SAEnum(ProcessingKind), nullable=False)
     )
@@ -72,9 +75,7 @@ class ProcessingJob(Entity, table=True):
         default=None, sa_column=Column(DateTime(timezone=True))
     )
     error_message: str | None = Field(default=None, max_length=512)
-    parameters_json: dict[str, Any] | None = Field(
-        default=None, sa_column=Column(JSONB)
-    )
+    parameters_json: Any | None = Field(default=None, sa_column=Column(JSONB))
 
     # ─── Relationships ─────────────────────
     file: FileMetadata | None = Relationship()

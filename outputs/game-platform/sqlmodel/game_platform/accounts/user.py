@@ -5,7 +5,7 @@ from typing import ClassVar, TYPE_CHECKING
 from pydantic import AnyUrl, EmailStr
 from enum import Enum
 
-from sqlalchemy import CheckConstraint, Column, Enum as SAEnum, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, Enum as SAEnum, text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 from game_platform.__associations__ import user_badges
@@ -113,16 +113,14 @@ class User(Timestamped, table=True):
     is_active: bool = Field(
         sa_column_kwargs={
             "nullable": False,
-            "server_default": "true",
+            "server_default": text("true"),
             "comment": "Whether the account is currently active.",
         }
     )
 
     # ─── Relationships ─────────────────────
     # Billing subscriptions tied to the account.
-    subscriptions: list[Subscription] = Relationship(
-        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
-    )
+    subscriptions: list[Subscription] = Relationship(back_populates="user")
     # Profile badges granted through a shorthand join table.
     badges: list[Badge] = Relationship(
         back_populates="users", sa_relationship_kwargs={"secondary": user_badges}

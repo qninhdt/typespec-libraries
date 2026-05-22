@@ -34,12 +34,12 @@ class GameEvent(WorldOwned, table=True):
         )
     )
     # Predicate expression evaluated at runtime.
-    conditions: dict[str, Any] | None = Field(
+    conditions: Any | None = Field(
         default=None,
         sa_column=Column(JSONB, comment="Predicate expression evaluated at runtime."),
     )
     # Mutations applied when the event fires.
-    effects: dict[str, Any] | None = Field(
+    effects: Any | None = Field(
         default=None,
         sa_column=Column(JSONB, comment="Mutations applied when the event fires."),
     )

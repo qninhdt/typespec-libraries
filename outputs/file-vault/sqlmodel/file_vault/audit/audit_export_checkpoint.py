@@ -4,6 +4,7 @@
 from uuid import UUID
 from datetime import datetime
 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 from ..shared.entity import Entity
@@ -17,7 +18,9 @@ class AuditExportCheckpoint(Entity, table=True):
     sink_name: str = Field(
         unique=True, max_length=255, sa_column_kwargs={"nullable": False}
     )
-    last_event_id: UUID | None = Field(default=None)
+    last_event_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     exported_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )

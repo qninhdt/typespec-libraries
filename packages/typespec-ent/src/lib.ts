@@ -13,8 +13,6 @@ export interface EntEmitterOptions {
   exclude?: string[];
   /** Explicit persistence strategy for collection fields */
   "collection-strategy"?: "jsonb" | "postgres";
-  /** Target database dialect (default: postgres) */
-  dialect?: "postgres" | "mysql" | "sqlite";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
@@ -27,7 +25,6 @@ const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
     "collection-strategy": { type: "string", nullable: true },
-    dialect: { type: "string", nullable: true },
   },
   required: [],
 };
@@ -42,7 +39,7 @@ export const $lib = createTypeSpecLibrary({
       },
     },
     "unsupported-type": {
-      severity: "warning",
+      severity: "error",
       messages: {
         default: paramMessage`Type "${"typeName"}" on property "${"propName"}" could not be mapped to a Go type.`,
       },
@@ -56,7 +53,7 @@ export const $lib = createTypeSpecLibrary({
     "emit-write-failed": {
       severity: "error",
       messages: {
-        default: paramMessage`Failed to write output file "${"fileName"}": ${"error"}.`,
+        default: paramMessage`Failed to write output to directory "${"outputDir"}": ${"error"}.`,
       },
     },
     "no-tables-found": {

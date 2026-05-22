@@ -10,27 +10,27 @@ import { resolveDbType } from "@qninhdt/typespec-orm";
  */
 export const DBML_TYPE_MAP: Record<string, string> = {
   uuid: "uuid",
-  string: "varchar",
+  string: "text",
   text: "text",
   boolean: "boolean",
-  int8: "integer",
-  int16: "integer",
+  int8: "smallint",
+  int16: "smallint",
   int32: "integer",
   int64: "bigint",
-  uint8: "integer",
+  uint8: "smallint",
   uint16: "integer",
   uint32: "bigint",
   uint64: "bigint",
-  float32: "float",
-  float64: "double",
-  decimal: "decimal",
+  float32: "real",
+  float64: "double precision",
+  decimal: "numeric",
   serial: "serial",
   bigserial: "bigserial",
-  utcDateTime: "timestamp",
+  utcDateTime: "timestamptz",
   date: "date",
   time: "time",
   duration: "interval",
-  bytes: "blob",
+  bytes: "bytea",
   jsonb: "jsonb",
 };
 
@@ -87,7 +87,7 @@ export function formatColumnSettings(settings: ColumnSettings): string {
     if (
       /^[a-zA-Z_][\w]*\(.*\)$/.test(val) ||
       /^-?\d+(\.\d+)?$/.test(val) ||
-      /^(true|false)$/i.test(val)
+      /^(true|false|null)$/i.test(val)
     ) {
       parts.push(`default: \`${val}\``);
     } else {
@@ -95,9 +95,7 @@ export function formatColumnSettings(settings: ColumnSettings): string {
     }
   }
   if (settings.note) {
-    // Sanitize: strip quotes/backticks and collapse newlines to spaces
-    const sanitized = settings.note.replaceAll(/['"`]/g, "").replaceAll(/\r?\n/g, " ");
-    parts.push(`note: '${sanitized}'`);
+    parts.push(`note: ${formatDbmlNote(settings.note)}`);
   }
 
   return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
@@ -105,4 +103,31 @@ export function formatColumnSettings(settings: ColumnSettings): string {
 
 function escapeDbmlSetting(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+}
+
+/**
+ * Format a note value for DBML.
+ *
+ * DBML supports two forms:
+ *   - short single-quoted: `'...'`
+ *   - long triple-quoted:  `'''...'''`
+ *
+ * Triple-quoted form lets us embed quotes, backticks, and newlines without
+ * fragile escape sequences. Stripping the characters (the previous behavior)
+ * silently lost information from the user's docs, so we now preserve them.
+ *
+ * Returns the formatted note value INCLUDING surrounding quotes.
+ */
+export function formatDbmlNote(note: string): string {
+  if (!/['"`]|\r?\n/.test(note)) {
+    return `'${note}'`;
+  }
+  // Normalize CRLF/CR to LF for stable output across platforms.
+  const normalized = note.replaceAll(/\r\n?/g, "\n");
+  // DBML closes long notes on `'''`. Defuse any literal triple-apostrophe run
+  // anywhere in the content, plus any trailing apostrophes that would combine
+  // with the closing `'''` into 4+ consecutive apostrophes.
+  let escaped = normalized.replaceAll(/'{3,}/g, (run) => run.replaceAll("'", "\\'"));
+  escaped = escaped.replace(/'+$/, (run) => run.replaceAll("'", "\\'"));
+  return `'''${escaped}'''`;
 }

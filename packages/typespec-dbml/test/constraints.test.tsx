@@ -8,7 +8,7 @@ import { emitDbmlFile } from "./utils.js";
 describe("DBML constraints", () => {
   it("generates primary key", async () => {
     const output = await emitDbmlFile(`@table model User { @key id: uuid; }`, "users.dbml");
-    expect(output).toContain("id uuid [pk, not null]");
+    expect(output).toContain("id uuid [pk]");
   });
 
   it("generates not null for non-optional fields", async () => {
@@ -16,7 +16,7 @@ describe("DBML constraints", () => {
       `@table model User { @key id: uuid; name: string; }`,
       "users.dbml",
     );
-    expect(output).toContain("name varchar(255) [not null]");
+    expect(output).toContain("name text [not null]");
   });
 
   it("generates nullable for optional fields", async () => {
@@ -24,7 +24,7 @@ describe("DBML constraints", () => {
       `@table model User { @key id: uuid; nickname?: string; }`,
       "users.dbml",
     );
-    expect(output).toContain("nickname varchar(255)");
+    expect(output).toContain("nickname text");
   });
 
   it("generates unique constraint", async () => {
@@ -32,7 +32,7 @@ describe("DBML constraints", () => {
       `@table model User { @key id: uuid; @unique email: string; }`,
       "users.dbml",
     );
-    expect(output).toContain("email varchar(255) [not null]");
+    expect(output).toContain("email text [not null]");
     expect(output).toContain("email [unique]");
   });
 
@@ -50,7 +50,7 @@ describe("DBML constraints", () => {
       `@table model Counter { @key @autoIncrement id: serial; }`,
       "counters.dbml",
     );
-    expect(output).toContain("id serial [pk, increment, not null]");
+    expect(output).toContain("id serial [pk, increment]");
   });
 
   it("generates composite index via composite<> type", async () => {
@@ -98,7 +98,7 @@ describe("DBML constraints", () => {
     );
 
     expect(output).toContain("tenant_id uuid [not null]");
-    expect(output).toContain("code varchar(255) [not null]");
+    expect(output).toContain("code text [not null]");
     expect(output).toContain("(tenant_id, code) [unique]");
   });
 
@@ -109,5 +109,30 @@ describe("DBML constraints", () => {
     );
     expect(output).toContain("indexes {");
     expect(output).toContain("(user_id, role_id) [pk]");
+  });
+
+  it("emits not null for non-optional @autoUpdateTime columns", async () => {
+    const output = await emitDbmlFile(
+      `@table model Doc { @key id: uuid; @autoUpdateTime updatedAt: utcDateTime; }`,
+      "docs.dbml",
+    );
+    expect(output).toContain("updated_at timestamptz [not null, default: `now()`]");
+  });
+
+  it("emits not null for non-optional @autoCreateTime columns", async () => {
+    const output = await emitDbmlFile(
+      `@table model Doc { @key id: uuid; @autoCreateTime createdAt: utcDateTime; }`,
+      "docs.dbml",
+    );
+    expect(output).toContain("created_at timestamptz [not null, default: `now()`]");
+  });
+
+  it("keeps optional @autoUpdateTime columns nullable", async () => {
+    const output = await emitDbmlFile(
+      `@table model Doc { @key id: uuid; @autoUpdateTime updatedAt?: utcDateTime; }`,
+      "docs.dbml",
+    );
+    expect(output).toContain("updated_at timestamptz [default: `now()`]");
+    expect(output).not.toContain("updated_at timestamptz [not null");
   });
 });

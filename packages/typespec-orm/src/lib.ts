@@ -17,6 +17,18 @@ export const $lib = createTypeSpecLibrary({
         default: `Model has multiple @softDelete properties. Only one soft-delete timestamp is allowed per table.`,
       },
     },
+    "multiple-version-columns": {
+      severity: "error",
+      messages: {
+        default: `Model has multiple @version properties. Only one optimistic-locking column is allowed per table.`,
+      },
+    },
+    "multiple-tenant-id-columns": {
+      severity: "error",
+      messages: {
+        default: `Model has multiple @tenantId properties. Only one tenant scope column is allowed per table.`,
+      },
+    },
     "duplicate-table-name": {
       severity: "error",
       messages: {
@@ -50,7 +62,7 @@ export const $lib = createTypeSpecLibrary({
     "filtered-dependency": {
       severity: "error",
       messages: {
-        default: paramMessage`${"typeName"}" depends on filtered-out ${"dependencyKind"} "${"dependencyName"}".`,
+        default: paramMessage`"${"typeName"}" depends on filtered-out ${"dependencyKind"} "${"dependencyName"}".`,
       },
     },
     "unsupported-relation-shape": {
@@ -218,6 +230,12 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`@${"decorator"} on "${"propName"}" has no effect - the property is not a relation or foreign key.`,
       },
     },
+    "foreign-key-without-index": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`@foreignKey on "${"propName"}" has no @index/@unique/@key. PostgreSQL will not auto-create an index, which usually causes lookup hot-spots.`,
+      },
+    },
     "invalid-foreign-key": {
       severity: "warning",
       messages: {
@@ -291,6 +309,28 @@ export const $lib = createTypeSpecLibrary({
       description: "Maps ModelProperty → ON UPDATE action string",
     },
     ignore: { description: "Marks ModelProperty as ignored (not a DB column)" },
+    schema: { description: "Maps Model or Namespace → PostgreSQL schema name" },
+    defaultExpression: {
+      description: "Maps ModelProperty → SQL expression evaluated at insert time",
+    },
+    version: { description: "Marks ModelProperty as the optimistic-locking version column" },
+    audit: { description: "Maps ModelProperty → audit role (\"createdBy\" or \"updatedBy\")" },
+    tenantId: { description: "Marks ModelProperty as the tenant-scope foreign key" },
+    modelIndexes: {
+      description: "Maps Model → array of @@index([...]) augment specs",
+    },
+    modelUniques: {
+      description: "Maps Model → array of @@unique([...]) augment specs",
+    },
+    tags: {
+      description: "Maps Model | ModelProperty → string[] of tag selectors",
+    },
+    owner: {
+      description: "Maps Model | Namespace → owning team identifier",
+    },
+    classification: {
+      description: "Maps Model | ModelProperty → data classification level",
+    },
     // ─── Data / Form decorators ──────────────────────────────────────────────
     data: { description: "Marks Model as a non-DB data/form shape" },
     title: { description: "Maps ModelProperty → human-readable field title" },
@@ -321,6 +361,16 @@ export const PrecisionKey = $lib.stateKeys.precision;
 export const OnDeleteKey = $lib.stateKeys.onDelete;
 export const OnUpdateKey = $lib.stateKeys.onUpdate;
 export const IgnoreKey = $lib.stateKeys.ignore;
+export const SchemaKey = $lib.stateKeys.schema;
+export const DefaultExpressionKey = $lib.stateKeys.defaultExpression;
+export const VersionKey = $lib.stateKeys.version;
+export const AuditKey = $lib.stateKeys.audit;
+export const TenantIdKey = $lib.stateKeys.tenantId;
+export const ModelIndexesKey = $lib.stateKeys.modelIndexes;
+export const ModelUniquesKey = $lib.stateKeys.modelUniques;
+export const TagsKey = $lib.stateKeys.tags;
+export const OwnerKey = $lib.stateKeys.owner;
+export const ClassificationKey = $lib.stateKeys.classification;
 export const DataKey = $lib.stateKeys.data;
 export const TitleKey = $lib.stateKeys.title;
 export const PlaceholderKey = $lib.stateKeys.placeholder;

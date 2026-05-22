@@ -519,4 +519,96 @@ describe("$onValidate diagnostics", () => {
     );
     expect(diags).toHaveLength(1);
   });
+
+  it("reports multiple @version columns on the same model", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @version v1: int32 = 0;
+        @version v2: int32 = 0;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/multiple-version-columns",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("reports multiple @tenantId columns on the same model", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @tenantId tenant1: uuid;
+        @tenantId tenant2: uuid;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/multiple-tenant-id-columns",
+    );
+    expect(diags).toHaveLength(1);
+  });
+
+  it("accepts a single @version column without diagnostics", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @version revision: int32 = 0;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) =>
+        d.code === "@qninhdt/typespec-orm/multiple-version-columns" ||
+        d.code === "@qninhdt/typespec-orm/multiple-tenant-id-columns",
+    );
+    expect(diags).toHaveLength(0);
+  });
+
+  it("warns on @foreignKey without an index/unique/key", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table model Tenant { @key id: uuid; }
+      @table model Project {
+        @key id: uuid;
+        @foreignKey("id", "id") tenantId: uuid;
+        tenant: Tenant;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-without-index",
+    );
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].severity).toBe("warning");
+  });
+
+  it("does not warn when @foreignKey has @index", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table model Tenant { @key id: uuid; }
+      @table model Project {
+        @key id: uuid;
+        @index @foreignKey("id", "id") tenantId: uuid;
+        tenant: Tenant;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/foreign-key-without-index",
+    );
+    expect(diags).toHaveLength(0);
+  });
 });

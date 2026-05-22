@@ -13,6 +13,7 @@ export const NEEDS_SA_COLUMN = new Set([
   "time",
   "bytes",
   "decimal",
+  "uuid",
 ]);
 
 export interface PythonTypeMapping {
@@ -29,7 +30,12 @@ export const UNKNOWN_PY_TYPE: PythonTypeMapping = {
 };
 
 export const PYTHON_TYPE_MAP: Record<string, PythonTypeMapping> = {
-  uuid: { pyType: "UUID", imports: ["uuid.UUID"], saImports: [] },
+  uuid: {
+    pyType: "UUID",
+    saColumnType: "PG_UUID(as_uuid=True)",
+    imports: ["uuid.UUID"],
+    saImports: ["sqlalchemy.dialects.postgresql.UUID as PG_UUID"],
+  },
   string: { pyType: "str", saColumnType: "String", imports: [], saImports: ["sqlalchemy.String"] },
   text: { pyType: "str", saColumnType: "Text", imports: [], saImports: ["sqlalchemy.Text"] },
   boolean: {
@@ -132,7 +138,7 @@ export const PYTHON_TYPE_MAP: Record<string, PythonTypeMapping> = {
     saImports: ["sqlalchemy.LargeBinary"],
   },
   jsonb: {
-    pyType: "dict[str, Any]",
+    pyType: "Any",
     saColumnType: "JSONB",
     imports: ["typing.Any"],
     saImports: ["sqlalchemy.dialects.postgresql.JSONB"],

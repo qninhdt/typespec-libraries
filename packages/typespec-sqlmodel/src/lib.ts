@@ -13,8 +13,6 @@ export interface SqlModelEmitterOptions {
   exclude?: string[];
   /** Explicit persistence strategy for collection fields */
   "collection-strategy"?: "jsonb" | "postgres";
-  /** Target database dialect (default: postgres) */
-  dialect?: "postgres" | "mysql" | "sqlite";
 }
 
 const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
@@ -27,7 +25,6 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
     "collection-strategy": { type: "string", nullable: true },
-    dialect: { type: "string", nullable: true },
   },
   required: [],
 };
@@ -63,6 +60,12 @@ export const $lib = createTypeSpecLibrary({
       severity: "warning",
       messages: {
         default: "No models decorated with @table or @data were found. Nothing to emit.",
+      },
+    },
+    "init-export-collision": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Generated __init__.py for package "${"packageName"}" exports "${"name"}" more than once. A child package, model, or reserved attribute is colliding.`,
       },
     },
   },

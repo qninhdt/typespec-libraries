@@ -5,7 +5,6 @@ package worlds
 
 // CreateWorldForm Form payload for creating or editing a world. Demonstrates cross-namespace lookup types pulled from multiple bounded contexts.
 type CreateWorldForm struct {
-
 	// Display name of the world. Referenced by forms and collaboration models through lookup types.
 	Name string `validate:"required,max=200" json:"name" form:"name,title=World Name,placeholder=Chronicles of Emberfall"`
 	// System prompt used to guide AI generation within the world.

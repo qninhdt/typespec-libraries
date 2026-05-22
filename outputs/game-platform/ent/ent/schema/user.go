@@ -74,8 +74,6 @@ func (User) Fields() []ent.Field {
 		field.Bool("is_active").
 			Default(true).
 			Comment("Whether the account is currently active."),
-		// Example of a computed UI field excluded from persistence.,
-		field.JSON("full_title", map[string]any{}).Optional(),
 	}
 }
 
@@ -84,8 +82,8 @@ func (User) Edges() []ent.Edge {
 		edge.To("subscriptions", Subscription.Type).
 			StorageKey(edge.Column("user_id")).
 			Annotations(entsql.OnDelete(entsql.Cascade)),
-		edge.To("badges", Badge.Type).
-			StorageKey(edge.Table("user_badges")),
+		edge.From("badges", Badge.Type).
+			Ref("users"),
 	}
 }
 

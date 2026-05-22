@@ -28,6 +28,9 @@ import {
   getModelOwnProperties,
   resolveRelation,
 } from "./helpers.js";
+import { truncatePgIdentifier } from "./identifier-policy.js";
+import { ModelIndexesKey, ModelUniquesKey } from "./lib.js";
+import type { ModelIndexSpec } from "./decorators.js";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -108,7 +111,9 @@ export function collectCompositeTypeFields(
         resolveCompositeColumnName(program, model, column),
       );
       const snakeColumns = resolvedColumns.map((column) => camelToSnake(column));
-      const generatedName = [tableName, ...snakeColumns, suffix].join("_");
+      const generatedName = truncatePgIdentifier(
+        [tableName, ...snakeColumns, suffix].join("_"),
+      );
       result.push({
         name: generatedName,
         columns: resolvedColumns,
@@ -117,6 +122,25 @@ export function collectCompositeTypeFields(
       });
     }
   }
+
+  for (const spec of (program.stateMap(ModelIndexesKey).get(model) as ModelIndexSpec[] | undefined) ?? []) {
+    const resolved = spec.columns.map((c) => resolveCompositeColumnName(program, model, c));
+    const snake = resolved.map((c) => camelToSnake(c));
+    const name = truncatePgIdentifier(
+      spec.name ?? [tableName, ...snake, "idx"].join("_"),
+    );
+    result.push({ name, columns: resolved, isUnique: false, isPrimary: false });
+  }
+
+  for (const spec of (program.stateMap(ModelUniquesKey).get(model) as ModelIndexSpec[] | undefined) ?? []) {
+    const resolved = spec.columns.map((c) => resolveCompositeColumnName(program, model, c));
+    const snake = resolved.map((c) => camelToSnake(c));
+    const name = truncatePgIdentifier(
+      spec.name ?? [tableName, ...snake, "unique"].join("_"),
+    );
+    result.push({ name, columns: resolved, isUnique: true, isPrimary: false });
+  }
+
   return result;
 }
 

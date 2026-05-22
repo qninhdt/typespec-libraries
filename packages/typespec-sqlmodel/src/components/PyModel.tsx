@@ -22,6 +22,9 @@ import {
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
   camelToSnake,
+  getColumnName as getOrmColumnName,
+  getSchemaName,
+  findVersionProperty,
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import {
@@ -82,6 +85,7 @@ interface PyModelRenderContext {
   fieldDefs: string[];
   relationDefs: string[];
   scalarNames?: string[];
+  versionColumnName?: string;
 }
 
 /**
@@ -173,6 +177,12 @@ export function PyModelFile(props: PyModelFileProps): Children {
     fieldDefs,
     relationDefs,
     scalarNames: Array.from(allCustomScalars).map((s) => scalarAliasNames?.get(s) ?? s.name),
+    versionColumnName: tableName
+      ? (() => {
+          const v = findVersionProperty(program, model);
+          return v ? getOrmColumnName(program, v) : undefined;
+        })()
+      : undefined,
   });
 
   return (
@@ -227,6 +237,12 @@ function buildTableArgEntries(
 ): string[] {
   const tableArgEntries = buildCompositeTableArgEntries(compositeTypeFields, saImports);
   addCheckConstraints(program, model, saImports, tableArgEntries);
+  const schemaName = getSchemaName(program, model);
+  if (schemaName) {
+    tableArgEntries.push(
+      `${FOUR_SPACES}${FOUR_SPACES}{"schema": ${pythonStringLiteral(schemaName)}}`,
+    );
+  }
   return tableArgEntries;
 }
 
@@ -308,6 +324,7 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     fieldDefs,
     relationDefs,
     scalarNames,
+    versionColumnName,
   } = context;
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
@@ -327,6 +344,7 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     tableArgEntries,
     fieldDefs,
     relationDefs,
+    versionColumnName,
   );
   return code;
 }
@@ -352,6 +370,7 @@ function buildModelClass(
   tableArgEntries: string[],
   fieldDefs: string[],
   relationDefs: string[],
+  versionColumnName: string | undefined,
 ): string {
   const baseList = sourceModelNames.length > 0 ? sourceModelNames.join(", ") : "SQLModel";
   const isTable = !!tableName;
@@ -368,6 +387,10 @@ function buildModelClass(
     code += `${FOUR_SPACES}__table_args__ = (\n`;
     code += tableArgEntries.join(",\n") + ",\n";
     code += `${FOUR_SPACES})\n`;
+  }
+
+  if (versionColumnName) {
+    code += `${FOUR_SPACES}__mapper_args__ = {"version_id_col": ${pythonStringLiteral(versionColumnName)}}\n`;
   }
 
   code += "\n";

@@ -13,10 +13,12 @@ import {
   getColumnName,
   getCompositeFields,
   getDefaultValue,
+  getDefaultExpression,
   getDoc,
   getMaxLength,
   getOnDelete,
   getPrecision,
+  getSchemaName,
   getPropertyEnum,
   getTableName,
   isArrayType,
@@ -93,15 +95,9 @@ export function EntModelFile(props: EntModelFileProps): Children {
     }
   }
 
-  for (const { prop } of ignored) {
-    const doc = getDoc(program, prop);
-    if (doc) {
-      fieldLines.push(`// ${doc}`);
-    }
-    fieldLines.push(
-      `field.JSON(${goStringLiteral(getColumnName(program, prop))}, map[string]any{}).Optional()`,
-    );
-  }
+  // @ignore'd properties are excluded from the database schema entirely:
+  // no Ent field, no column. They remain part of the in-memory model only.
+  void ignored;
 
   const edgeLines = relations.map(({ prop, resolved }) =>
     buildEntEdge(program, prop, resolved, ctx),
@@ -223,7 +219,7 @@ function buildEntField(
       chains.push("Nillable()");
     }
   }
-  if (isKey(program, prop) && isAutoIncrement(program, prop)) chains.push("Immutable()");
+  if (isKey(program, prop)) chains.push("Immutable()");
   if (isUnique(program, prop) && !compositeUniqueColumns.has(columnName)) chains.push("Unique()");
 
   return {
@@ -282,8 +278,7 @@ function buildEntFieldBuilder(
       return `field.Float(${goStringLiteral(columnName)})`;
     case "decimal":
       ctx.imports.add("github.com/shopspring/decimal");
-      ctx.imports.add("entgo.io/ent/dialect");
-      return `field.Other(${goStringLiteral(columnName)}, decimal.Decimal{}).SchemaType(map[string]string{dialect.Postgres: "numeric"})`;
+      return `field.Other(${goStringLiteral(columnName)}, decimal.Decimal{})`;
     case "utcDateTime":
     case "date":
     case "time":
@@ -309,11 +304,18 @@ function buildArrayFieldBuilder(
 ): string {
   const elementType = getArrayElementType(prop.type);
   const elementDbType = elementType ? resolveDbType(elementType) : undefined;
-  if (collectionStrategy === "postgres" && elementDbType) {
-    const postgresType = resolvePostgresArrayElementType(elementDbType);
-    if (postgresType) {
-      ctx.imports.add("entgo.io/ent/dialect");
-      return `field.JSON(${goStringLiteral(columnName)}, []${resolveGoArrayElementType(elementType)}{}).SchemaType(map[string]string{dialect.Postgres: "${postgresType}[]"})`;
+  if (collectionStrategy === "postgres") {
+    if (elementDbType) {
+      const postgresType = resolvePostgresArrayElementType(elementDbType);
+      if (postgresType) {
+        ctx.imports.add("entgo.io/ent/dialect");
+        return `field.JSON(${goStringLiteral(columnName)}, []${resolveGoArrayElementType(elementType)}{}).SchemaType(map[string]string{dialect.Postgres: "${postgresType}[]"})`;
+      }
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        target: prop,
+        format: { typeName: `${elementDbType}[]`, propName: prop.name },
+      });
     }
   }
   return `field.JSON(${goStringLiteral(columnName)}, []${resolveGoArrayElementType(elementType)}{})`;
@@ -322,7 +324,7 @@ function buildArrayFieldBuilder(
 function buildCommonFieldChains(
   program: Program,
   prop: ModelProperty,
-  columnName: string,
+  _columnName: string,
   ctx: EntFileContext,
   _compositeUniqueColumns: Set<string>,
 ): string[] {
@@ -334,21 +336,40 @@ function buildCommonFieldChains(
   }
 
   const prec = getPrecision(program, prop);
-  if (prec && (dbType === "decimal" || dbType === "float32" || dbType === "float64")) {
+  if (prec && dbType === "decimal") {
     ctx.imports.add("entgo.io/ent/dialect");
     chains.push(
       `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(`numeric(${prec.precision},${prec.scale})`)}})`,
     );
   }
 
-  const defaultValue = getDefaultValue(program, prop);
-  if (defaultValue !== undefined && !isKey(program, prop)) {
-    const formatted = formatEntDefault(defaultValue, prop.type);
-    if (formatted) chains.push(`Default(${formatted})`);
+  const defaultExpr = getDefaultExpression(program, prop);
+  if (defaultExpr) {
+    ctx.usesEntSql = true;
+    chains.push(
+      `Annotations(entsql.Default(${goStringLiteral(defaultExpr)}))`,
+    );
+  } else {
+    const defaultValue = getDefaultValue(program, prop);
+    if (defaultValue !== undefined && !isKey(program, prop)) {
+      const formatted = formatEntDefault(defaultValue, prop.type);
+      if (formatted) {
+        chains.push(`Default(${formatted})`);
+      } else {
+        reportDiagnostic(program, {
+          code: "unsupported-type",
+          target: prop,
+          format: { typeName: `default(${prop.type.kind})`, propName: prop.name },
+        });
+      }
+    }
   }
 
   if (isKey(program, prop) && dbType === "uuid") {
-    chains.push("Default(uuid.New)");
+    const hasUserDefault = !!getDefaultExpression(program, prop) || getDefaultValue(program, prop) !== undefined;
+    if (!hasUserDefault) {
+      chains.push("Default(uuid.New)");
+    }
   }
   if (isAutoCreateTime(program, prop)) {
     ctx.imports.add("time");
@@ -377,9 +398,47 @@ function buildEntEdge(
 
   let builder: string;
   if (rel.kind === "many-to-many") {
-    builder = `edge.To(${goStringLiteral(edgeName)}, ${targetType})`;
-    if (rel.joinTable) {
-      chains.push(`StorageKey(edge.Table(${goStringLiteral(rel.joinTable)}))`);
+    // Ent requires exactly one side of a M2M relation to own the join table
+    // (emits `edge.To(...).StorageKey(...)`); the other side must be the
+    // inverse (emits `edge.From(...).Ref(...)`). Otherwise `ent generate`
+    // produces duplicate join tables. The normalized ORM graph does not
+    // expose an explicit owning flag for shorthand `@manyToMany`, so we
+    // pick the owning side deterministically: the model whose name compares
+    // alphabetically <= the target model's name owns the relation.
+    const ownerName = prop.model?.name ?? "";
+    const targetName = rel.targetModel.name;
+    let isOwner: boolean;
+    if (ownerName === targetName) {
+      if (!rel.backPopulates) {
+        reportDiagnostic(program, {
+          code: "unsupported-type",
+          target: prop,
+          format: { typeName: "self-many-to-many-without-backPopulates", propName: prop.name },
+        });
+        isOwner = true;
+      } else {
+        isOwner = edgeName < rel.backPopulates;
+      }
+    } else {
+      isOwner = ownerName < targetName;
+    }
+
+    if (isOwner) {
+      builder = `edge.To(${goStringLiteral(edgeName)}, ${targetType})`;
+      if (rel.joinTable) {
+        const localPk = rel.fkColumnName;
+        const targetPk = rel.fkTargetColumn;
+        const ownerCol = `${camelToSnake(ownerName)}_${localPk}`;
+        const inverseCol = `${camelToSnake(targetName)}_${targetPk}`;
+        chains.push(
+          `StorageKey(edge.Table(${goStringLiteral(rel.joinTable)}), edge.Columns(${goStringLiteral(ownerCol)}, ${goStringLiteral(inverseCol)}))`,
+        );
+      }
+    } else {
+      builder = `edge.From(${goStringLiteral(edgeName)}, ${targetType})`;
+      if (rel.backPopulates) {
+        chains.push(`Ref(${goStringLiteral(rel.backPopulates)})`);
+      }
     }
   } else if (rel.kind === "one-to-many") {
     builder = `edge.To(${goStringLiteral(edgeName)}, ${targetType})`;
@@ -402,8 +461,15 @@ function buildEntEdge(
     chains.push("Required()");
   }
   const onDelete = getOnDelete(program, prop) ?? rel.onDelete;
+  // entgo.io/ent/dialect/entsql does not export OnUpdate; @onUpdate is preserved
+  // in the ORM graph for downstream emitters (DBML, SQLModel) but cannot be
+  // surfaced through Ent's edge annotation API. Apply ON UPDATE via Atlas/SQL.
+  const annotations: string[] = [];
   if (onDelete) {
-    chains.push(`Annotations(entsql.OnDelete(${formatEntReferentialAction(onDelete)}))`);
+    annotations.push(`entsql.OnDelete(${formatEntReferentialAction(onDelete)})`);
+  }
+  if (annotations.length > 0) {
+    chains.push(`Annotations(${annotations.join(", ")})`);
     ctx.usesEntSql = true;
   }
 
@@ -451,6 +517,10 @@ function buildEntAnnotations(
   }
 
   const annotationParts = [`Table: ${goStringLiteral(getTableName(program, model))}`];
+  const schemaName = getSchemaName(program, model);
+  if (schemaName) {
+    annotationParts.push(`Schema: ${goStringLiteral(schemaName)}`);
+  }
   if (checks.length > 0) {
     annotationParts.push(`Checks: map[string]string{${checks.join(", ")}}`);
   }

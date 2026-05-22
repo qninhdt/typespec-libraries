@@ -31,7 +31,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).toContain("z.boolean()");
   });
 
-  it("maps integer types to z.number().int()", async () => {
+  it("maps integer types to z.number().int() for 32-bit and z.string().regex for wider", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -45,8 +45,12 @@ describe("Zod scalar type mappings", () => {
       "IntTest.ts",
     );
 
+    // 8/16/32-bit integers map to z.number().int()
     expect(output).toContain("z.number()");
     expect(output).toContain(".int()");
+    // int64 defaults to "string" strategy: z.string().regex(/^-?\d+$/)
+    expect(output).toContain("z.string().regex(/^-?\\d+$/)");
+    expect(output).not.toContain("z.bigint()");
   });
 
   it("maps float types to z.number()", async () => {
@@ -92,7 +96,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).toContain("z.instanceof(Uint8Array)");
   });
 
-  it("maps uuid scalar to z.string().uuid()", async () => {
+  it("maps uuid scalar to z.uuid()", async () => {
     const output = await emitZodFile(
       `
       scalar uuid extends string;
@@ -105,7 +109,8 @@ describe("Zod scalar type mappings", () => {
       "User.ts",
     );
 
-    expect(output).toContain("z.string().uuid()");
+    expect(output).toContain("z.uuid()");
+    expect(output).not.toContain("z.string().uuid()");
   });
 
   it("maps plainDate to z.coerce.date()", async () => {
@@ -122,7 +127,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).toContain("z.coerce.date()");
   });
 
-  it("maps plainTime to z.string().time()", async () => {
+  it("maps plainTime to z.iso.time()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -133,8 +138,8 @@ describe("Zod scalar type mappings", () => {
       "User.ts",
     );
 
-    expect(output).toContain("z.string()");
-    expect(output).toContain(".time()");
+    expect(output).toContain("z.iso.time()");
+    expect(output).not.toContain("z.string().time()");
   });
 
   it("maps utcDateTime to z.coerce.date()", async () => {
@@ -151,7 +156,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).toContain("z.coerce.date()");
   });
 
-  it("maps duration to z.string().duration()", async () => {
+  it("maps duration to z.iso.duration()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -162,8 +167,8 @@ describe("Zod scalar type mappings", () => {
       "Task.ts",
     );
 
-    expect(output).toContain("z.string()");
-    expect(output).toContain(".duration()");
+    expect(output).toContain("z.iso.duration()");
+    expect(output).not.toContain("z.string().duration()");
   });
 
   it("maps safeint to z.number().int().safe()", async () => {
@@ -245,13 +250,15 @@ describe("Zod optional fields", () => {
     );
 
     expect(output).toContain(".default(0)");
-    expect(output).toContain(".default(42n)");
+    // int64 default under "string" int64-strategy renders as JSON string literal
+    expect(output).toContain('.default("42")');
     expect(output).not.toContain(".default(0n)");
+    expect(output).not.toContain(".default(42n)");
   });
 });
 
 describe("Zod semantic scalars", () => {
-  it("maps email to z.string().email()", async () => {
+  it("maps email to z.email()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -262,10 +269,11 @@ describe("Zod semantic scalars", () => {
       "User.ts",
     );
 
-    expect(output).toContain("z.string().email()");
+    expect(output).toContain("z.email()");
+    expect(output).not.toContain("z.string().email()");
   });
 
-  it("maps ipv4 to z.string().ipv4()", async () => {
+  it("maps ipv4 to z.ipv4()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -276,10 +284,11 @@ describe("Zod semantic scalars", () => {
       "Server.ts",
     );
 
-    expect(output).toContain("z.string().ipv4()");
+    expect(output).toContain("z.ipv4()");
+    expect(output).not.toContain("z.string().ipv4()");
   });
 
-  it("maps ipv6 to z.string().ipv6()", async () => {
+  it("maps ipv6 to z.ipv6()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -290,10 +299,11 @@ describe("Zod semantic scalars", () => {
       "Server.ts",
     );
 
-    expect(output).toContain("z.string().ipv6()");
+    expect(output).toContain("z.ipv6()");
+    expect(output).not.toContain("z.string().ipv6()");
   });
 
-  it("maps ip to z.string().ip()", async () => {
+  it("maps ip to z.union of ipv4 and ipv6", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -304,10 +314,13 @@ describe("Zod semantic scalars", () => {
       "Server.ts",
     );
 
-    expect(output).toContain("z.string().ip()");
+    expect(output).toContain("z.union(");
+    expect(output).toContain("z.ipv4()");
+    expect(output).toContain("z.ipv6()");
+    expect(output).not.toContain("z.string().ip()");
   });
 
-  it("maps url to z.string().url()", async () => {
+  it("maps url to z.url()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -318,10 +331,11 @@ describe("Zod semantic scalars", () => {
       "Link.ts",
     );
 
-    expect(output).toContain("z.string().url()");
+    expect(output).toContain("z.url()");
+    expect(output).not.toContain("z.string().url()");
   });
 
-  it("maps cidr to z.string().cidr()", async () => {
+  it("maps cidr to z.cidr()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -332,10 +346,11 @@ describe("Zod semantic scalars", () => {
       "Network.ts",
     );
 
-    expect(output).toContain("z.string().cidr()");
+    expect(output).toContain("z.cidr()");
+    expect(output).not.toContain("z.string().cidr()");
   });
 
-  it("maps base64 to z.string().base64()", async () => {
+  it("maps base64 to z.base64()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -346,7 +361,8 @@ describe("Zod semantic scalars", () => {
       "Attachment.ts",
     );
 
-    expect(output).toContain("z.string().base64()");
+    expect(output).toContain("z.base64()");
+    expect(output).not.toContain("z.string().base64()");
   });
 
   it("does not add extra regex for email scalar", async () => {
@@ -386,7 +402,7 @@ describe("Zod semantic scalars", () => {
     expect(modelFile).toContain("macAddr: macSchema");
   });
 
-  it("maps cuid to z.string().cuid()", async () => {
+  it("maps cuid to z.cuid()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -397,10 +413,11 @@ describe("Zod semantic scalars", () => {
       "Resource.ts",
     );
 
-    expect(output).toContain("z.string().cuid()");
+    expect(output).toContain("z.cuid()");
+    expect(output).not.toContain("z.string().cuid()");
   });
 
-  it("maps cuid2 to z.string().cuid2()", async () => {
+  it("maps cuid2 to z.cuid2()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -411,10 +428,11 @@ describe("Zod semantic scalars", () => {
       "Resource.ts",
     );
 
-    expect(output).toContain("z.string().cuid2()");
+    expect(output).toContain("z.cuid2()");
+    expect(output).not.toContain("z.string().cuid2()");
   });
 
-  it("maps ulid to z.string().ulid()", async () => {
+  it("maps ulid to z.ulid()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -425,10 +443,11 @@ describe("Zod semantic scalars", () => {
       "Resource.ts",
     );
 
-    expect(output).toContain("z.string().ulid()");
+    expect(output).toContain("z.ulid()");
+    expect(output).not.toContain("z.string().ulid()");
   });
 
-  it("maps nanoid to z.string().nanoid()", async () => {
+  it("maps nanoid to z.nanoid()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -439,10 +458,11 @@ describe("Zod semantic scalars", () => {
       "Resource.ts",
     );
 
-    expect(output).toContain("z.string().nanoid()");
+    expect(output).toContain("z.nanoid()");
+    expect(output).not.toContain("z.string().nanoid()");
   });
 
-  it("maps jwt to z.string().jwt()", async () => {
+  it("maps jwt to z.jwt()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -453,10 +473,11 @@ describe("Zod semantic scalars", () => {
       "Auth.ts",
     );
 
-    expect(output).toContain("z.string().jwt()");
+    expect(output).toContain("z.jwt()");
+    expect(output).not.toContain("z.string().jwt()");
   });
 
-  it("maps emoji to z.string().emoji()", async () => {
+  it("maps emoji to z.emoji()", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -467,7 +488,8 @@ describe("Zod semantic scalars", () => {
       "Reaction.ts",
     );
 
-    expect(output).toContain("z.string().emoji()");
+    expect(output).toContain("z.emoji()");
+    expect(output).not.toContain("z.string().emoji()");
   });
 
   it("does not add extra regex for cuid scalar", async () => {

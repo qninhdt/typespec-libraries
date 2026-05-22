@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.identity.v1")
+@package({
+  name: "filevault.identity.v1",
+})
 namespace FileVault.Identity;
 
-@protoService
+@Protobuf.service
 interface AuthService {
   signIn(...SignInRequest): SignInResponse;
 
@@ -14,7 +16,7 @@ interface AuthService {
   revokeSession(...RevokeSessionRequest): FileVault.Shared.Ack;
 }
 
-@protoService
+@Protobuf.service
 interface AccountService {
   getAccount(...GetAccountRequest): AccountView;
 

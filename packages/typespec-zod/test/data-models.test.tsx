@@ -140,7 +140,9 @@ describe("Zod @data model generation", () => {
 
     expect(output).toContain('import { BaseFormSchema } from "./BaseForm.js";');
     expect(output).not.toContain("contact: z.string().email()");
-    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.safeExtend(");
+    expect(output).not.toContain("contact: z.email()");
+    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.extend(");
+    expect(output).not.toContain(".safeExtend(");
     expect(output).toContain("message: z.string().optional()");
   });
 

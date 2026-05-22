@@ -7,6 +7,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Index, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ...shared.timestamped import Timestamped
 
@@ -83,6 +84,7 @@ class Invitation(Timestamped, table=True):
     )
     inviter_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("users.id", ondelete="CASCADE", onupdate="CASCADE"),
             nullable=False,
             index=True,
@@ -90,6 +92,7 @@ class Invitation(Timestamped, table=True):
     )
     world_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("worlds.id", ondelete="CASCADE", onupdate="CASCADE"),
             nullable=False,
             index=True,

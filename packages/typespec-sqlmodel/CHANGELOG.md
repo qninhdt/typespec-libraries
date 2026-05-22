@@ -11,7 +11,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Namespace-first Python package emission driven by the shared normalized ORM graph.
 - Support for `library-name`, `include`, `exclude`, collection strategies, referenced-column foreign keys, named checks, and `@manyToMany(...)` shorthand.
-- Generated `__associations__.py` for shorthand join tables and root `metadata = SQLModel.metadata` exports for Alembic-friendly integration.
+- Generated `__associations__.py` for shorthand join tables and root `target_metadata = SQLModel.metadata` exports for Alembic-friendly integration.
 - `@tableMixin` expansion and namespace-aware package scaffolding with generated `__init__.py` files at each emitted package level.
 
 ### Changed

@@ -45,6 +45,6 @@ func (Badge) Fields() []ent.Field {
 func (Badge) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("users", User.Type).
-			StorageKey(edge.Table("user_badges")),
+			StorageKey(edge.Table("user_badges"), edge.Columns("badge_id", "user_id")),
 	}
 }

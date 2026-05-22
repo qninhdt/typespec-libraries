@@ -14,7 +14,7 @@ env "sqlmodel" {
   }
   format {
     migrate {
-      diff = "{{ sql . \"  \" }}"
+      diff = "{{ sql . "  " }}"
     }
   }
 }

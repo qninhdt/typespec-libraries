@@ -8,7 +8,7 @@ env "ent" {
   }
   format {
     migrate {
-      diff = "{{ sql . \"  \" }}"
+      diff = "{{ sql . "  " }}"
     }
   }
 }

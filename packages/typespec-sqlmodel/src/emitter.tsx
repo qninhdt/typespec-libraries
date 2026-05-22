@@ -81,7 +81,6 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
-  const dialect = options.dialect ?? "postgres";
   const tables = selection.models.filter((model) => model.kind === "table");
 
   const manyToManyAssociations = collectManyToManyAssociations(
@@ -109,9 +108,9 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.length > 0 && (
+      {tables.length > 0 && isStandalone && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
-          {generateAtlasHcl(dialect)}
+          {generateAtlasHcl()}
         </SourceFile>
       )}
       {isStandalone && (
@@ -132,7 +131,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = [` +
-            selection.topLevelNamespaces.map((item) => `"${item}"`).join(", ") +
+            selection.topLevelNamespaces.map((item) => `"${camelToSnake(item)}"`).join(", ") +
             `]
 `}
         </SourceFile>
@@ -150,6 +149,12 @@ packages = [` +
                 ),
                 includeMetadata: info.includeMetadata,
                 importAssociations: info.importAssociations,
+                reportCollision: ({ name, packageName }) =>
+                  reportDiagnostic(context.program, {
+                    code: "init-export-collision",
+                    target: context.program.getGlobalNamespaceType(),
+                    format: { name, packageName },
+                  }),
               })}
             </SourceFile>
           </SourceDirectory>
@@ -221,31 +226,24 @@ packages = [` +
   }
 }
 
-function generateAtlasHcl(dialect: string): string {
-  const atlasDialect = dialect === "mysql" ? "mysql" : dialect === "sqlite" ? "sqlite" : "postgresql";
-  const devUrl = dialect === "mysql"
-    ? "docker://mysql/8/dev"
-    : dialect === "sqlite"
-      ? "sqlite://file?mode=memory"
-      : "docker://postgres/16/dev?search_path=public";
-
+function generateAtlasHcl(): string {
   return `data "external_schema" "sqlmodel" {
   program = [
     "atlas-provider-sqlalchemy",
     "--path", ".",
-    "--dialect", "${atlasDialect}"
+    "--dialect", "postgresql"
   ]
 }
 
 env "sqlmodel" {
   src = data.external_schema.sqlmodel.url
-  dev = "${devUrl}"
+  dev = "docker://postgres/16/dev?search_path=public"
   migration {
     dir = "file://migrations"
   }
   format {
     migrate {
-      diff = "{{ sql . \\"  \\" }}"
+      diff = "{{ sql . \"  \" }}"
     }
   }
 }
@@ -348,6 +346,12 @@ function buildAssociationModules(
     if (!topLevel) {
       continue;
     }
+    if (topLevels.length === 2 && topLevels[0] !== topLevels[1]) {
+      reportDiagnostic(program, {
+        code: "no-tables-found",
+        target: association.leftProperty,
+      });
+    }
 
     const moduleName = `${topLevel}.__associations__`;
     const symbol = toPythonIdentifier(association.tableName);
@@ -438,7 +442,10 @@ function resolveAssociationColumnType(
 ): string {
   if (prop.type.kind === "Enum") {
     sqlalchemyImports.add("sqlalchemy.String");
-    const maxLen = Math.max(...getEnumMembers(prop.type).map((item) => item.value.length), 20);
+    const maxLen = Math.max(
+      ...getEnumMembers(prop.type).map((item) => String(item.value ?? "").length),
+      20,
+    );
     return `String(${maxLen})`;
   }
 

@@ -34,7 +34,13 @@
     "format-examples": "pnpm run format-examples:ent && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
     "format-examples:ent": "find outputs -path '*/ent/*' -name '*.go' -type f -exec gofmt -w {} +",
     "format-examples:sqlmodel": "find outputs -path '*/sqlmodel' -type d -exec ruff format {} +",
-    "format-examples:zod": "find outputs -path '*/zod' -type d -exec prettier --write {} +"
+    "format-examples:zod": "find outputs -path '*/zod' -type d -exec prettier --write {} +",
+    "validate-examples:ent": "sh -c 'cd outputs/file-vault/ent && go build -mod=mod ./...' && sh -c 'cd outputs/game-platform/ent && go build -mod=mod ./...'",
+    "validate-examples:sqlmodel": "python -m compileall outputs/file-vault/sqlmodel outputs/game-platform/sqlmodel",
+    "validate-examples:zod": "pnpm --dir outputs/file-vault/zod exec tsc -p tsconfig.json && pnpm --dir outputs/game-platform/zod exec tsc -p tsconfig.json",
+    "validate-examples:dbml": "test -s outputs/file-vault/dbml/schema.dbml && test -s outputs/game-platform/dbml/schema.dbml",
+    "validate-examples:protobuf": "sh -c 'protos=\"$(find outputs/file-vault/protobuf -name \"*.proto\" | sort)\"; test -n \"$protos\" && protoc -I outputs/file-vault/protobuf --descriptor_set_out=/tmp/file-vault.pb $protos'",
+    "validate-examples": "pnpm run validate-examples:ent && pnpm run validate-examples:sqlmodel && pnpm run validate-examples:zod && pnpm run validate-examples:protobuf"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -49,7 +55,6 @@
     "@qninhdt/typespec-dbml": "workspace:*",
     "@qninhdt/typespec-ent": "workspace:*",
     "@qninhdt/typespec-orm": "workspace:*",
-    "@qninhdt/typespec-protobuf": "workspace:*",
     "@qninhdt/typespec-sqlmodel": "workspace:*",
     "@qninhdt/typespec-zod": "workspace:*",
     "@typespec/compiler": "^1.12.0",

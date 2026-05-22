@@ -76,7 +76,9 @@ export function buildPythonImportBlock(
   const importList = [...sqlmodelOrPydanticImports].sort((left, right) =>
     left.localeCompare(right),
   );
-  code += `from ${importSource} import ${importList.join(", ")}\n`;
+  if (importList.length > 0) {
+    code += `from ${importSource} import ${importList.join(", ")}\n`;
+  }
 
   return code;
 }

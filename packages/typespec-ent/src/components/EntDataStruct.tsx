@@ -103,8 +103,8 @@ export function EntDataFile(props: EntDataFileProps): Children {
   if (enumLines.length > 0) lines.push(enumLines.join("\n"));
   lines.push(docComment);
   lines.push(`type ${structName} struct {`);
-  lines.push(embeddedFieldLines.join(""));
-  lines.push(fieldLineStrs.join(""));
+  if (embeddedFieldLines.length > 0) lines.push(embeddedFieldLines.join("").replace(/\n$/, ""));
+  if (fieldLineStrs.length > 0) lines.push(fieldLineStrs.join("").replace(/\n$/, ""));
   lines.push("}");
   lines.push("");
 

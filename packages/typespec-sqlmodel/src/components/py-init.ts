@@ -1,4 +1,4 @@
-import { pythonTripleQuotedString } from "./py-field-utils.js";
+import { pythonTripleQuotedString, toPythonIdentifier } from "./py-field-utils.js";
 
 export interface PyInitModelExport {
   name: string;
@@ -11,12 +11,22 @@ export interface PyInitOptions {
   childPackages?: string[];
   includeMetadata?: boolean;
   importAssociations?: boolean;
+  reportCollision?: (info: { name: string; packageName: string }) => void;
 }
 
 export function generateInit(options: PyInitOptions): string {
   const FOUR_SPACES = "    ";
   const imports: string[] = [];
   const allExports: string[] = [];
+  const seen = new Set<string>();
+  const pushExport = (name: string) => {
+    if (seen.has(name)) {
+      options.reportCollision?.({ name, packageName: options.moduleName });
+      return;
+    }
+    seen.add(name);
+    allExports.push(`${FOUR_SPACES}"${name}",`);
+  };
 
   if (options.includeMetadata) {
     imports.push("from sqlmodel import SQLModel");
@@ -27,13 +37,23 @@ export function generateInit(options: PyInitOptions): string {
   }
 
   for (const childPackage of options.childPackages ?? []) {
-    imports.push(`from . import ${childPackage}`);
-    allExports.push(`${FOUR_SPACES}"${childPackage}",`);
+    const safeName = toPythonIdentifier(childPackage);
+    if (safeName === childPackage) {
+      imports.push(`from . import ${childPackage}`);
+    } else {
+      imports.push(`from . import ${childPackage} as ${safeName}`);
+    }
+    pushExport(safeName);
   }
 
   for (const model of options.models ?? []) {
-    imports.push(`from .${model.moduleFile} import ${model.name}`);
-    allExports.push(`${FOUR_SPACES}"${model.name}",`);
+    const safeName = toPythonIdentifier(model.name);
+    if (safeName === model.name) {
+      imports.push(`from .${model.moduleFile} import ${model.name}`);
+    } else {
+      imports.push(`from .${model.moduleFile} import ${model.name} as ${safeName}`);
+    }
+    pushExport(safeName);
   }
 
   let code = `${pythonTripleQuotedString(`${options.moduleName} - auto-generated models. DO NOT EDIT.`)}\n\n`;
@@ -44,8 +64,8 @@ export function generateInit(options: PyInitOptions): string {
   }
 
   if (options.includeMetadata) {
-    code += "metadata = SQLModel.metadata\n\n";
-    allExports.push(`${FOUR_SPACES}"metadata",`);
+    code += "target_metadata = SQLModel.metadata\n\n";
+    pushExport("target_metadata");
   }
 
   code += "__all__ = [\n";

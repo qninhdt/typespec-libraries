@@ -5,12 +5,25 @@
  */
 
 import type { Model, ModelProperty, Program } from "@typespec/compiler";
+import { walkPropertiesInherited } from "@typespec/compiler";
 import type { ResolvedRelation } from "@qninhdt/typespec-orm";
-import { camelToSnake, getDoc } from "@qninhdt/typespec-orm";
+import { camelToSnake, getDoc, getMappedBy } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
 import { FOUR_SPACES } from "./PyConstants.js";
 
-const CASCADE_DELETE_ORPHAN = '"cascade": "all, delete-orphan"';
+function deriveInverseBackPopulates(
+  program: Program,
+  prop: ModelProperty,
+  rel: ResolvedRelation,
+): string | undefined {
+  if (rel.kind !== "many-to-one" && rel.kind !== "one-to-one") return undefined;
+  for (const targetProp of walkPropertiesInherited(rel.targetModel)) {
+    if (getMappedBy(program, targetProp) === prop.name) {
+      return camelToSnake(targetProp.name);
+    }
+  }
+  return undefined;
+}
 
 /**
  * Generate a SQLModel Relationship() for a navigation property.
@@ -31,11 +44,14 @@ export function generateRelationField(
 
   const relArgs: string[] = [];
 
-  if (rel.backPopulates) {
-    relArgs.push(`back_populates="${rel.backPopulates}"`);
+  const resolvedBackPopulates =
+    rel.backPopulates ?? deriveInverseBackPopulates(program, prop, rel);
+
+  if (resolvedBackPopulates) {
+    relArgs.push(`back_populates="${resolvedBackPopulates}"`);
   }
 
-  if (rel.kind === "one-to-many" && !rel.backPopulates) {
+  if (rel.kind === "one-to-many" && !resolvedBackPopulates) {
     reportDiagnostic(program, {
       code: "missing-back-reference",
       format: {
@@ -60,9 +76,9 @@ export function generateRelationField(
     relArgs.push(
       `sa_relationship_kwargs={"remote_side": "${rel.targetModel.name}.${rel.targetProperty.name}"}`,
     );
-    // Use string quotes for forward reference in type annotation
+    // pyType already quotes the inner reference for forward-compat.
     return {
-      field: `${docComment}${FOUR_SPACES}${pyFieldName}: "${pyType}" = Relationship(${relArgs.join(", ")})\n`,
+      field: `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Relationship(${relArgs.join(", ")})\n`,
       targetModel: rel.targetModel,
     };
   }
@@ -72,8 +88,6 @@ export function generateRelationField(
 
   if (rel.kind === "many-to-many" && manyToManySecondary) {
     saRelKwArgs.push(`"secondary": ${manyToManySecondary}`);
-  } else if (isMany && rel.onDelete === "CASCADE") {
-    saRelKwArgs.push(CASCADE_DELETE_ORPHAN);
   }
 
   // Add any sa_relationship_kwargs to relArgs

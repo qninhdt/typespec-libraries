@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -34,13 +35,19 @@ class AssistantTask(Entity, table=True):
 
     conversation_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("assistant_conversations.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
         )
     )
     requested_by: UUID = Field(
-        index=True, foreign_key="user_accounts.id", sa_column_kwargs={"nullable": False}
+        sa_column=Column(
+            PG_UUID(as_uuid=True),
+            ForeignKey("user_accounts.id"),
+            nullable=False,
+            index=True,
+        )
     )
     task_type: str = Field(max_length=120, sa_column_kwargs={"nullable": False})
     objective: str = Field(sa_column=Column(Text, nullable=False))
@@ -49,7 +56,9 @@ class AssistantTask(Entity, table=True):
             SAEnum(AssistantTaskStatus), nullable=False, server_default="queued"
         )
     )
-    target_node_id: UUID | None = Field(default=None)
+    target_node_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     result_summary: str | None = Field(default=None, sa_column=Column(Text))
     started_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))

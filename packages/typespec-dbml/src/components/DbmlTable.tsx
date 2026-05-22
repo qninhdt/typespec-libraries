@@ -12,6 +12,7 @@ import {
   isIndex,
   getColumnName,
   getDoc,
+  getSchemaName,
 } from "@qninhdt/typespec-orm";
 import { generateColumnLine } from "./DbmlColumn.jsx";
 
@@ -66,7 +67,11 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  const tableLines = [`Table ${tableName} {`, ...lines];
+  const schemaName = getSchemaName(program, model);
+  const qualifiedName = schemaName
+    ? `${quoteDbmlIdentifier(schemaName)}.${quoteDbmlIdentifier(tableName)}`
+    : quoteDbmlIdentifier(tableName);
+  const tableLines = [`Table ${qualifiedName} {`, ...lines];
   if (indexes.length > 0) {
     tableLines.push("", "  indexes {", ...indexes, "  }");
   }
@@ -87,4 +92,8 @@ function buildCompositeIndexLine(ct: {
     suffix = " [unique]";
   }
   return `    (${ct.columns.join(", ")})${suffix}`;
+}
+
+function quoteDbmlIdentifier(name: string): string {
+  return /^[A-Za-z_][\w]*$/.test(name) ? name : `"${name.replaceAll('"', '\\"')}"`;
 }

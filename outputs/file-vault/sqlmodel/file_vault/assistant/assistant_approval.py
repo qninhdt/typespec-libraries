@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -31,6 +31,7 @@ class AssistantApproval(Entity, table=True):
 
     task_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("assistant_tasks.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -38,14 +39,16 @@ class AssistantApproval(Entity, table=True):
     )
     action: str = Field(max_length=160, sa_column_kwargs={"nullable": False})
     resource_type: str = Field(max_length=80, sa_column_kwargs={"nullable": False})
-    resource_id: UUID = Field(sa_column_kwargs={"nullable": False})
-    proposal_json: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    resource_id: UUID = Field(sa_column=Column(PG_UUID(as_uuid=True), nullable=False))
+    proposal_json: Any = Field(sa_column=Column(JSONB, nullable=False))
     decision: ApprovalDecision = Field(
         sa_column=Column(
             SAEnum(ApprovalDecision), nullable=False, server_default="pending"
         )
     )
-    decided_by: UUID | None = Field(default=None)
+    decided_by: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     decided_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )

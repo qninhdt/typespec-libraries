@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.processing.v1")
+@package({
+  name: "filevault.processing.v1",
+})
 namespace FileVault.Processing;
 
-@protoService
+@Protobuf.service
 interface ProcessingService {
   submitJob(...SubmitProcessingJobRequest): ProcessingJobView;
 

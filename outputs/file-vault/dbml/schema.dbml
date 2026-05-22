@@ -29,17 +29,17 @@ Enum AssistantTaskStatus {
 }
 
 Table assistant_approvals {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   task_id uuid [not null]
   action varchar(160) [not null]
   resource_type varchar(80) [not null]
   resource_id uuid [not null]
   proposal_json jsonb [not null]
-  decision ApprovalDecision [default: 'pending']
+  decision ApprovalDecision [not null, default: 'pending']
   decided_by uuid
-  decided_at timestamp
+  decided_at timestamptz
 
   indexes {
     task_id
@@ -47,14 +47,14 @@ Table assistant_approvals {
 }
 
 Table assistant_conversations {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  deleted_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  deleted_at timestamptz
   owner_id uuid [not null]
   title varchar(200) [not null]
-  state ConversationState [default: 'active']
-  last_message_at timestamp
+  state ConversationState [not null, default: 'active']
+  last_message_at timestamptz
 
   indexes {
     owner_id
@@ -62,11 +62,11 @@ Table assistant_conversations {
 }
 
 Table assistant_messages {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   conversation_id uuid [not null]
-  role MessageRole
+  role MessageRole [not null]
   content text [not null]
   model_name varchar(120)
   token_count integer
@@ -77,18 +77,18 @@ Table assistant_messages {
 }
 
 Table assistant_tasks {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   conversation_id uuid [not null]
   requested_by uuid [not null]
   task_type varchar(120) [not null]
   objective text [not null]
-  status AssistantTaskStatus [default: 'queued']
+  status AssistantTaskStatus [not null, default: 'queued']
   target_node_id uuid
   result_summary text
-  started_at timestamp
-  finished_at timestamp
+  started_at timestamptz
+  finished_at timestamptz
 
   indexes {
     conversation_id
@@ -106,17 +106,17 @@ Enum AuditSeverity {
 }
 
 Table audit_events {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   actor_id uuid
   action varchar(160) [not null]
   resource_type varchar(80) [not null]
   resource_id uuid
-  severity AuditSeverity [default: 'info']
-  request_id varchar(255)
-  ip_address_hash varchar(255)
-  user_agent_hash varchar(255)
+  severity AuditSeverity [not null, default: 'info']
+  request_id text
+  ip_address_hash text
+  user_agent_hash text
   metadata_json jsonb
 
   indexes {
@@ -125,12 +125,12 @@ Table audit_events {
 }
 
 Table audit_export_checkpoints {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  sink_name varchar(255) [not null]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  sink_name text [not null]
   last_event_id uuid
-  exported_at timestamp
+  exported_at timestamptz
 
   indexes {
     sink_name [unique]
@@ -160,16 +160,16 @@ Enum AccountStatus {
 }
 
 Table auth_sessions {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
-  refresh_token_hash varchar(255) [not null]
+  refresh_token_hash text [not null]
   device_label varchar(80)
   ip_address_hash varchar(128)
   user_agent_hash varchar(128)
-  expires_at timestamp [not null]
-  revoked_at timestamp
+  expires_at timestamptz [not null]
+  revoked_at timestamptz
 
   indexes {
     account_id
@@ -178,14 +178,14 @@ Table auth_sessions {
 }
 
 Table external_identities {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
-  provider ExternalAuthProvider
+  provider ExternalAuthProvider [not null]
   provider_subject varchar(256) [not null]
   email_at_provider varchar(320)
-  linked_at timestamp [not null]
+  linked_at timestamptz [not null]
 
   indexes {
     (provider, provider_subject) [unique]
@@ -194,15 +194,15 @@ Table external_identities {
 }
 
 Table mfa_factors {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
-  kind MfaFactorKind
+  kind MfaFactorKind [not null]
   label varchar(120)
-  secret_ref varchar(255) [not null]
-  verified_at timestamp
-  disabled_at timestamp
+  secret_ref text [not null]
+  verified_at timestamptz
+  disabled_at timestamptz
 
   indexes {
     account_id
@@ -210,14 +210,14 @@ Table mfa_factors {
 }
 
 Table password_credentials {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
-  password_hash varchar(255) [not null]
+  password_hash text [not null]
   password_algorithm varchar(64) [not null]
-  password_updated_at timestamp [not null]
-  compromised_at timestamp
+  password_updated_at timestamptz [not null]
+  compromised_at timestamptz
 
   indexes {
     account_id [unique]
@@ -225,18 +225,18 @@ Table password_credentials {
 }
 
 Table user_accounts {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  deleted_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  deleted_at timestamptz
   email varchar(320) [not null]
   display_name varchar(120) [not null]
   avatar_url varchar(512)
   locale varchar(16)
-  status AccountStatus [default: 'pending_verification']
-  email_verified_at timestamp
-  last_login_at timestamp
-  disabled_at timestamp
+  status AccountStatus [not null, default: 'pendingVerification']
+  email_verified_at timestamptz
+  last_login_at timestamptz
+  disabled_at timestamptz
 
   indexes {
     email [unique]
@@ -274,10 +274,10 @@ Enum Visibility {
 }
 
 Table file_labels {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  deleted_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  deleted_at timestamptz
   vault_id uuid [not null]
   name varchar(80) [not null]
   color varchar(16)
@@ -289,9 +289,9 @@ Table file_labels {
 }
 
 Table file_label_assignments {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
   label_id uuid [not null]
 
@@ -303,12 +303,12 @@ Table file_label_assignments {
 }
 
 Table file_metadata {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   node_id uuid [not null]
   current_version_id uuid
-  category FileCategory [default: 'unknown']
+  category FileCategory [not null, default: 'unspecified']
   media_type varchar(160) [not null]
   extension varchar(32)
   size_bytes bigint [not null]
@@ -321,9 +321,9 @@ Table file_metadata {
 }
 
 Table file_versions {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
   version_number integer [not null]
   storage_object_id uuid [not null]
@@ -340,20 +340,20 @@ Table file_versions {
 }
 
 Table vault_nodes {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  deleted_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  deleted_at timestamptz
   vault_id uuid [not null]
   parent_id uuid
-  kind VaultNodeKind
+  kind VaultNodeKind [not null]
   name varchar(240) [not null]
   normalized_name varchar(240) [not null]
   path text [not null]
   depth integer [not null]
-  state VaultNodeState [default: 'active']
-  visibility Visibility [default: 'private']
-  trashed_at timestamp
+  state VaultNodeState [not null, default: 'active']
+  visibility Visibility [not null, default: 'private']
+  trashed_at timestamptz
   created_by uuid [not null]
   updated_by uuid
 
@@ -367,10 +367,10 @@ Table vault_nodes {
 }
 
 Table vault_spaces {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  deleted_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  deleted_at timestamptz
   owner_id uuid [not null]
   name varchar(120) [not null]
   quota_bytes bigint [not null]
@@ -397,15 +397,15 @@ Enum NotificationState {
 }
 
 Table notifications {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   recipient_id uuid [not null]
   subject varchar(160) [not null]
   body text [not null]
-  resource_type varchar(255)
+  resource_type text
   resource_id uuid
-  read_at timestamp
+  read_at timestamptz
 
   indexes {
     recipient_id
@@ -413,15 +413,15 @@ Table notifications {
 }
 
 Table notification_deliveries {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   notification_id uuid [not null]
-  channel NotificationChannel
-  state NotificationState [default: 'queued']
-  provider_message_id varchar(255)
-  error_message varchar(255)
-  sent_at timestamp
+  channel NotificationChannel [not null]
+  state NotificationState [not null, default: 'queued']
+  provider_message_id text
+  error_message text
+  sent_at timestamptz
 
   indexes {
     notification_id
@@ -429,11 +429,11 @@ Table notification_deliveries {
 }
 
 Table notification_preferences {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
-  channel NotificationChannel
+  channel NotificationChannel [not null]
   enabled boolean [not null, default: `true`]
   quiet_hours_json jsonb
 
@@ -471,11 +471,11 @@ Enum ProcessingStatus {
 }
 
 Table extracted_texts {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
-  language varchar(255)
+  language text
   content text [not null]
   extraction_version integer [not null, default: `1`]
 
@@ -485,13 +485,13 @@ Table extracted_texts {
 }
 
 Table file_summaries {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
   summary text [not null]
-  model_name varchar(255) [not null]
-  generated_at timestamp [not null]
+  model_name text [not null]
+  generated_at timestamptz [not null]
 
   indexes {
     file_id [unique]
@@ -499,12 +499,12 @@ Table file_summaries {
 }
 
 Table processing_artifacts {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   job_id uuid [not null]
   file_id uuid [not null]
-  kind ArtifactKind
+  kind ArtifactKind [not null]
   storage_object_id uuid
   text_value text
   metadata_json jsonb
@@ -516,18 +516,18 @@ Table processing_artifacts {
 }
 
 Table processing_jobs {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
   version_id uuid
-  kind ProcessingKind
-  status ProcessingStatus [default: 'queued']
+  kind ProcessingKind [not null]
+  status ProcessingStatus [not null, default: 'queued']
   priority integer [not null, default: `100`]
   attempts integer [not null, default: `0`]
-  scheduled_at timestamp [not null]
-  started_at timestamp
-  finished_at timestamp
+  scheduled_at timestamptz [not null]
+  started_at timestamptz
+  finished_at timestamptz
   error_message varchar(512)
   parameters_json jsonb
 
@@ -549,16 +549,16 @@ Enum IndexState {
 }
 
 Table search_documents {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   file_id uuid [not null]
   owner_id uuid [not null]
   title varchar(240) [not null]
-  media_type varchar(255) [not null]
-  language varchar(255)
-  state IndexState [default: 'pending']
-  indexed_at timestamp
+  media_type text [not null]
+  language text
+  state IndexState [not null, default: 'pending']
+  indexed_at timestamptz
   content_version integer [not null, default: `1`]
   tags_json jsonb
 
@@ -569,12 +569,12 @@ Table search_documents {
 }
 
 Table search_index_checkpoints {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
-  shard_key varchar(255) [not null]
-  last_processed_event_id varchar(255)
-  last_processed_at timestamp
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
+  shard_key text [not null]
+  last_processed_event_id text
+  last_processed_at timestamptz
 
   indexes {
     shard_key [unique]
@@ -597,16 +597,16 @@ Enum ShareRole {
 }
 
 Table share_grants {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   resource_node_id uuid [not null]
   granted_by uuid [not null]
-  subject_kind ShareSubjectKind
+  subject_kind ShareSubjectKind [not null]
   subject varchar(320) [not null]
-  role ShareRole
-  expires_at timestamp
-  revoked_at timestamp
+  role ShareRole [not null]
+  expires_at timestamptz
+  revoked_at timestamptz
 
   indexes {
     resource_node_id
@@ -615,18 +615,18 @@ Table share_grants {
 }
 
 Table share_links {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   resource_node_id uuid [not null]
   created_by uuid [not null]
-  token_hash varchar(255) [not null]
-  role ShareRole [default: 'viewer']
-  password_hash varchar(255)
+  token_hash text [not null]
+  role ShareRole [not null, default: 'viewer']
+  password_hash text
   max_downloads integer
   download_count integer [not null, default: `0`]
-  expires_at timestamp
-  revoked_at timestamp
+  expires_at timestamptz
+  revoked_at timestamptz
 
   indexes {
     resource_node_id
@@ -654,9 +654,9 @@ Enum UploadState {
 }
 
 Table storage_buckets {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   name varchar(120) [not null]
   provider varchar(80) [not null]
   region varchar(80) [not null]
@@ -668,16 +668,16 @@ Table storage_buckets {
 }
 
 Table storage_objects {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   bucket_id uuid [not null]
-  object_key varchar(255) [not null]
+  object_key text [not null]
   size_bytes bigint [not null]
   sha256 varchar(128) [not null]
   media_type varchar(160) [not null]
-  state StorageObjectState [default: 'pending']
-  encryption_key_ref varchar(255)
+  state StorageObjectState [not null, default: 'pending']
+  encryption_key_ref text
 
   indexes {
     bucket_id
@@ -686,9 +686,9 @@ Table storage_objects {
 }
 
 Table upload_parts {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   upload_session_id uuid [not null]
   part_number integer [not null]
   offset_bytes bigint [not null]
@@ -702,17 +702,17 @@ Table upload_parts {
 }
 
 Table upload_sessions {
-  id uuid [pk, not null]
-  created_at timestamp [not null, default: `now()`]
-  updated_at timestamp [default: `now()`]
+  id uuid [pk]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [default: `now()`]
   account_id uuid [not null]
   bucket_id uuid [not null]
   storage_object_id uuid
   file_name varchar(240) [not null]
   expected_size_bytes bigint [not null]
-  state UploadState [default: 'initiated']
-  expires_at timestamp [not null]
-  completed_at timestamp
+  state UploadState [not null, default: 'initiated']
+  expires_at timestamptz [not null]
+  completed_at timestamptz
 
   indexes {
     account_id

@@ -1,11 +1,13 @@
-import "@qninhdt/typespec-protobuf";
+import "@typespec/protobuf";
 
-using Qninhdt.Proto;
+using Protobuf;
 
-@protoPackage("filevault.search.v1")
+@package({
+  name: "filevault.search.v1",
+})
 namespace FileVault.Search;
 
-@protoService
+@Protobuf.service
 interface SearchService {
   searchFiles(...SearchFilesRequest): SearchFilesResponse;
 

@@ -1,6 +1,8 @@
 module github.com/example/file-vault
 
-go 1.22
+go 1.24
+
+toolchain go1.24.1
 
 require (
 	entgo.io/ent v0.14.6

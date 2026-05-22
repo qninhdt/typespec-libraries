@@ -34,9 +34,15 @@ export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-dbml",
   diagnostics: {
     "unsupported-type": {
+      severity: "error",
+      messages: {
+        default: `Column type could not be mapped to a DBML type.`,
+      },
+    },
+    "invalid-enum-default": {
       severity: "warning",
       messages: {
-        default: `Column skipped: type could not be mapped to a DBML type.`,
+        default: paramMessage`Default value '${"value"}' is not a member of enum '${"enumName"}'. Known members: ${"members"}.`,
       },
     },
     "emit-write-failed": {

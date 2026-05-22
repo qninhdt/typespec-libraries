@@ -6,6 +6,7 @@ from uuid import UUID
 from datetime import datetime
 
 from sqlalchemy import Column, DateTime, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -21,6 +22,7 @@ class Notification(Entity, table=True):
 
     recipient_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("user_accounts.id", ondelete="CASCADE"),
             nullable=False,
             index=True,
@@ -29,7 +31,9 @@ class Notification(Entity, table=True):
     subject: str = Field(max_length=160, sa_column_kwargs={"nullable": False})
     body: str = Field(sa_column=Column(Text, nullable=False))
     resource_type: str | None = Field(default=None, max_length=255)
-    resource_id: UUID | None = Field(default=None)
+    resource_id: UUID | None = Field(
+        default=None, sa_column=Column(PG_UUID(as_uuid=True))
+    )
     read_at: datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True))
     )

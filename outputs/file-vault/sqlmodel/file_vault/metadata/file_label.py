@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sqlalchemy import Column, ForeignKey, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.soft_deletable_entity import SoftDeletableEntity
 
@@ -23,6 +24,7 @@ class FileLabel(SoftDeletableEntity, table=True):
 
     vault_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("vault_spaces.id", ondelete="CASCADE"),
             nullable=False,
             index=True,

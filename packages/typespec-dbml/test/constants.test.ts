@@ -41,7 +41,9 @@ describe("DBML constants helpers", () => {
         default: "pending",
         note: `line "one"\nline 'two'`,
       }),
-    ).toBe(" [pk, not null, unique, default: 'pending', note: 'line one line two']");
+    ).toBe(
+      ` [pk, not null, unique, default: 'pending', note: '''line "one"\nline 'two\\'''']`,
+    );
     expect(formatColumnSettings({})).toBe("");
   });
 
@@ -89,14 +91,41 @@ describe("formatColumnSettings individual options", () => {
     expect(formatColumnSettings({ default: "path\\to" })).toBe(" [default: 'path\\\\to']");
   });
 
-  it("sanitizes note by removing quotes and collapsing newlines", () => {
+  it("uses triple-quoted long form when a note contains quotes or backticks", () => {
     expect(formatColumnSettings({ note: 'has "quotes" and `backticks`' })).toBe(
-      " [note: 'has quotes and backticks']",
+      " [note: '''has \"quotes\" and `backticks`''']",
     );
   });
 
-  it("collapses Windows-style newlines in notes", () => {
-    expect(formatColumnSettings({ note: "line1\r\nline2" })).toBe(" [note: 'line1 line2']");
+  it("preserves apostrophes inside long-form notes without losing them", () => {
+    // Apostrophes embedded mid-string don't need escaping inside `'''...'''`.
+    expect(formatColumnSettings({ note: "can't \"do this\"" })).toBe(
+      " [note: '''can't \"do this\"''']",
+    );
+  });
+
+  it("escapes trailing apostrophes that would collide with the closing delimiter", () => {
+    expect(formatColumnSettings({ note: "ends in quote'" })).toBe(
+      " [note: '''ends in quote\\'''']",
+    );
+  });
+
+  it("escapes triple-apostrophe runs inside long-form notes", () => {
+    expect(formatColumnSettings({ note: "a'''b\n" })).toBe(
+      " [note: '''a\\'\\'\\'b\n''']",
+    );
+  });
+
+  it("preserves newlines in long-form notes", () => {
+    expect(formatColumnSettings({ note: "line1\nline2" })).toBe(
+      " [note: '''line1\nline2''']",
+    );
+  });
+
+  it("normalizes Windows-style newlines to LF in long-form notes", () => {
+    expect(formatColumnSettings({ note: "line1\r\nline2" })).toBe(
+      " [note: '''line1\nline2''']",
+    );
   });
 });
 
@@ -134,8 +163,8 @@ describe("DBML_TYPE_MAP", () => {
   });
 
   it("maps integer types correctly", () => {
-    expect(DBML_TYPE_MAP.int8).toBe("integer");
-    expect(DBML_TYPE_MAP.int16).toBe("integer");
+    expect(DBML_TYPE_MAP.int8).toBe("smallint");
+    expect(DBML_TYPE_MAP.int16).toBe("smallint");
     expect(DBML_TYPE_MAP.int32).toBe("integer");
     expect(DBML_TYPE_MAP.int64).toBe("bigint");
     expect(DBML_TYPE_MAP.uint32).toBe("bigint");
@@ -143,14 +172,14 @@ describe("DBML_TYPE_MAP", () => {
   });
 
   it("maps temporal types correctly", () => {
-    expect(DBML_TYPE_MAP.utcDateTime).toBe("timestamp");
+    expect(DBML_TYPE_MAP.utcDateTime).toBe("timestamptz");
     expect(DBML_TYPE_MAP.date).toBe("date");
     expect(DBML_TYPE_MAP.time).toBe("time");
     expect(DBML_TYPE_MAP.duration).toBe("interval");
   });
 
   it("maps float types correctly", () => {
-    expect(DBML_TYPE_MAP.float32).toBe("float");
-    expect(DBML_TYPE_MAP.float64).toBe("double");
+    expect(DBML_TYPE_MAP.float32).toBe("real");
+    expect(DBML_TYPE_MAP.float64).toBe("double precision");
   });
 });

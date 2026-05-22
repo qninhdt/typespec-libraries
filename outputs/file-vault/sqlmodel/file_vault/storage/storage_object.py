@@ -6,6 +6,7 @@ from uuid import UUID
 from enum import Enum
 
 from sqlalchemy import Column, Enum as SAEnum, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlmodel import Field, Relationship, SQLModel
 from ..shared.entity import Entity
 
@@ -30,6 +31,7 @@ class StorageObject(Entity, table=True):
 
     bucket_id: UUID = Field(
         sa_column=Column(
+            PG_UUID(as_uuid=True),
             ForeignKey("storage_buckets.id", ondelete="RESTRICT"),
             nullable=False,
             index=True,
