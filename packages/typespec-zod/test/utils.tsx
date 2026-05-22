@@ -8,10 +8,8 @@ import {
   expectFileContains,
 } from "@qninhdt/typespec-orm/testing";
 import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
-import { newTopologicalTypeCollector } from "../src/utils.jsx";
 import { ZodModelFile } from "../src/components/ZodModelFile.jsx";
 import { collectScalarsForModels, ZodScalarsFile } from "../src/components/ZodScalarsFile.jsx";
-import { ZodSchemaDeclaration } from "../src/components/ZodSchemaDeclaration.jsx";
 import { zod } from "../src/external-packages/zod.js";
 import { expect } from "vitest";
 
@@ -58,13 +56,6 @@ export async function renderZodOutput(
   });
   const dataModels = selection.models;
 
-  const collector = newTopologicalTypeCollector(program);
-  for (const { model } of dataModels) {
-    collector.collectType(model);
-  }
-
-  const declarations = collector.types.filter((t) => t.kind === "Enum" || t.kind === "Model");
-
   const tree = (
     <Output program={program} externals={[zod]}>
       <SourceDirectory path=".">
@@ -75,12 +66,6 @@ export async function renderZodOutput(
             dataModels.map(({ model }) => model),
           )}
         />
-        {declarations.map((type) => {
-          if (type.kind === "Enum") {
-            return <ZodSchemaDeclaration type={type} name={type.name + "Schema"} export />;
-          }
-          return null;
-        })}
         {dataModels.map(({ model, label }) => {
           const directory =
             typeof pathPrefix === "string" ? pathPrefix : pathPrefix ? "models" : "";

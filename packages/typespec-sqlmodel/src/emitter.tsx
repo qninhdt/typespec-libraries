@@ -20,6 +20,7 @@ import { buildPythonImportBlock, generateInit } from "./components/PyConstants.j
 import { toPythonIdentifier } from "./components/py-field-utils.js";
 import { PyDataFile } from "./components/PyDataModel.jsx";
 import { PyModelFile } from "./components/PyModel.jsx";
+import { buildMappedByIndex } from "./components/PyRelationField.jsx";
 import {
   buildPythonScalarAliasNames,
   collectAliasableScalarsForModels,
@@ -81,7 +82,18 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
-  const tables = selection.models.filter((model) => model.kind === "table");
+
+  // Partition once and reuse — avoids three separate filter passes per
+  // namespace group below.
+  const modelsByKind: Record<NormalizedOrmModel["kind"], NormalizedOrmModel[]> = {
+    table: [],
+    mixin: [],
+    data: [],
+  };
+  for (const model of selection.models) {
+    modelsByKind[model.kind].push(model);
+  }
+  const tables = modelsByKind.table;
 
   const manyToManyAssociations = collectManyToManyAssociations(
     program,
@@ -105,6 +117,13 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   );
   const scalarGroups = buildScalarGroups(program, selection.models);
   const scalarGroupsByTopLevel = new Map(scalarGroups.map((group) => [group.topLevel, group]));
+
+  // Build the inverse-mappedBy index once — N×M property walks become O(N).
+  const allRelationModels = new Set<Model>();
+  for (const model of [...tables, ...modelsByKind.mixin]) {
+    allRelationModels.add(model.model);
+  }
+  const mappedByIndex = buildMappedByIndex(program, allRelationModels);
 
   const tree = (
     <SourceDirectory path=".">
@@ -184,6 +203,7 @@ packages = [` +
                 manyToManySecondaryByProp={manyToManySecondaryByProp}
                 runtimeImports={runtimeImportsByModel.get(model.model)}
                 scalarAliasNames={scalarGroupsByTopLevel.get(model.namespacePath[0])?.aliasNames}
+                mappedByIndex={mappedByIndex}
               />
             ))}
           {models
@@ -195,6 +215,7 @@ packages = [` +
                 modelLookup={graph.byModel}
                 collectionStrategy={collectionStrategy}
                 scalarAliasNames={scalarGroupsByTopLevel.get(model.namespacePath[0])?.aliasNames}
+                mappedByIndex={mappedByIndex}
               />
             ))}
           {models

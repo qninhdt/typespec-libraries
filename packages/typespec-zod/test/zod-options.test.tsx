@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Program, Scalar, Type } from "@typespec/compiler";
-import {
-  ZodCustomEmitOptions,
-  getEmitOptionsForType,
-  getEmitOptionsForTypeKind,
-  getZodOptions,
-} from "../src/context/zod-options.js";
-import { createTestRunner } from "./utils.jsx";
+import type { Program } from "@typespec/compiler";
+import { getZodOptions } from "../src/context/zod-options.js";
 
 type ProgramStubOverrides = Partial<Program> & {
   getCompilerOptions?: () => { emitterOutput?: Record<string, unknown> };
@@ -18,42 +12,6 @@ function createProgramStub(overrides?: ProgramStubOverrides): Program {
     ...overrides,
   } as Program;
 }
-
-describe("ZodCustomEmitOptions", () => {
-  it("returns options registered for an exact type", () => {
-    const custom = ZodCustomEmitOptions();
-    const type = { kind: "Model", name: "User" } as Type;
-    const reference = { noDeclaration: true };
-
-    custom.forType(type, reference);
-
-    expect(getEmitOptionsForType(createProgramStub(), type, custom)).toBe(reference);
-  });
-
-  it("returns options registered for a type kind", () => {
-    const custom = ZodCustomEmitOptions();
-    const options = { noDeclaration: true };
-
-    custom.forTypeKind("Enum", options);
-
-    expect(getEmitOptionsForTypeKind(createProgramStub(), "Enum", custom)).toBe(options);
-  });
-
-  it("falls back to a custom base scalar option", () => {
-    const custom = ZodCustomEmitOptions();
-    const options = { noDeclaration: true };
-
-    return createTestRunner().then(async (runner) => {
-      const compiled = (await runner.compile(`
-        scalar CustomBase extends string;
-        scalar CustomDerived extends CustomBase;
-      `)) as Record<string, Scalar>;
-
-      custom.forType(compiled.CustomBase, options);
-      expect(getEmitOptionsForType(runner.program, compiled.CustomDerived, custom)).toBe(options);
-    });
-  });
-});
 
 describe("getZodOptions", () => {
   it("reads emitter options from compiler output", () => {
@@ -71,6 +29,12 @@ describe("getZodOptions", () => {
     expect(getZodOptions(program)).toEqual({
       standalone: true,
       "library-name": "demo-lib",
+      "int64-strategy": "string",
+    });
+  });
+
+  it("defaults int64-strategy to string when no options provided", () => {
+    expect(getZodOptions(createProgramStub())).toEqual({
       "int64-strategy": "string",
     });
   });

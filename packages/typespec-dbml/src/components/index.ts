@@ -9,4 +9,4 @@ export { generateColumnLine } from "./DbmlColumn.jsx";
 export { DbmlTable } from "./DbmlTable.jsx";
 export { generateRelationField, generateRelationFields } from "./DbmlRelationField.jsx";
 export { generateEnumDefinition, generateEnumDefinitions } from "./DbmlEnum.jsx";
-export { DbmlFile } from "./DbmlFile.jsx";
+export { renderAssociationTable, renderAssociationRefs } from "./DbmlAssociation.jsx";

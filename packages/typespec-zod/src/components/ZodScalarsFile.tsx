@@ -4,16 +4,11 @@
 
 import { Children } from "@alloy-js/core";
 import { SourceFile } from "@alloy-js/typescript";
-import {
-  walkPropertiesInherited,
-  type Model,
-  type Program,
-  type Scalar,
-  type Type,
-} from "@typespec/compiler";
+import { type Model, type Program, type Scalar } from "@typespec/compiler";
 import { generatedHeader, getNamespaceSegments, getTypeFullName } from "@qninhdt/typespec-orm";
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
 import { shouldReference, toPascalCase } from "../utils.js";
+import { walkReferencedTypes } from "../traversal.js";
 
 export interface ZodScalarsFileProps {
   readonly program: Program;
@@ -40,53 +35,13 @@ export function ZodScalarsFile(props: ZodScalarsFileProps): Children {
 
 export function collectScalarsForModels(program: Program, models: readonly Model[]): Scalar[] {
   const scalars = new Map<string, Scalar>();
-  const seen = new Set<Type>();
-
-  function visit(type: Type): void {
-    if (seen.has(type)) return;
-    seen.add(type);
-
-    if (type.kind === "Scalar") {
-      if (shouldReference(program, type)) {
-        scalars.set(getTypeFullName(program, type), type);
-      }
-      if (type.baseScalar) visit(type.baseScalar);
-      return;
-    }
-
-    if (type.kind === "Model") {
-      if (type.baseModel) visit(type.baseModel);
-      if (type.indexer) {
-        visit(type.indexer.key);
-        visit(type.indexer.value);
-      }
-      for (const prop of walkPropertiesInherited(type)) {
-        visit(prop.type);
-      }
-      return;
-    }
-
-    if (type.kind === "Union") {
-      for (const variant of type.variants.values()) {
-        visit(variant.kind === "UnionVariant" ? variant.type : variant);
-      }
-      return;
-    }
-
-    if (type.kind === "UnionVariant") {
-      visit(type.type);
-      return;
-    }
-
-    if (type.kind === "Tuple") {
-      for (const value of type.values) {
-        visit(value);
-      }
-    }
-  }
 
   for (const model of models) {
-    visit(model);
+    walkReferencedTypes(model, (type) => {
+      if (type.kind === "Scalar" && shouldReference(program, type)) {
+        scalars.set(getTypeFullName(program, type), type);
+      }
+    });
   }
 
   return [...scalars.entries()]

@@ -7,13 +7,6 @@
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
 import {
-  getMaxLength as tsGetMaxLength,
-  getMaxValue as tsGetMaxValue,
-  getMaxValueExclusive as tsGetMaxValueExclusive,
-  getMinLength as tsGetMinLength,
-  getMinValue as tsGetMinValue,
-  getMinValueExclusive as tsGetMinValueExclusive,
-  getPattern as tsGetPattern,
   type Model,
   type ModelProperty,
   type Program,
@@ -24,13 +17,6 @@ import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getDoc,
   getOrmScalarName,
-  getMaxLength,
-  getMaxValue,
-  getMaxValueExclusive,
-  getMinLength,
-  getMinValue,
-  getMinValueExclusive,
-  getPattern,
   getPlaceholder,
   getEnumMembers,
   getTitle,
@@ -53,6 +39,7 @@ import {
   toPythonRelativeImport,
 } from "./PyConstants.js";
 import { getNativePydanticType, collectAliasableCustomScalars } from "./py-field-utils.js";
+import { getEffectivePropertyConstraints } from "./py-property-constraints.js";
 
 export interface PyDataFileProps {
   readonly program: Program;
@@ -104,8 +91,8 @@ export function PyDataFile(props: PyDataFileProps): Children {
 
   let code = FILE_HEADER;
   code += buildPythonImportBlock(stdImports, new Set(), pydanticImports, "pydantic");
-  code += buildReferencedModelImportBlock(new Set(sourceModels), modelLookup, namespacePath);
-  code += buildReferencedModelImportBlock(referencedModels, modelLookup, namespacePath);
+  const allReferenced = new Set<Model>([...sourceModels, ...referencedModels]);
+  code += buildReferencedModelImportBlock(allReferenced, modelLookup, namespacePath);
   if (scalarNames.length > 0) {
     code += `from ${".".repeat(Math.max(namespacePath.length, 1))}_scalars import ${[...new Set(scalarNames)].join(", ")}\n`;
   }
@@ -349,19 +336,10 @@ function pushValidationFieldArgs(
   usesScalarAlias: boolean,
 ): void {
   // When using a scalar alias, only read constraints directly applied on the
-  // property itself (raw TypeSpec getters). Constraints inherited from the scalar
-  // definition are already in _scalars.py — don't duplicate them.
-  const maxLen = usesScalarAlias ? tsGetMaxLength(program, prop) : getMaxLength(program, prop);
-  const minLen = usesScalarAlias ? tsGetMinLength(program, prop) : getMinLength(program, prop);
-  const minVal = usesScalarAlias ? tsGetMinValue(program, prop) : getMinValue(program, prop);
-  const maxVal = usesScalarAlias ? tsGetMaxValue(program, prop) : getMaxValue(program, prop);
-  const minValExcl = usesScalarAlias
-    ? tsGetMinValueExclusive(program, prop)
-    : getMinValueExclusive(program, prop);
-  const maxValExcl = usesScalarAlias
-    ? tsGetMaxValueExclusive(program, prop)
-    : getMaxValueExclusive(program, prop);
-  const pattern = usesScalarAlias ? tsGetPattern(program, prop) : getPattern(program, prop);
+  // property itself. Constraints inherited from the scalar definition are
+  // already in _scalars.py — don't duplicate them.
+  const { maxLen, minLen, minVal, maxVal, minValExcl, maxValExcl, pattern } =
+    getEffectivePropertyConstraints(program, prop, { useDirect: usesScalarAlias });
 
   if (maxLen !== undefined) fieldArgs.push(`max_length=${maxLen}`);
   if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);

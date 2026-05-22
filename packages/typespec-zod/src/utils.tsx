@@ -5,12 +5,32 @@
 import { Refkey } from "@alloy-js/core";
 import { Children } from "@alloy-js/core/jsx-runtime";
 import { FunctionCallExpression, MemberExpression } from "@alloy-js/typescript";
-import { Program, Type, walkPropertiesInherited } from "@typespec/compiler";
+import { Model, ModelProperty, Program, Type } from "@typespec/compiler";
 import { $ } from "@typespec/compiler/typekit";
-import { SCCSet } from "@typespec/emitter-framework";
-import { isBuiltIn, isCustomScalar } from "@qninhdt/typespec-orm";
+import {
+  getModelOwnProperties as ormGetModelOwnProperties,
+  isBuiltIn,
+  isCustomScalar,
+} from "@qninhdt/typespec-orm";
 export { isBuiltIn };
 import { zod } from "./external-packages/zod.js";
+
+const ownPropertiesCache = new WeakMap<Model, ModelProperty[]>();
+
+/**
+ * Memoized wrapper around `getModelOwnProperties`. The underlying call
+ * walks the property map and filters; the cache avoids repeating that
+ * work when the same model is rendered through multiple components
+ * during a single emit.
+ */
+export function getModelOwnProperties(model: Model): ModelProperty[] {
+  let cached = ownPropertiesCache.get(model);
+  if (cached === undefined) {
+    cached = ormGetModelOwnProperties(model);
+    ownPropertiesCache.set(model, cached);
+  }
+  return cached;
+}
 
 export const refkeySym = Symbol.for("typespec-zod.refkey");
 
@@ -84,63 +104,6 @@ export function shouldReference(program: Program, type: Type): boolean {
     return isCustomScalar(program, type) && !ZOD_NATIVE_SCALARS.has(type.name);
   }
   return isDeclaration(program, type) && !isBuiltIn(program, type);
-}
-
-interface TypeCollector {
-  collectType: (type: Type) => void;
-  get types(): Type[];
-}
-
-export function newTopologicalTypeCollector(program: Program): TypeCollector {
-  const types = new SCCSet<Type>(referencedTypes);
-
-  function referencedTypes(type: Type): Type[] {
-    switch (type.kind) {
-      case "Model":
-        return [
-          ...(type.baseModel ? [type.baseModel] : []),
-          ...(type.indexer ? [type.indexer.key, type.indexer.value] : []),
-          ...[...walkPropertiesInherited(type)].map((p) => p.type),
-        ];
-
-      case "Union":
-        return [...type.variants.values()].map((v) => (v.kind === "UnionVariant" ? v.type : v));
-      case "UnionVariant":
-        return [type.type];
-      case "Interface":
-        return [...type.operations.values()];
-      case "Operation":
-        return [type.parameters, type.returnType];
-      case "Enum":
-        return [];
-      case "Scalar":
-        return type.baseScalar ? [type.baseScalar] : [];
-      case "Tuple":
-        return type.values;
-      case "Namespace":
-        return [
-          ...type.operations.values(),
-          ...type.scalars.values(),
-          ...type.models.values(),
-          ...type.enums.values(),
-          ...type.interfaces.values(),
-          ...type.namespaces.values(),
-        ];
-      default:
-        return [];
-    }
-  }
-
-  return {
-    collectType(type: Type) {
-      if (shouldReference(program, type)) {
-        types.add(type);
-      }
-    },
-    get types() {
-      return types.items;
-    },
-  };
 }
 
 export function call(target: string, ...args: Children[]) {

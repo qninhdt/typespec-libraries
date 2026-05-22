@@ -5,7 +5,7 @@ import {
   type Program,
   type Type,
 } from "@typespec/compiler";
-import { DataKey, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
+import { DataKey, ORM_NAMESPACE, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
   collectOrmManagedModels,
@@ -72,7 +72,6 @@ interface SelectionOptions {
 }
 
 const BUILTIN_NAMESPACE = "TypeSpec";
-const ORM_NAMESPACE = "Qninhdt.Orm";
 
 const MODEL_KIND_PRIORITY: Record<NormalizedOrmModel["kind"], number> = {
   data: 0,

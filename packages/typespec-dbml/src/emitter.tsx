@@ -7,9 +7,6 @@ import type { EmitContext, Model } from "@typespec/compiler";
 import {
   classifyProperties,
   collectManyToManyAssociations,
-  getColumnName,
-  getSchemaName,
-  getTableName,
   normalizeOrmGraph,
   selectModelsForEmitter,
   type EnumMemberInfo,
@@ -17,17 +14,14 @@ import {
   type NormalizedOrmGraph,
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
-import { getDbmlType } from "./components/DbmlConstants.js";
 import { DbmlTable } from "./components/DbmlTable.jsx";
 import { generateEnumDefinition } from "./components/DbmlEnum.jsx";
 import { generateRelationFields } from "./components/DbmlRelationField.jsx";
+import {
+  renderAssociationTable,
+  renderAssociationRefs,
+} from "./components/DbmlAssociation.jsx";
 import { reportDiagnostic, type DbmlEmitterOptions } from "./lib.js";
-
-function qualifyDbmlTable(program: EmitContext<DbmlEmitterOptions>["program"], model: Model): string {
-  const schema = getSchemaName(program, model);
-  const table = getTableName(program, model);
-  return schema ? `${schema}.${table}` : table;
-}
 
 interface ClassifiedTableEntry {
   normalized: NormalizedOrmModel;
@@ -61,20 +55,29 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
     tables.map((item) => item.model),
   );
 
-  const classifiedByTable = tables.map((table) => ({
-    normalized: table,
-    model: table.model,
-    tableName: table.tableName!,
-    classified: classifyProperties(program, table.model),
-  }));
+  const classifiedByTable = tables.map((table) => {
+    if (table.tableName === undefined) {
+      // Selection with kinds:["table"] guarantees a tableName, but be defensive.
+      throw new Error(`Selected table model ${table.fullName} is missing a tableName.`);
+    }
+    return {
+      normalized: table,
+      model: table.model,
+      tableName: table.tableName,
+      classified: classifyProperties(program, table.model),
+    };
+  });
+
+  const groupedTables = groupTablesByNamespace(classifiedByTable);
+  const groupedAssociations = groupAssociationsByNamespace(graph, associations);
 
   const documents = splitByNamespace
-    ? buildNamespaceDocuments(program, graph, classifiedByTable, associations)
+    ? buildNamespaceDocuments(program, groupedTables, groupedAssociations)
     : [
         {
           dir: ".",
           fileName: `${fileName}.dbml`,
-          code: buildSingleDocument(program, graph, classifiedByTable, associations),
+          code: buildSingleDocument(program, groupedTables, groupedAssociations),
         },
       ];
 
@@ -104,12 +107,9 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
 
 function buildSingleDocument(
   program: EmitContext<DbmlEmitterOptions>["program"],
-  graph: NormalizedOrmGraph,
-  tables: ClassifiedTableEntry[],
-  associations: ManyToManyAssociation[],
+  groupedTables: Map<string, ClassifiedTableEntry[]>,
+  groupedAssociations: Map<string, ManyToManyAssociation[]>,
 ): string {
-  const groupedTables = groupTablesByNamespace(tables);
-  const groupedAssociations = groupAssociationsByNamespace(graph, associations);
   const codeParts: string[] = ["// Database Schema", ""];
   const allRefs = new Set<string>();
 
@@ -136,13 +136,9 @@ function buildSingleDocument(
 
 function buildNamespaceDocuments(
   program: EmitContext<DbmlEmitterOptions>["program"],
-  graph: NormalizedOrmGraph,
-  tables: ClassifiedTableEntry[],
-  associations: ManyToManyAssociation[],
+  groupedTables: Map<string, ClassifiedTableEntry[]>,
+  groupedAssociations: Map<string, ManyToManyAssociation[]>,
 ): DbmlDocument[] {
-  const groupedTables = groupTablesByNamespace(tables);
-  const groupedAssociations = groupAssociationsByNamespace(graph, associations);
-
   return [...groupedTables.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([namespace, items]) => {
@@ -256,37 +252,4 @@ function groupAssociationsByNamespace(
     bucket.sort((a, b) => a.tableName.localeCompare(b.tableName));
   }
   return grouped;
-}
-
-function renderAssociationTable(
-  program: EmitContext<DbmlEmitterOptions>["program"],
-  association: ManyToManyAssociation,
-): string {
-  const leftType = getDbmlType(program, association.leftKey.type) ?? "varchar(255)";
-  const rightType = getDbmlType(program, association.rightKey.type) ?? "varchar(255)";
-
-  return [
-    `Table ${association.tableName} {`,
-    `  ${association.leftJoinColumn} ${leftType} [not null]`,
-    `  ${association.rightJoinColumn} ${rightType} [not null]`,
-    "",
-    "  indexes {",
-    `    (${association.leftJoinColumn}, ${association.rightJoinColumn}) [pk]`,
-    "  }",
-    "}",
-  ].join("\n");
-}
-
-function renderAssociationRefs(
-  program: EmitContext<DbmlEmitterOptions>["program"],
-  association: ManyToManyAssociation,
-): string[] {
-  const leftQualified = qualifyDbmlTable(program, association.leftModel);
-  const rightQualified = qualifyDbmlTable(program, association.rightModel);
-  const joinSchema = getSchemaName(program, association.leftModel) ?? getSchemaName(program, association.rightModel);
-  const joinQualified = joinSchema ? `${joinSchema}.${association.tableName}` : association.tableName;
-  return [
-    `Ref: ${joinQualified}.${association.leftJoinColumn} > ${leftQualified}.${getColumnName(program, association.leftKey)}`,
-    `Ref: ${joinQualified}.${association.rightJoinColumn} > ${rightQualified}.${getColumnName(program, association.rightKey)}`,
-  ];
 }

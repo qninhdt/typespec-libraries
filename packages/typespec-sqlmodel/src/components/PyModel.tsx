@@ -38,8 +38,9 @@ import {
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
 import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
-import { generateRelationField } from "./PyRelationField.jsx";
+import { generateRelationField, type MappedByIndex } from "./PyRelationField.jsx";
 import { collectAliasableCustomScalars } from "./py-field-utils.js";
+import { PyModelBuilder } from "./py-model-builder.js";
 import type { SqlModelEmitterOptions } from "../lib.js";
 
 export interface PyModelFileProps {
@@ -50,6 +51,7 @@ export interface PyModelFileProps {
   readonly manyToManySecondaryByProp?: Map<ModelProperty, string>;
   readonly runtimeImports?: Map<string, Set<string>>;
   readonly scalarAliasNames?: ReadonlyMap<Scalar, string>;
+  readonly mappedByIndex?: MappedByIndex;
 }
 
 interface RegularFieldContext {
@@ -57,12 +59,7 @@ interface RegularFieldContext {
   regularProps: ReturnType<typeof classifyProperties>["fields"];
   compositeUniqueColumns: Set<string>;
   fkInfoMap: Map<string, ResolvedForeignKeyFieldInfo>;
-  stdImports: Set<string>;
-  saImports: Set<string>;
-  sqlmodelImports: Set<string>;
-  needsField: { value: boolean };
-  needsColumn: { value: boolean };
-  fieldDefs: string[];
+  builder: PyModelBuilder;
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
   scalarAliasNames?: ReadonlyMap<Scalar, string>;
 }
@@ -100,17 +97,14 @@ export function PyModelFile(props: PyModelFileProps): Children {
     manyToManySecondaryByProp,
     runtimeImports,
     scalarAliasNames,
+    mappedByIndex,
   } = props;
   const { model } = normalizedModel;
   const tableName = normalizedModel.tableName;
   const fileName = camelToSnake(model.name) + ".py";
   const sourceModels = normalizedModel.mixins;
 
-  const stdImports = new Set<string>();
-  const saImports = new Set<string>();
-  const sqlmodelImports = new Set<string>(["SQLModel", "Field"]);
-  const needsField = { value: false };
-  const needsColumn = { value: false };
+  const builder = new PyModelBuilder();
 
   // Classify properties
   const {
@@ -126,56 +120,40 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
   const fkInfoMap = buildForeignKeyInfoMap(model, relations);
 
-  const fieldDefs: string[] = [];
-  const relationDefs: string[] = [];
-  const relationTargetModels = new Set<Model>();
-  const tableArgEntries = buildTableArgEntries(program, model, compositeTypeFields, saImports);
+  const tableArgEntries = buildTableArgEntries(program, model, compositeTypeFields, builder.saImports);
 
   const allCustomScalars = collectAliasableCustomScalars(program, model);
 
-  addIgnoredFields(program, ignored, fieldDefs, stdImports);
-  addRelationFields(
-    program,
-    relations,
-    relationDefs,
-    relationTargetModels,
-    stdImports,
-    sqlmodelImports,
-    manyToManySecondaryByProp,
-  );
+  addIgnoredFields(program, ignored, builder);
+  addRelationFields(program, relations, builder, manyToManySecondaryByProp, mappedByIndex);
   addRegularFields({
     program,
     regularProps,
     compositeUniqueColumns,
     fkInfoMap,
-    stdImports,
-    saImports,
-    sqlmodelImports,
-    needsField,
-    needsColumn,
-    fieldDefs,
+    builder,
     collectionStrategy,
     scalarAliasNames,
   });
-  addEnumImports(enumTypes, stdImports, saImports);
+  addEnumImports(enumTypes, builder.stdImports, builder.saImports);
 
   const code = buildPyModelCode({
     program,
     model,
     tableName,
     enumTypes,
-    stdImports,
-    saImports,
-    sqlmodelImports,
+    stdImports: builder.stdImports,
+    saImports: builder.saImports,
+    sqlmodelImports: builder.sqlmodelImports,
     runtimeImports,
-    relationTargetModels,
+    relationTargetModels: builder.relationTargetModels,
     sourceModels,
     modelLookup,
     namespacePath: normalizedModel.namespacePath,
     sourceModelNames: sourceModels.map((item) => item.name).sort((a, b) => a.localeCompare(b)),
     tableArgEntries,
-    fieldDefs,
-    relationDefs,
+    fieldDefs: builder.fieldDefs,
+    relationDefs: builder.relationDefs,
     scalarNames: Array.from(allCustomScalars).map((s) => scalarAliasNames?.get(s) ?? s.name),
     versionColumnName: tableName
       ? (() => {
@@ -198,12 +176,7 @@ function addRegularFields(context: RegularFieldContext): void {
     regularProps,
     compositeUniqueColumns,
     fkInfoMap,
-    stdImports,
-    saImports,
-    sqlmodelImports,
-    needsField,
-    needsColumn,
-    fieldDefs,
+    builder,
     collectionStrategy,
     scalarAliasNames,
   } = context;
@@ -211,15 +184,15 @@ function addRegularFields(context: RegularFieldContext): void {
     if (getCompositeFields(program, prop)) continue;
 
     const columnName = getColumnName(program, prop);
-    fieldDefs.push(
+    builder.addFieldDef(
       generateField(
         program,
         prop,
-        stdImports,
-        saImports,
-        sqlmodelImports,
-        needsField,
-        needsColumn,
+        builder.stdImports,
+        builder.saImports,
+        builder.sqlmodelImports,
+        builder.needsField,
+        builder.needsColumn,
         compositeUniqueColumns.has(columnName),
         fkInfoMap.get(columnName),
         collectionStrategy,
@@ -407,31 +380,33 @@ function buildModelClass(
 function addIgnoredFields(
   program: Program,
   ignored: ReturnType<typeof classifyProperties>["ignored"],
-  fieldDefs: string[],
-  stdImports: Set<string>,
+  builder: PyModelBuilder,
 ): void {
   for (const { prop, enumInfo } of ignored) {
-    fieldDefs.push(generateIgnoredField(program, prop, stdImports, enumInfo));
+    builder.addFieldDef(generateIgnoredField(program, prop, builder.stdImports, enumInfo));
   }
 }
 
 function addRelationFields(
   program: Program,
   relations: ReturnType<typeof classifyProperties>["relations"],
-  relationDefs: string[],
-  relationTargetModels: Set<Model>,
-  stdImports: Set<string>,
-  sqlmodelImports: Set<string>,
+  builder: PyModelBuilder,
   manyToManySecondaryByProp: Map<ModelProperty, string> | undefined,
+  mappedByIndex: MappedByIndex | undefined,
 ): void {
   for (const { prop, resolved } of relations) {
-    sqlmodelImports.add("Relationship");
+    builder.ensureSqlmodel("Relationship");
     const secondary =
       resolved.kind === "many-to-many" ? manyToManySecondaryByProp?.get(prop) : undefined;
-    const { field, targetModel } = generateRelationField(program, prop, resolved, secondary);
-    relationDefs.push(field);
-    relationTargetModels.add(targetModel);
-    stdImports.add("TYPE_CHECKING");
+    const { field, targetModel } = generateRelationField(
+      program,
+      prop,
+      resolved,
+      secondary,
+      mappedByIndex,
+    );
+    builder.addRelationDef(field, targetModel);
+    builder.ensureStdImport("typing.TYPE_CHECKING");
   }
 }
 

@@ -5,24 +5,22 @@
 import { Children } from "@alloy-js/core";
 import { SourceFile } from "@alloy-js/typescript";
 import {
-  walkPropertiesInherited,
   type Enum,
   type Model,
   type Program,
   type Scalar,
-  type Type,
   type Union,
 } from "@typespec/compiler";
 import {
   generatedHeader,
-  getModelOwnProperties,
   getInputTypeForProperty,
   getPlaceholder,
   getTitle,
   isData,
 } from "@qninhdt/typespec-orm";
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
-import { shouldReference, toPascalCase } from "../utils.js";
+import { getModelOwnProperties, shouldReference, toPascalCase } from "../utils.js";
+import { walkReferencedTypes } from "../traversal.js";
 
 export interface ZodModelFileProps {
   readonly program: Program;
@@ -101,15 +99,9 @@ function collectReferencedDeclarations(
   root: Model,
   rootSchemaName: string,
 ): ReferencedDeclaration[] {
-  const seen = new Set<Type>();
   const declarations = new Map<string, ReferencedDeclarationType>();
 
-  function visit(current: Type): void {
-    if (seen.has(current)) {
-      return;
-    }
-    seen.add(current);
-
+  walkReferencedTypes(root, (current) => {
     switch (current.kind) {
       case "Enum":
         if (shouldReference(program, current)) {
@@ -117,42 +109,19 @@ function collectReferencedDeclarations(
         }
         return;
       case "Model":
-        if (current.baseModel) visit(current.baseModel);
-        if (current.indexer) {
-          visit(current.indexer.key);
-          visit(current.indexer.value);
-        }
-        for (const prop of walkPropertiesInherited(current)) {
-          visit(prop.type);
-        }
         if (current !== root && shouldReference(program, current) && !isData(program, current)) {
           declarations.set(getDeclarationKey(current), current);
         }
         return;
       case "Union":
-        for (const variant of current.variants.values()) {
-          visit(variant.kind === "UnionVariant" ? variant.type : variant);
-        }
         if (shouldReference(program, current)) {
           declarations.set(getDeclarationKey(current), current);
         }
         return;
-      case "UnionVariant":
-        visit(current.type);
-        return;
-      case "Tuple":
-        for (const value of current.values) {
-          visit(value);
-        }
-        return;
-      case "Scalar":
-        if (current.baseScalar) visit(current.baseScalar);
-        // Scalars are declared in _scalars.ts, not inlined in model files
-        return;
+      // Scalars are declared in _scalars.ts, not inlined in model files.
     }
-  }
+  });
 
-  visit(root);
   return buildDeclarationNames([...declarations.values()], rootSchemaName);
 }
 

@@ -24,7 +24,7 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
-    "collection-strategy": { type: "string", nullable: true },
+    "collection-strategy": { type: "string", enum: ["jsonb", "postgres"], nullable: true },
   },
   required: [],
 };

@@ -65,8 +65,9 @@ export function EntDataFile(props: EntDataFileProps): Children {
     packageImports,
   );
 
+  const shouldCollectEnums = props.emitEnums !== false;
   for (const prop of getModelOwnProperties(model)) {
-    collectGoEnumTypes(prop.type, enumTypes);
+    if (shouldCollectEnums) collectGoEnumTypes(prop.type, enumTypes);
     fieldLineStrs.push(
       generateDataFieldLine(
         program,

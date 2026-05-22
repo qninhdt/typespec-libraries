@@ -1,4 +1,4 @@
-import { render, SourceDirectory, type OutputDirectory } from "@alloy-js/core";
+import { render, SourceDirectory, SourceFile, type OutputDirectory } from "@alloy-js/core";
 import { TypeSpecDbmlTestLibrary } from "../src/testing/index.js";
 import {
   createTestRunner as sharedCreateTestRunner,
@@ -6,8 +6,10 @@ import {
   getOutputFileContent,
   expectFileContains,
 } from "@qninhdt/typespec-orm/testing";
-import { collectTableModels } from "@qninhdt/typespec-orm";
-import { DbmlFile } from "../src/components/DbmlFile.jsx";
+import { classifyProperties, collectTableModels } from "@qninhdt/typespec-orm";
+import { DbmlTable } from "../src/components/DbmlTable.jsx";
+import { generateEnumDefinition } from "../src/components/DbmlEnum.jsx";
+import { generateRelationFields } from "../src/components/DbmlRelationField.jsx";
 import { expect } from "vitest";
 
 const LIBRARIES = [TypeSpecDbmlTestLibrary];
@@ -44,9 +46,26 @@ export async function renderDbmlOutput(code: string): Promise<OutputDirectory> {
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.map(({ model, tableName }) => (
-        <DbmlFile program={program} model={model} tableName={tableName} allTables={tables} />
-      ))}
+      {tables.map(({ model, tableName }) => {
+        const { enumTypes, relations } = classifyProperties(program, model);
+        const tableDef = DbmlTable({ program, model, tableName });
+        const refs = generateRelationFields(program, relations, tableName);
+
+        const codeParts: string[] = ["// Database Schema", ""];
+        for (const [enumName, members] of enumTypes) {
+          codeParts.push(generateEnumDefinition(enumName, members), "");
+        }
+        codeParts.push(tableDef, "");
+        for (const ref of refs) {
+          codeParts.push(ref);
+        }
+
+        return (
+          <SourceFile path={`${tableName}.dbml`} filetype="dbml" printWidth={9999}>
+            {codeParts.join("\n")}
+          </SourceFile>
+        );
+      })}
     </SourceDirectory>
   );
 

@@ -341,6 +341,9 @@ export const $lib = createTypeSpecLibrary({
 
 export const { reportDiagnostic } = $lib;
 
+/** Fully-qualified TypeSpec namespace where ORM decorators are declared. */
+export const ORM_NAMESPACE = "Qninhdt.Orm";
+
 // ─── State Keys ──────────────────────────────────────────────────────────────
 // Typed symbol keys for program.stateMap() / program.stateSet() access.
 

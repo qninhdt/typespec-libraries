@@ -38,11 +38,7 @@ export function groupImports(imports: Set<string>): Map<string, Set<string>> {
 
     const lastDot = imp.lastIndexOf(".");
     if (lastDot === -1) {
-      if (imp === "TYPE_CHECKING") {
-        addGroupedImport(groups, "typing", imp);
-      } else {
-        groups.set(imp, new Set([imp]));
-      }
+      groups.set(imp, new Set([imp]));
       continue;
     }
 

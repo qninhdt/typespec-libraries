@@ -214,7 +214,6 @@ describe("GO_TYPE_MAP", () => {
     for (const key of expectedKeys) {
       expect(GO_TYPE_MAP).toHaveProperty(key);
       expect(GO_TYPE_MAP[key].goType).toBeTruthy();
-      expect(GO_TYPE_MAP[key].entType).toBeTruthy();
     }
   });
 

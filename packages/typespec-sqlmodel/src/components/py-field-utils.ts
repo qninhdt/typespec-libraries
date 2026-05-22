@@ -19,6 +19,14 @@ export function pythonStringLiteral(value: string): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Exhaustiveness check for discriminated unions / closed string sets. Throws
+ * if reached, so the type system catches a missing case at compile time.
+ */
+export function assertNever(value: never, context: string): never {
+  throw new Error(`Unhandled case in ${context}: ${JSON.stringify(value)}`);
+}
+
 const SQL_CALL_EXPRESSION = /^[A-Za-z_]\w*\s*\(.*\)$/;
 
 export function renderServerDefault(

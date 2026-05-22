@@ -186,8 +186,13 @@ describe("groupImports", () => {
     expect(result.get("sqlalchemy")).toEqual(new Set(["Column as SAColumn"]));
   });
 
-  it("handles TYPE_CHECKING as typing import", () => {
+  it("treats bare TYPE_CHECKING as a bare import (callers must qualify)", () => {
     const result = groupImports(new Set(["TYPE_CHECKING"]));
+    expect(result.get("TYPE_CHECKING")).toEqual(new Set(["TYPE_CHECKING"]));
+  });
+
+  it("groups qualified typing.TYPE_CHECKING under typing", () => {
+    const result = groupImports(new Set(["typing.TYPE_CHECKING"]));
     expect(result.get("typing")).toEqual(new Set(["TYPE_CHECKING"]));
   });
 
