@@ -9,8 +9,10 @@ import {
 } from "@qninhdt/typespec-orm/testing";
 import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
 import { ZodModelFile } from "../src/components/ZodModelFile.jsx";
+import { ZodMetaFile } from "../src/components/ZodMetaFile.jsx";
 import { collectScalarsForModels, ZodScalarsFile } from "../src/components/ZodScalarsFile.jsx";
 import { zod } from "../src/external-packages/zod.js";
+import type { ZodEmitterOptions } from "../src/lib.js";
 import { expect } from "vitest";
 
 const LIBRARIES = [TypeSpecZodTestLibrary];
@@ -27,18 +29,25 @@ export async function createEmitterTestRunner(emitterOptions?: Record<string, un
   });
 }
 
+export interface RenderOptions {
+  readonly pathPrefix?: string | boolean;
+  readonly emitterOptions?: ZodEmitterOptions;
+}
+
 export async function emitZodFile(
   code: string,
   fileName: string,
   pathPrefix: string | boolean = false,
+  emitterOptions?: ZodEmitterOptions,
 ): Promise<string> {
-  const output = await renderZodOutput(code, pathPrefix);
+  const output = await renderZodOutput(code, pathPrefix, emitterOptions);
   return getOutputFileContent(output, fileName);
 }
 
 export async function renderZodOutput(
   code: string,
   pathPrefix: string | boolean = false,
+  emitterOptions?: ZodEmitterOptions,
 ): Promise<OutputDirectory> {
   const runner = await createTestRunner();
   await runner.compile(code);
@@ -50,6 +59,23 @@ export async function renderZodOutput(
   ).toHaveLength(0);
 
   const program = runner.program;
+  // Stash emitter options on the program so getZodOptions() picks them up.
+  // Cast through `any` because the Program's `compilerOptions` shape is
+  // narrower than the test stub our zod-options reader expects.
+  if (emitterOptions) {
+    const stub = program as unknown as {
+      compilerOptions?: {
+        options?: Record<string, unknown>;
+      };
+    };
+    stub.compilerOptions = {
+      ...(stub.compilerOptions ?? {}),
+      options: {
+        ...(stub.compilerOptions?.options ?? {}),
+        "@qninhdt/typespec-zod": emitterOptions as unknown as Record<string, unknown>,
+      },
+    };
+  }
   const graph = normalizeOrmGraph(program);
   const selection = selectModelsForEmitter(program, graph, {
     kinds: ["mixin", "data"],
@@ -59,6 +85,7 @@ export async function renderZodOutput(
   const tree = (
     <Output program={program} externals={[zod]}>
       <SourceDirectory path=".">
+        <ZodMetaFile />
         <ZodScalarsFile
           program={program}
           scalars={collectScalarsForModels(

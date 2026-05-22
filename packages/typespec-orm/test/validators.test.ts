@@ -611,4 +611,212 @@ describe("$onValidate diagnostics", () => {
     );
     expect(diags).toHaveLength(0);
   });
+
+  it("warns when a model name or column name is a PostgreSQL reserved word", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table("user")
+      model User {
+        @key id: uuid;
+        order: string;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/pg-reserved-identifier",
+    );
+    // "user" (explicit table name) and "order" (column) are both reserved.
+    expect(diags.length).toBeGreaterThanOrEqual(2);
+    for (const diag of diags) {
+      expect(diag.severity).toBe("warning");
+    }
+    const messages = diags.map((d) => d.message);
+    expect(messages.some((m) => m.includes('"user"'))).toBe(true);
+    expect(messages.some((m) => m.includes('"order"'))).toBe(true);
+  });
+
+  it("reports mixin-field-conflict when a child model overrides a mixin field", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @tableMixin
+      model AuditFields {
+        createdAt: utcDateTime;
+      }
+
+      @table
+      model Post extends AuditFields {
+        @key id: uuid;
+        // Same field name as the mixin → child must not silently override.
+        createdAt: utcDateTime;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/mixin-field-conflict",
+    );
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("createdAt");
+  });
+
+  it("reports empty-index-columns when @@tableIndex is given an empty list", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        name: string;
+      }
+
+      @@tableIndex(User, #[]);
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/empty-index-columns",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+  });
+
+  it("reports duplicate-column-in-index when @@tableUnique repeats a column", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        email: string;
+      }
+
+      @@tableUnique(User, #["email", "email"], "user_email_unique");
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/duplicate-column-in-index",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("email");
+  });
+
+  it("reports default-expression-conflicts-literal when both are set on a property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Item {
+        @key id: uuid;
+        @defaultExpression("now()") createdAt: utcDateTime = utcDateTime.fromISO("2024-01-01T00:00:00Z");
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/default-expression-conflicts-literal",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("createdAt");
+  });
+
+  it("reports many-to-many-target-missing-key when a side has no @key", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Tag {
+        // intentionally missing @key
+        name: string;
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        @manyToMany("post_tag") tags: Tag[];
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/many-to-many-target-missing-key",
+    );
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("Tag");
+  });
+
+  it("reports auto-create-and-update-conflict when both decorators applied to same property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Item {
+        @key id: uuid;
+        @autoCreateTime @autoUpdateTime touchedAt: utcDateTime;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/auto-create-and-update-conflict",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("touchedAt");
+  });
+
+  it("reports multiple-auto-increment-columns when more than one @autoIncrement is present", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Counter {
+        @key @autoIncrement id: int64;
+        @autoIncrement seq: int64;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/multiple-auto-increment-columns",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+  });
+
+  it("reports auto-increment-requires-key when @autoIncrement is on a non-key property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Item {
+        @key id: uuid;
+        @autoIncrement seq: int64;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/auto-increment-requires-key",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+    expect(diags[0].message).toContain("seq");
+  });
+
+  it("reports auto-increment-requires-key when @autoIncrement is on an optional property", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Item {
+        @key id: uuid;
+        @autoIncrement seq?: int64;
+      }
+    `);
+    $onValidate(runner.program);
+
+    const diags = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-orm/auto-increment-requires-key",
+    );
+    expect(diags).toHaveLength(1);
+    expect(diags[0].severity).toBe("error");
+  });
 });

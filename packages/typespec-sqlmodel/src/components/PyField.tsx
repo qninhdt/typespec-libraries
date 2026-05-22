@@ -6,12 +6,7 @@
  * `py-field-enum.ts`.
  */
 
-import type {
-  Enum,
-  ModelProperty,
-  Program,
-  Scalar,
-} from "@typespec/compiler";
+import type { Enum, ModelProperty, Program, Scalar } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   camelToSnake,
@@ -30,14 +25,11 @@ import {
 } from "@qninhdt/typespec-orm";
 import { reportDiagnostic } from "../lib.js";
 import type { SqlModelEmitterOptions } from "../lib.js";
-import {
-  FOUR_SPACES,
-  getNativePydanticType,
-  getPythonTypeMap,
-} from "./PyConstants.js";
+import { FOUR_SPACES, getNativePydanticType, getPythonTypeMap } from "./PyConstants.js";
 import {
   buildConstraintArgs,
   buildFkArgs,
+  buildMetadataArgs,
   buildPkArgs,
   buildSoftDeleteIndex,
   finalizeColumn,
@@ -108,8 +100,7 @@ export function generateField(
   const isOptional = prop.optional;
   const isPk = isKey(program, prop);
   const isSoft = isSoftDelete(program, prop);
-  const isAutoInc =
-    isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
+  const isAutoInc = isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
 
   // Custom scalar overrides — choose between native pydantic types and
   // generated alias names.
@@ -176,6 +167,7 @@ export function generateField(
 
   buildFkArgs({ program, prop, relationForeignKey, state, imports, flags });
   buildSoftDeleteIndex(program, prop, state, flags);
+  buildMetadataArgs(program, prop, state, flags);
 
   // Reference sqlmodelImports so the parameter is intentionally retained for
   // future use (Field/Relationship are added by the caller).

@@ -48,7 +48,7 @@ describe("SQLModel enum generation", () => {
     );
 
     // Field should use sa_column with SAEnum
-    expect(output).toContain("SAEnum(Role)");
+    expect(output).toContain('SAEnum(Role, name="role")');
     expect(output).toContain("Enum as SAEnum");
   });
 

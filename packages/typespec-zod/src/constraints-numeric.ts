@@ -1,8 +1,10 @@
 /**
  * Numeric constraint resolution. Resolves @minValue/@maxValue and exclusive
  * variants from decorators on properties and scalars (and inherited from
- * base scalars), then emits z.gte()/z.lte()/z.gt()/z.lt() / z.safe() / z.nonnegative()
- * parts.
+ * base scalars), then emits z.gte()/z.lte()/z.gt()/z.lt() / z.nonnegative()
+ * parts. Note: Zod 4's `z.number().int()` already enforces the safe-integer
+ * range, so `safeint` does not emit a redundant `.safe()` (which doesn't
+ * exist on number schemas in Zod 4 anyway).
  */
 
 import { Children } from "@alloy-js/core/jsx-runtime";
@@ -22,7 +24,7 @@ interface NumericConstraints {
   max?: NumericValue;
   minExclusive?: NumericValue;
   maxExclusive?: NumericValue;
-  safe?: boolean;
+  multipleOf?: number;
 }
 
 export function numericConstraintsParts($: Typekit, type: Scalar, member?: ModelProperty) {
@@ -55,12 +57,16 @@ export function encodedNumericConstraints($: Typekit, type: Scalar): Children[] 
 function numericConstraintsToParts(constraints: NumericConstraints): Children[] {
   const parts: Children[] = [];
 
-  if (constraints.safe) {
-    parts.push(callPart("safe"));
-  }
-
   for (const [name, value] of Object.entries(constraints)) {
     if (value === undefined || (typeof value !== "bigint" && !Number.isFinite(value))) {
+      continue;
+    }
+
+    if (name === "multipleOf") {
+      // `z.number().multipleOf(x)` exists in Zod 4. We avoid `.step()`
+      // because it's an alias and `.multipleOf()` matches the TypeSpec
+      // decorator name verbatim.
+      parts.push(callPart("multipleOf", `${value}`));
       continue;
     }
 
@@ -97,7 +103,9 @@ function zodNumericConstraintName(name: string): string {
 function intrinsicNumericConstraints($: Typekit, type: Scalar): NumericConstraints {
   const known = $.scalar.getStdBase(type);
   if (!known || !$.scalar.extendsNumeric(known)) return {};
-  if ($.scalar.extendsSafeint(known)) return { safe: true };
+  // Note: `safeint` previously emitted `.safe()`; in Zod 4 the safe-integer
+  // range is already enforced by `.int()`, and `.safe()` does not exist on
+  // number schemas. So no intrinsic numeric constraint is needed here.
   return {};
 }
 
@@ -109,9 +117,36 @@ function decoratorNumericConstraints($: Typekit, sources: Type[]): NumericConstr
       maxExclusive: $.type.maxValueExclusive(source),
       min: $.type.minValue(source),
       minExclusive: $.type.minValueExclusive(source),
+      multipleOf: extractMultipleOf(source),
     });
   }
   return final;
+}
+
+/**
+ * `@multipleOf` lives in `@typespec/json-schema` (not in the compiler's std
+ * decorators), so the typekit doesn't expose a typed accessor for it. We
+ * read it directly off the type's `decorators` list by name; this works
+ * regardless of whether `@typespec/json-schema` is installed because we only
+ * inspect what's already attached.
+ */
+function extractMultipleOf(source: Type): number | undefined {
+  if (!("decorators" in source) || !Array.isArray(source.decorators)) return undefined;
+  for (const dec of source.decorators) {
+    const name = dec.definition?.name ?? dec.decorator?.name ?? "";
+    // `definition.name` is `@multipleOf`, function name is `$multipleOf`.
+    if (name !== "@multipleOf" && name !== "$multipleOf") continue;
+    const arg = dec.args[0];
+    if (!arg) continue;
+    const js = arg.jsValue;
+    if (typeof js === "number") return js;
+    if (typeof js === "bigint") return Number(js);
+    if (js && typeof js === "object" && "asNumber" in js) {
+      const n = (js as { asNumber: () => number | null }).asNumber();
+      if (typeof n === "number") return n;
+    }
+  }
+  return undefined;
 }
 
 function assignNumericConstraints(target: NumericConstraints, source: NumericConstraints) {
@@ -119,7 +154,6 @@ function assignNumericConstraints(target: NumericConstraints, source: NumericCon
   target.max = minNumeric(target.max, source.max);
   target.minExclusive = maxNumeric(source.minExclusive, target.minExclusive);
   target.maxExclusive = minNumeric(source.maxExclusive, target.maxExclusive);
-  target.safe = target.safe ?? source.safe;
 }
 
 /**
@@ -155,8 +189,7 @@ function resolveIntrinsicVsDecorator(
   if (intrinsicValue === undefined) return;
 
   const exclusiveKey = side === "min" ? "minExclusive" : "maxExclusive";
-  const intrinsicWins = (i: NumericValue, d: NumericValue) =>
-    side === "min" ? i > d : i < d;
+  const intrinsicWins = (i: NumericValue, d: NumericValue) => (side === "min" ? i > d : i < d);
 
   // Compare against same-kind decorator bound first, then exclusive variant.
   for (const decoratorKey of [side, exclusiveKey] as const) {

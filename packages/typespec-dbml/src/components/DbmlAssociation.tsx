@@ -2,20 +2,10 @@
  * DbmlAssociation - DBML rendering for many-to-many association join tables.
  */
 
-import type { Model, Program } from "@typespec/compiler";
-import {
-  getColumnName,
-  getSchemaName,
-  getTableName,
-  type ManyToManyAssociation,
-} from "@qninhdt/typespec-orm";
-import { getDbmlType } from "./DbmlConstants.js";
-
-function qualifyDbmlTable(program: Program, model: Model): string {
-  const schema = getSchemaName(program, model);
-  const table = getTableName(program, model);
-  return schema ? `${schema}.${table}` : table;
-}
+import type { Program } from "@typespec/compiler";
+import { getColumnName, getSchemaName, type ManyToManyAssociation } from "@qninhdt/typespec-orm";
+import { getDbmlType, qualifyDbmlTable, quoteDbmlIdentifier } from "./DbmlConstants.js";
+import { reportDiagnostic } from "../lib.js";
 
 /**
  * Render the join-table definition for a many-to-many association.
@@ -23,17 +13,42 @@ function qualifyDbmlTable(program: Program, model: Model): string {
 export function renderAssociationTable(
   program: Program,
   association: ManyToManyAssociation,
-): string {
-  const leftType = getDbmlType(program, association.leftKey.type) ?? "varchar(255)";
-  const rightType = getDbmlType(program, association.rightKey.type) ?? "varchar(255)";
+): string | undefined {
+  const leftType = getDbmlType(program, association.leftKey.type);
+  const rightType = getDbmlType(program, association.rightKey.type);
+  if (leftType === undefined || rightType === undefined) {
+    // Strict-by-default: a many-to-many endpoint with an unmappable key column
+    // type produces a fallback that misrepresents the schema. Diagnose and
+    // skip the join table so the rest of the document remains parseable.
+    reportDiagnostic(program, {
+      code: "association-column-type-fallback",
+      target: leftType === undefined ? association.leftKey : association.rightKey,
+      format: { table: association.tableName },
+    });
+    return undefined;
+  }
+  const leftCol = quoteDbmlIdentifier(association.leftJoinColumn);
+  const rightCol = quoteDbmlIdentifier(association.rightJoinColumn);
 
+  // Schema-qualify + quote the heading using the same helper used for the
+  // Refs below; otherwise the join table's `Table` line and the `Ref:` lines
+  // disagree when both endpoints share an `@schema`.
+  const joinSchema =
+    getSchemaName(program, association.leftModel) ?? getSchemaName(program, association.rightModel);
+  const joinTable = quoteDbmlIdentifier(association.tableName);
+  const joinQualified = joinSchema ? `${quoteDbmlIdentifier(joinSchema)}.${joinTable}` : joinTable;
+
+  // Mark each join column with `pk` in addition to the composite-PK index entry.
+  // The indexes-block form alone is missed by tooling that walks
+  // `Table.fields[].pk`; the per-column form alone misses dbdocs' composite-PK
+  // visualization. Emit both — `@dbml/core` accepts the redundancy.
   return [
-    `Table ${association.tableName} {`,
-    `  ${association.leftJoinColumn} ${leftType} [not null]`,
-    `  ${association.rightJoinColumn} ${rightType} [not null]`,
+    `Table ${joinQualified} {`,
+    `  ${leftCol} ${leftType} [pk, not null]`,
+    `  ${rightCol} ${rightType} [pk, not null]`,
     "",
     "  indexes {",
-    `    (${association.leftJoinColumn}, ${association.rightJoinColumn}) [pk]`,
+    `    (${leftCol}, ${rightCol}) [pk]`,
     "  }",
     "}",
   ].join("\n");
@@ -49,13 +64,15 @@ export function renderAssociationRefs(
   const leftQualified = qualifyDbmlTable(program, association.leftModel);
   const rightQualified = qualifyDbmlTable(program, association.rightModel);
   const joinSchema =
-    getSchemaName(program, association.leftModel) ??
-    getSchemaName(program, association.rightModel);
-  const joinQualified = joinSchema
-    ? `${joinSchema}.${association.tableName}`
-    : association.tableName;
+    getSchemaName(program, association.leftModel) ?? getSchemaName(program, association.rightModel);
+  const joinTable = quoteDbmlIdentifier(association.tableName);
+  const joinQualified = joinSchema ? `${quoteDbmlIdentifier(joinSchema)}.${joinTable}` : joinTable;
+  const leftJoinCol = quoteDbmlIdentifier(association.leftJoinColumn);
+  const rightJoinCol = quoteDbmlIdentifier(association.rightJoinColumn);
+  const leftKeyCol = quoteDbmlIdentifier(getColumnName(program, association.leftKey));
+  const rightKeyCol = quoteDbmlIdentifier(getColumnName(program, association.rightKey));
   return [
-    `Ref: ${joinQualified}.${association.leftJoinColumn} > ${leftQualified}.${getColumnName(program, association.leftKey)}`,
-    `Ref: ${joinQualified}.${association.rightJoinColumn} > ${rightQualified}.${getColumnName(program, association.rightKey)}`,
+    `Ref: ${joinQualified}.${leftJoinCol} > ${leftQualified}.${leftKeyCol}`,
+    `Ref: ${joinQualified}.${rightJoinCol} > ${rightQualified}.${rightKeyCol}`,
   ];
 }

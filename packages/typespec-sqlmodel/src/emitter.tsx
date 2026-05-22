@@ -10,6 +10,7 @@ import {
   getEnumMembers,
   getMaxLength,
   getPrecision,
+  getSchemaName,
   getTableName,
   resolveDbType,
   type ManyToManyAssociation,
@@ -83,6 +84,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   }
 
   const { program, graph, selection, namespaceGroups, isStandalone, libraryName } = result;
+  const emitAtlas = options["emit-atlas"] ?? false;
 
   // Partition once and reuse — avoids three separate filter passes per
   // namespace group below.
@@ -108,6 +110,7 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
     manyToManyAssociations,
     associationImportsByProp,
     runtimeImportsByModel,
+    new Set(selection.topLevelNamespaces),
   );
   const manyToManySecondaryByProp = new Map(
     [...associationImportsByProp.entries()].map(([prop, ref]) => [prop, ref.symbol]),
@@ -118,6 +121,23 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
   );
   const scalarGroups = buildScalarGroups(program, selection.models);
   const scalarGroupsByTopLevel = new Map(scalarGroups.map((group) => [group.topLevel, group]));
+  // Cross-namespace scalar dedup — a scalar reachable from N>=2 top-levels is
+  // emitted once under `_shared/scalars.py` and re-exported from each
+  // top-level's `_scalars.py`. Single-top-level groups stay inline.
+  const sharedScalars = buildSharedScalars(scalarGroups);
+  const sharedAliasNames = new Map<Scalar, string>();
+  for (const scalar of sharedScalars) {
+    // Pick the alias name from any group that contains the scalar — they all
+    // resolve to the same Python identifier because the scalar is identical.
+    for (const group of scalarGroups) {
+      const alias = group.aliasNames.get(scalar);
+      if (alias) {
+        sharedAliasNames.set(scalar, alias);
+        break;
+      }
+    }
+  }
+  const sharedScalarSet = new Set(sharedScalars);
 
   // Build the inverse-mappedBy index once — N×M property walks become O(N).
   const allRelationModels = new Set<Model>();
@@ -128,34 +148,42 @@ export async function emit(context: EmitContext<SqlModelEmitterOptions>): Promis
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.length > 0 && isStandalone && (
+      {tables.length > 0 && isStandalone && emitAtlas && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
           {generateAtlasHcl()}
         </SourceFile>
       )}
       {isStandalone && (
         <SourceFile path="pyproject.toml" filetype="toml" printWidth={9999}>
-          {`[project]
-name = ${JSON.stringify(libraryName)}
-version = "0.0.0"
-description = "Generated SQLModel classes"
-requires-python = ">=3.10"
-dependencies = [
-    "atlas-provider-sqlalchemy>=0.3.0",
-    "sqlmodel>=0.0.14",
-]
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = [` +
-            selection.topLevelNamespaces.map((item) => `"${camelToSnake(item)}"`).join(", ") +
-            `]
-`}
+          {generatePyprojectToml({
+            libraryName: libraryName ?? "generated-sqlmodel",
+            version: options.version ?? "0.0.0",
+            description: options.description,
+            topLevelNamespaces: selection.topLevelNamespaces,
+          })}
         </SourceFile>
       )}
+      {isStandalone && (
+        <SourceFile path="README.md" filetype="md" printWidth={9999}>
+          {generateStandaloneReadme({
+            libraryName: libraryName ?? "generated-sqlmodel",
+            description: options.description,
+          })}
+        </SourceFile>
+      )}
+      {isStandalone && (
+        <SourceFile path="LICENSE" filetype="txt" printWidth={9999}>
+          {options.license ?? "Proprietary — internal use only\n"}
+        </SourceFile>
+      )}
+      {isStandalone &&
+        selection.topLevelNamespaces.map((topLevel) => (
+          <SourceDirectory path={camelToSnake(topLevel)}>
+            <SourceFile path="py.typed" filetype="txt" printWidth={9999}>
+              {""}
+            </SourceFile>
+          </SourceDirectory>
+        ))}
       {[...packageInfo.values()]
         .sort((a, b) => a.dir.localeCompare(b.dir))
         .map((info) => (
@@ -188,9 +216,28 @@ packages = [` +
       ))}
       {scalarGroups.map((group) => (
         <SourceDirectory path={group.topLevel}>
-          <PyScalarsFile program={program} scalars={group.scalars} aliasNames={group.aliasNames} />
+          <PyScalarsFile
+            program={program}
+            scalars={group.scalars}
+            aliasNames={group.aliasNames}
+            reexports={sharedScalarSet}
+            reexportFromModule=".._shared.scalars"
+          />
         </SourceDirectory>
       ))}
+      {sharedScalars.length > 0 && (
+        <SourceDirectory path="_shared">
+          <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
+            {""}
+          </SourceFile>
+          <PyScalarsFile
+            program={program}
+            scalars={sharedScalars}
+            aliasNames={sharedAliasNames}
+            path="scalars.py"
+          />
+        </SourceDirectory>
+      )}
       {namespaceGroups.map((models) => (
         <SourceDirectory path={models[0].namespaceDir}>
           {models
@@ -248,6 +295,60 @@ packages = [` +
   }
 }
 
+function generatePyprojectToml(args: {
+  libraryName: string;
+  version: string;
+  description?: string;
+  topLevelNamespaces: readonly string[];
+}): string {
+  const { libraryName, version, description, topLevelNamespaces } = args;
+  const packages = topLevelNamespaces.map((item) => `"${camelToSnake(item)}"`).join(", ");
+  const descriptionLine =
+    description !== undefined ? `description = ${JSON.stringify(description)}\n` : "";
+  return `[project]
+name = ${JSON.stringify(libraryName)}
+version = ${JSON.stringify(version)}
+${descriptionLine}requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Generated" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "atlas-provider-sqlalchemy>=0.3.0",
+    "pydantic[email]>=2.0,<3.0",
+    "sqlalchemy>=2.0,<3.0",
+    "sqlmodel>=0.0.16,<1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [${packages}]
+`;
+}
+
+function generateStandaloneReadme(args: { libraryName: string; description?: string }): string {
+  const { libraryName, description } = args;
+  const blurb =
+    description ??
+    `Auto-generated SQLModel package emitted by @qninhdt/typespec-sqlmodel. Do not edit by hand — regenerate from your TypeSpec sources.`;
+  return `# ${libraryName}
+
+${blurb}
+
+## Install
+
+\`\`\`sh
+pip install ${libraryName}
+\`\`\`
+
+This package was produced by \`@qninhdt/typespec-sqlmodel\`.
+`;
+}
+
 function generateAtlasHcl(): string {
   return `data "external_schema" "sqlmodel" {
   program = [
@@ -301,6 +402,25 @@ function buildScalarGroups(
     .filter((group) => group.scalars.length > 0);
 }
 
+/**
+ * Returns scalars referenced from 2+ top-level namespaces. These get hoisted
+ * to a single root-level `_shared/scalars.py`; per-namespace `_scalars.py`
+ * re-exports them so import paths stay stable.
+ */
+function buildSharedScalars(groups: ScalarGroup[]): Scalar[] {
+  const counts = new Map<Scalar, number>();
+  for (const group of groups) {
+    for (const scalar of group.scalars) {
+      counts.set(scalar, (counts.get(scalar) ?? 0) + 1);
+    }
+  }
+  const shared: Scalar[] = [];
+  for (const [scalar, count] of counts.entries()) {
+    if (count > 1) shared.push(scalar);
+  }
+  return shared.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function buildPackageInfo(
   models: NormalizedOrmModel[],
   associationDirs: string[],
@@ -318,7 +438,12 @@ function buildPackageInfo(
       moduleName,
       models: [],
       childPackages: new Set<string>(),
-      includeMetadata: !dir.includes("/"),
+      // Expose `target_metadata = SQLModel.metadata` at every package level,
+      // not just single-segment roots. Multi-segment namespace packages
+      // (e.g. `foo/bar/baz/__init__.py`) need it too so consumers can
+      // `from foo.bar.baz import target_metadata` for Atlas/Alembic. The
+      // metadata is a singleton, so re-exporting at nested levels is cheap.
+      includeMetadata: true,
       importAssociations: false,
     };
     packages.set(dir, info);
@@ -355,6 +480,7 @@ function buildAssociationModules(
   associations: ManyToManyAssociation[],
   associationImportsByProp: Map<ModelProperty, AssociationImportRef>,
   runtimeImportsByModel: Map<Model, Map<string, Set<string>>>,
+  selectedTopLevels: ReadonlySet<string>,
 ): AssociationModuleFile[] {
   const grouped = new Map<string, ManyToManyAssociation[]>();
 
@@ -370,13 +496,36 @@ function buildAssociationModules(
     }
     if (topLevels.length === 2 && topLevels[0] !== topLevels[1]) {
       reportDiagnostic(program, {
-        code: "no-tables-found",
+        code: "cross-namespace-many-to-many-unsupported",
         target: association.leftProperty,
+        format: {
+          leftModel: association.leftModel.name,
+          leftNamespace: topLevels[0],
+          rightModel: association.rightModel.name,
+          rightNamespace: topLevels[1],
+        },
       });
     }
 
     const moduleName = `${topLevel}.__associations__`;
     const symbol = toPythonIdentifier(association.tableName);
+
+    // Filter awareness — if `exclude` (or a narrow `include`) drops the
+    // top-level package the association is anchored to, the
+    // `from <top>.__associations__ import …` line emitted on each endpoint
+    // would resolve to a missing module at runtime. Surface that mismatch
+    // as a hard diagnostic instead of producing broken Python.
+    if (!selectedTopLevels.has(topLevel)) {
+      reportDiagnostic(program, {
+        code: "filtered-association-table-missing",
+        target: association.leftProperty,
+        format: {
+          tableName: association.tableName,
+          topLevel,
+          symbol,
+        },
+      });
+    }
 
     associationImportsByProp.set(association.leftProperty, { moduleName, symbol });
     associationImportsByProp.set(association.rightProperty, { moduleName, symbol });
@@ -559,6 +708,9 @@ function buildAssociationColumn(
   sqlalchemyImports: Set<string>,
 ): string {
   const columnType = resolveAssociationColumnType(program, key, sqlalchemyImports);
-  const foreignKey = `${getTableName(program, model)}.${getColumnName(program, key)}`;
+  const tableName = getTableName(program, model);
+  const schema = getSchemaName(program, model);
+  const qualifiedTable = schema ? `${schema}.${tableName}` : tableName;
+  const foreignKey = `${qualifiedTable}.${getColumnName(program, key)}`;
   return `Column(${JSON.stringify(joinColumn)}, ${columnType}, ForeignKey(${JSON.stringify(foreignKey)}), primary_key=True)`;
 }

@@ -1,5 +1,9 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { emitGoFile } from "./utils.jsx";
+import { emit } from "../src/emitter.js";
+import { emitGoFile, createTestRunner } from "./utils.jsx";
 
 describe("Ent schema generation", () => {
   it("generates fields, annotations, indexes, and defaults", async () => {
@@ -171,6 +175,35 @@ describe("Ent schema generation", () => {
     expect(post).not.toContain("entsql.OnDelete(");
   });
 
+  it("surfaces @onUpdate as a Comment marker when on-update-emit-raw-sql is enabled", async () => {
+    const post = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("owner")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        ownerId: uuid;
+        @foreignKey("ownerId")
+        @onDelete("CASCADE")
+        @onUpdate("CASCADE")
+        owner: User;
+      }
+    `,
+      "post.go",
+      "test",
+      { "on-update-emit-raw-sql": true },
+    );
+
+    expect(post).toContain('Comment("on_update: CASCADE")');
+    expect(post).toContain("entsql.OnDelete(entsql.Cascade)");
+  });
+
   it("does not emit a column for @ignore'd properties", async () => {
     const output = await emitGoFile(
       `
@@ -237,5 +270,185 @@ describe("Ent schema generation", () => {
     expect(b).toContain('Ref("bs")');
     expect(b).not.toContain('edge.To("as"');
     expect(b).not.toContain("StorageKey(edge.Table(");
+  });
+
+  it("forces timestamptz schema type for utcDateTime fields", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Event {
+        @key id: uuid;
+        occurredAt: utcDateTime;
+      }
+    `,
+      "event.go",
+    );
+
+    expect(output).toContain('field.Time("occurred_at")');
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "timestamptz"})');
+  });
+
+  it("emits a generic numeric SchemaType for decimal fields without @precision", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Ledger {
+        @key id: uuid;
+        balance: decimal;
+      }
+    `,
+      "ledger.go",
+    );
+
+    expect(output).toContain("field.Other(");
+    expect(output).toContain("decimal.Decimal{}");
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "numeric"})');
+  });
+
+  it("preserves precision when @precision is set on a decimal", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Ledger {
+        @key id: uuid;
+        @precision(18, 4)
+        balance: decimal;
+      }
+    `,
+      "ledger.go",
+    );
+
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "numeric(18,4)"})');
+  });
+
+  it("surfaces field-level @scope as a Comment line on the field", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @Qninhdt.Orm.scope("frontend")
+        @Qninhdt.Orm.scope("kafka:upload-events")
+        avatarUrl: string;
+      }
+    `,
+      "user.go",
+    );
+
+    expect(output).toContain('field.String("avatar_url")');
+    expect(output).toMatch(
+      /Comment\("scope: (frontend, kafka:upload-events|kafka:upload-events, frontend)"\)/,
+    );
+  });
+
+  it("merges field-level @doc and @scope into a single Comment", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @doc("Human-readable display name.")
+        @Qninhdt.Orm.scope("frontend")
+        displayName: string;
+      }
+    `,
+      "user.go",
+    );
+
+    expect(output).toContain("Human-readable display name.");
+    expect(output).toContain("scope: frontend");
+  });
+
+  it("locks down composite @@tableIndex rendering through index.Fields(...)", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Membership {
+        @key id: uuid;
+        userId: uuid;
+        teamId: uuid;
+      }
+      @@tableIndex(Membership, #["userId", "teamId"], "idx_membership_user_team");
+    `,
+      "membership.go",
+    );
+
+    expect(output).toContain('index.Fields("user_id", "team_id")');
+  });
+});
+
+describe("Ent diagnostics", () => {
+  async function runEmit(code: string) {
+    const runner = await createTestRunner();
+    await runner.compile(code);
+    const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-diag-"));
+    await emit({
+      program: runner.program,
+      options: {},
+      emitterOutputDir: outDir,
+    } as never);
+    return runner.program.diagnostics;
+  }
+
+  it("reports an error (not a warning) when a property has no Go type mapping", async () => {
+    const diagnostics = await runEmit(`
+      @table
+      model Broken {
+        @key id: uuid;
+        payload: unknown;
+      }
+    `);
+    const diags = diagnostics.filter((d) => d.code === "@qninhdt/typespec-ent/unsupported-type");
+    expect(diags.length).toBeGreaterThan(0);
+    expect(diags.every((d) => d.severity === "error")).toBe(true);
+  });
+
+  it("reports cross-package-edge when an edge target lives in a different namespace", async () => {
+    const diagnostics = await runEmit(`
+      namespace App.Billing {
+        @table
+        model Invoice {
+          @key id: uuid;
+          customerId: uuid;
+          @foreignKey("customerId")
+          customer: App.Identity.Customer;
+        }
+      }
+      namespace App.Identity {
+        @table
+        model Customer {
+          @key id: uuid;
+        }
+      }
+    `);
+    expect(
+      diagnostics.some(
+        (d) => d.code === "@qninhdt/typespec-ent/cross-package-edge" && d.severity === "error",
+      ),
+    ).toBe(true);
+  });
+
+  it("reports referenced-column-fk-not-supported-by-ent when @foreignKey targets a non-key column", async () => {
+    const diagnostics = await runEmit(`
+      @table
+      model Org {
+        @key id: uuid;
+        @unique slug: string;
+      }
+      @table
+      model Member {
+        @key id: uuid;
+        orgSlug: string;
+        @foreignKey("orgSlug", "slug")
+        org: Org;
+      }
+    `);
+    expect(
+      diagnostics.some(
+        (d) =>
+          d.code === "@qninhdt/typespec-ent/referenced-column-fk-not-supported-by-ent" &&
+          d.severity === "error",
+      ),
+    ).toBe(true);
   });
 });

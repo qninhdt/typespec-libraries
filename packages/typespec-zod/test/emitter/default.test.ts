@@ -20,9 +20,9 @@ describe("Zod emitter end-to-end", () => {
     expect(output).toContain("contact: z.email()");
     expect(output).toContain("password: z.string().min(8)");
     expect(output).toContain("export type RegisterForm = z.infer<typeof RegisterFormSchema>;");
-    expect(output).toContain("export const RegisterFormMeta = {");
-    expect(output).toContain('name: { title: "Full Name" }');
-    expect(output).toContain('contact: { title: "Email", inputType: "email" }');
+    expect(output).toContain("export const RegisterFormMeta");
+    expect(output).toContain('name: { title: "Full Name"');
+    expect(output).toContain('contact: { title: "Email", inputType: "email"');
   });
 
   it("emits enum-typed fields inline", async () => {

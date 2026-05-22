@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTestHost } from "@qninhdt/typespec-orm/testing";
+import { TypeSpecSqlModelTestLibrary } from "../src/testing/index.js";
 import { emitPyFile, renderPyOutput } from "./utils.jsx";
+import { emit } from "../src/emitter.js";
 import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
 
 describe("Python scalar type mappings", () => {
@@ -318,6 +324,35 @@ describe("Python semantic scalar mappings", () => {
     expect(modelFile).toContain("password: StrongPassword");
   });
 
+  it("imports root-namespace scalar aliases via single-dot relative import", async () => {
+    const output = await renderPyOutput(`
+      @minLength(8)
+      scalar StrongPassword extends string;
+
+      @table
+      model RootUser {
+        @key id: uuid;
+        password: StrongPassword;
+      }
+
+      @data("Login form")
+      model SignInRequest {
+        password: StrongPassword;
+      }
+    `);
+    const scalarsFile = getOutputFileContent(output, "_scalars.py");
+    const tableFile = getOutputFileContent(output, "root_user.py");
+    const dataFile = getOutputFileContent(output, "sign_in_request.py");
+
+    expect(scalarsFile).toContain("StrongPassword = Annotated[str, Field(");
+    // Root-namespace models produce a single-dot relative import — anything
+    // less is a syntax error in Python and will fail to import at runtime.
+    expect(tableFile).toContain("from ._scalars import StrongPassword");
+    expect(tableFile).not.toMatch(/^from _scalars/m);
+    expect(dataFile).toContain("from ._scalars import StrongPassword");
+    expect(dataFile).not.toMatch(/^from _scalars/m);
+  });
+
   it("does not emit composite marker scalars as aliases", async () => {
     const output = await renderPyOutput(`
       @table
@@ -335,5 +370,56 @@ describe("Python semantic scalar mappings", () => {
     expect(() => getOutputFileContent(output, "_scalars.py")).toThrow();
     expect(modelFile).not.toContain("_scalars");
     expect(modelFile).not.toContain("composite");
+  });
+
+  it("hoists scalars shared across two top-level namespaces to _shared/scalars.py", async () => {
+    // Skip the standard test wrapper — it pins everything under a single
+    // top-level `Test` namespace which would prevent two top-levels from
+    // existing. Use the bare host to compile a real cross-top-level program.
+    const host = await createTestHost([TypeSpecSqlModelTestLibrary]);
+    host.addTypeSpecFile(
+      "main.tsp",
+      `
+        import "@qninhdt/typespec-orm";
+        using Qninhdt.Orm;
+
+        @minLength(8)
+        scalar StrongPassword extends string;
+
+        namespace Foo.Identity {
+          @table
+          model FooUser {
+            @key id: uuid;
+            password: StrongPassword;
+          }
+        }
+
+        namespace Bar.Identity {
+          @table
+          model BarUser {
+            @key id: uuid;
+            password: StrongPassword;
+          }
+        }
+      `,
+    );
+    await host.compile("main.tsp");
+
+    const outDir = await mkdtemp(join(tmpdir(), "sqlmodel-shared-scalars-"));
+    await emit({
+      program: host.program,
+      options: { standalone: true, "library-name": "demo" },
+      emitterOutputDir: outDir,
+    } as never);
+
+    const sharedFile = await readFile(join(outDir, "_shared/scalars.py"), "utf8");
+    const fooScalars = await readFile(join(outDir, "foo/_scalars.py"), "utf8");
+    const barScalars = await readFile(join(outDir, "bar/_scalars.py"), "utf8");
+
+    expect(sharedFile).toContain("StrongPassword = Annotated[str, Field(");
+    expect(fooScalars).toContain("from .._shared.scalars import StrongPassword");
+    expect(fooScalars).not.toContain("StrongPassword = Annotated");
+    expect(barScalars).toContain("from .._shared.scalars import StrongPassword");
+    expect(barScalars).not.toContain("StrongPassword = Annotated");
   });
 });

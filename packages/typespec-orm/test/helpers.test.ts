@@ -182,6 +182,36 @@ describe("metadata and relation helpers", () => {
     expect(resolveDbType(copiedSecret!.type)).toBe("string");
   });
 
+  it("resolves PG-canonical scalars to their distinct DB type names", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model Sample {
+        ci: citext;
+        tsv: tsvector;
+        tsq: tsquery;
+        win: interval;
+        addr: inet;
+        v4: ipv4;
+        v6: ipv6;
+        net: cidr;
+      }
+    `);
+
+    const sample = runner.program
+      .getGlobalNamespaceType()
+      .namespaces.get("Test")!
+      .models.get("Sample")!;
+    const props = sample.properties;
+    expect(resolveDbType(props.get("ci")!.type)).toBe("citext");
+    expect(resolveDbType(props.get("tsv")!.type)).toBe("tsvector");
+    expect(resolveDbType(props.get("tsq")!.type)).toBe("tsquery");
+    expect(resolveDbType(props.get("win")!.type)).toBe("interval");
+    expect(resolveDbType(props.get("addr")!.type)).toBe("inet");
+    expect(resolveDbType(props.get("v4")!.type)).toBe("ipv4");
+    expect(resolveDbType(props.get("v6")!.type)).toBe("ipv6");
+    expect(resolveDbType(props.get("net")!.type)).toBe("cidr");
+  });
+
   it("falls back to semantic-scalar-derived input types and unwraps enums", async () => {
     const runner = await createTestRunner();
     await runner.compile(`

@@ -52,4 +52,43 @@ describe("Zod descriptions", () => {
     // a built-in scalar type with no field-level @doc.
     expect(output).not.toContain(".describe(");
   });
+
+  it("terminates a .describe(...) chain with a semicolon", async () => {
+    const output = await emitZodFile(
+      `
+      @doc("Public user record")
+      @data("Form")
+      model PublicUser {
+        name: string;
+      }
+    `,
+      "PublicUser.ts",
+    );
+
+    // The exported declaration must end the .describe(...) chain with `;`
+    // so downstream tools (tsc, prettier) accept the rendered file.
+    expect(output).toMatch(/\.describe\("Public user record"\);/);
+  });
+
+  it("terminates a .brand(...) chain with a semicolon", async () => {
+    const output = await emitZodFile(
+      `
+      @minLength(8)
+      @maxLength(128)
+      scalar StrongPassword extends string;
+
+      @data("Form")
+      model SignInRequest {
+        password: StrongPassword;
+      }
+    `,
+      "_scalars.ts",
+      false,
+      { "branded-scalars": true },
+    );
+
+    // Custom scalar declarations end with .brand("Name") and must terminate
+    // with `;` to keep the rendered _scalars.ts file syntactically valid.
+    expect(output).toMatch(/\.brand\("StrongPassword"\);/);
+  });
 });

@@ -138,7 +138,9 @@ export const PYTHON_TYPE_MAP: Record<string, PythonTypeMapping> = {
     saImports: ["sqlalchemy.LargeBinary"],
   },
   jsonb: {
-    pyType: "Any",
+    // Strict-by-default: avoid lossy `Any`. Cover the JSON-document shape
+    // explicitly so consumers get real type-checking instead of an `Any` hole.
+    pyType: "dict[str, Any] | list[Any] | str | int | float | bool | None",
     saColumnType: "JSONB",
     imports: ["typing.Any"],
     saImports: ["sqlalchemy.dialects.postgresql.JSONB"],

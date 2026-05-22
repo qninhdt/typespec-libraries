@@ -133,6 +133,31 @@ scalar serial extends int32;
 scalar bigserial extends int64;
 
 /**
+ * Case-insensitive text (PostgreSQL CITEXT extension).
+ */
+scalar citext extends string;
+
+/**
+ * Full-text search vector (PostgreSQL TSVECTOR).
+ */
+scalar tsvector extends string;
+
+/**
+ * Full-text search query (PostgreSQL TSQUERY).
+ */
+scalar tsquery extends string;
+
+/**
+ * Time interval (PostgreSQL INTERVAL).
+ */
+scalar interval extends duration;
+
+/**
+ * IPv4 or IPv6 host address (PostgreSQL INET).
+ */
+scalar inet extends string;
+
+/**
  * Composite index/unique configuration marker.
  * Use @key for primary composite index, @unique for composite unique constraint.
  * Example: composite<"ownerId", "createdAt">
@@ -169,9 +194,9 @@ extern dec map(target: ModelProperty, columnName: valueof string);
 extern dec index(target: ModelProperty, name?: valueof string);
 
 /**
- * Marks a property as a unique column. By default, the column name is the same as the property name, but it can be overridden with `@map`.
+ * Marks a property as a unique column. By default, the unique constraint name is auto-derived from the table and column name. Pass `name` to override it (mirrors `@check`/`@index`).
  */
-extern dec unique(target: ModelProperty);
+extern dec unique(target: ModelProperty, name?: valueof string);
 
 /**
  * Adds a named database check constraint anchored to a property.
@@ -217,12 +242,12 @@ extern dec manyToMany(target: ModelProperty, tableName: valueof string);
 // ─── Timestamp auto-fill ─────────────────────────────────────────────────────
 
 /**
- * Marks a property as an auto-updating timestamp for when a record is created. The column type is determined by the property's type (e.g. `int64` maps to a bigint timestamp, `Date` maps to a datetime/timestamp column). The value is automatically set to the current timestamp when a new record is inserted.
+ * Marks a property as an auto-updating timestamp for when a record is created. The column type must be a datetime type (`utcDateTime` or `offsetDateTime`). The value is automatically set to the current timestamp when a new record is inserted.
  */
 extern dec autoCreateTime(target: ModelProperty);
 
 /**
- * Marks a property as an auto-updating timestamp for when a record is updated. The column type is determined by the property's type (e.g. `int64` maps to a bigint timestamp, `Date` maps to a datetime/timestamp column). The value is automatically updated to the current timestamp whenever the record is updated.
+ * Marks a property as an auto-updating timestamp for when a record is updated. The column type must be a datetime type (`utcDateTime` or `offsetDateTime`). The value is automatically updated to the current timestamp whenever the record is updated.
  */
 extern dec autoUpdateTime(target: ModelProperty);
 

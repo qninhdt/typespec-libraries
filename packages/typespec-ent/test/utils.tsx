@@ -70,6 +70,7 @@ export async function renderGoOutput(
             normalizedModel={model}
             modelLookup={graph.byModel}
             collectionStrategy={emitterOptions["collection-strategy"]}
+            onUpdateEmitRawSql={emitterOptions["on-update-emit-raw-sql"]}
           />
         ))}
       </SourceDirectory>

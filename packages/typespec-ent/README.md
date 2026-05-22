@@ -41,7 +41,7 @@ Generated Go code is aimed at modern Ent projects.
 - data-model `jsonb` fields use `encoding/json`
 - every table selection writes a PostgreSQL Atlas `atlas.hcl` using `ent://ent/schema`
 
-The repo currently verifies generated output with Go `1.22`.
+The repo currently verifies generated output with Go `1.24`.
 
 ## Configuration Reference
 
@@ -62,14 +62,18 @@ exclude: - "Demo.Platform.Audit"
 
 Supported options:
 
-| Option                | Type                    | Meaning                                           |
-| --------------------- | ----------------------- | ------------------------------------------------- |
-| `output-dir`          | `string`                | target directory handled by the TypeSpec compiler |
-| `standalone`          | `boolean`               | write `go.mod` and `ent/generate.go`              |
-| `library-name`        | `string`                | Go module/import root used in standalone mode     |
-| `collection-strategy` | `"jsonb" \| "postgres"` | persistence strategy for array-like fields        |
-| `include`             | `string[]`              | namespace or declaration selectors to keep        |
-| `exclude`             | `string[]`              | namespace or declaration selectors to drop        |
+| Option                      | Type                    | Meaning                                                                                                                                       |
+| --------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `output-dir`                | `string`                | target directory handled by the TypeSpec compiler                                                                                             |
+| `standalone`                | `boolean`               | write `go.mod` and `ent/generate.go`                                                                                                          |
+| `library-name`              | `string`                | Go module/import root used in standalone mode                                                                                                 |
+| `version`                   | `string`                | library version surfaced in the generated standalone README                                                                                   |
+| `collection-strategy`       | `"jsonb" \| "postgres"` | persistence strategy for array-like fields                                                                                                    |
+| `include`                   | `string[]`              | namespace or declaration selectors to keep                                                                                                    |
+| `exclude`                   | `string[]`              | namespace or declaration selectors to drop                                                                                                    |
+| `auto-include-dependencies` | `boolean`               | transitively pull required dependencies (relations, mixins, enums) in                                                                         |
+| `go-version`                | `string`                | Go toolchain version written into the generated `go.mod` (default `1.24`)                                                                     |
+| `on-update-emit-raw-sql`    | `boolean`               | when `true`, surface `@onUpdate` as a `Comment("on_update: <action>")` Ent annotation instead of dropping it with a warning (default `false`) |
 
 Not supported:
 

@@ -11,7 +11,7 @@ import { zodBaseSchemaParts } from "../zod-base-schema.js";
 import { zodConstraintsParts } from "../zod-constraints.js";
 import { zodDescriptionParts } from "../zod-description.js";
 import { zodMemberParts } from "../zod-member-parts.js";
-import { ZodCustomTypeComponent } from "./ZodCustomTypeComponent.js";
+import { getZodOptions } from "../context/zod-options.js";
 
 export interface ZodSchemaProps {
   readonly type: Type;
@@ -26,8 +26,11 @@ export function ZodSchema(props: ZodSchemaProps): Children {
 
   if (!props.nested) {
     // we are making a declaration
+    const brandEnabled = getZodOptions($.program)["branded-scalars"] ?? false;
     const brandParts =
-      props.type.kind === "Scalar" ? [callPart("brand", JSON.stringify(props.type.name))] : [];
+      brandEnabled && props.type.kind === "Scalar"
+        ? [callPart("brand", JSON.stringify(props.type.name))]
+        : [];
     return (
       <MemberExpression>
         {zodBaseSchemaParts(props.type)}
@@ -45,25 +48,21 @@ export function ZodSchema(props: ZodSchemaProps): Children {
 
   if (shouldReference($.program, type)) {
     return (
-      <ZodCustomTypeComponent type={type} member={member} reference>
-        <MemberExpression>
-          <MemberExpression.Part refkey={refkey(type, refkeySym)} />
-          {zodConstraintsParts(type, member)}
-          {zodMemberParts(member)}
-          {zodDescriptionParts(type, member)}
-        </MemberExpression>
-      </ZodCustomTypeComponent>
-    );
-  }
-
-  return (
-    <ZodCustomTypeComponent type={type} member={member} reference>
       <MemberExpression>
-        {zodBaseSchemaParts(type)}
+        <MemberExpression.Part refkey={refkey(type, refkeySym)} />
         {zodConstraintsParts(type, member)}
         {zodMemberParts(member)}
         {zodDescriptionParts(type, member)}
       </MemberExpression>
-    </ZodCustomTypeComponent>
+    );
+  }
+
+  return (
+    <MemberExpression>
+      {zodBaseSchemaParts(type)}
+      {zodConstraintsParts(type, member)}
+      {zodMemberParts(member)}
+      {zodDescriptionParts(type, member)}
+    </MemberExpression>
   );
 }

@@ -209,6 +209,11 @@ export function isUnique(program: Program, prop: ModelProperty): boolean {
 }
 
 export function getUniqueName(program: Program, prop: ModelProperty): string {
+  // Honor the override passed to @unique("name") if present.
+  const stored = program.stateMap(UniqueKey).get(prop);
+  if (typeof stored === "string" && stored !== "") {
+    return truncatePgIdentifier(stored);
+  }
   // Auto-derive unique constraint name: [tableName]_[columnName]_unique
   const model = prop.model;
   if (!model) return "";
@@ -226,7 +231,7 @@ export function getCheck(program: Program, prop: ModelProperty): CheckConstraint
   return program.stateMap(CheckKey).get(prop) as CheckConstraintInfo | undefined;
 }
 
-export function getDefaultValue(program: Program, prop: ModelProperty): string | undefined {
+export function getDefaultValue(_program: Program, prop: ModelProperty): string | undefined {
   // 1. TypeSpec builtin default (e.g. `credits: int32 = 0`) - preferred
   const builtin = prop.defaultValue;
   if (builtin) {
@@ -378,7 +383,7 @@ export function getManyToMany(program: Program, prop: ModelProperty): string | u
 
 // ─── Composite scalar helpers ───────────────────────────────────────────────
 
-export function getCompositeFields(program: Program, prop: ModelProperty): string[] | undefined {
+export function getCompositeFields(_program: Program, prop: ModelProperty): string[] | undefined {
   const type = prop.type;
 
   // Handle scalar-based composite type (composite<field1, field2>)
@@ -408,9 +413,7 @@ function getCompositeTemplateColumns(type: Scalar): string[] | undefined {
       continue;
     }
 
-    const typeObj = (arg as { type: unknown }).type as
-      | { kind: string; value?: string }
-      | undefined;
+    const typeObj = (arg as { type: unknown }).type as { kind: string; value?: string } | undefined;
     if (typeObj?.kind === "String" && typeObj.value) {
       columns.push(typeObj.value);
     }
@@ -468,10 +471,7 @@ export function getSchemaName(program: Program, target: Model): string | undefin
 }
 
 /** Returns the SQL default expression set via `@defaultExpression`, if any. */
-export function getDefaultExpression(
-  program: Program,
-  prop: ModelProperty,
-): string | undefined {
+export function getDefaultExpression(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(DefaultExpressionKey).get(prop) as string | undefined;
 }
 
@@ -517,11 +517,7 @@ export function getScopes(program: Program, target: Model | ModelProperty): read
 }
 
 /** True when the model or property carries the given scope. */
-export function hasScope(
-  program: Program,
-  target: Model | ModelProperty,
-  scope: string,
-): boolean {
+export function hasScope(program: Program, target: Model | ModelProperty, scope: string): boolean {
   return getScopes(program, target).includes(scope);
 }
 

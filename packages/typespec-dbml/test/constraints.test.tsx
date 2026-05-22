@@ -32,7 +32,21 @@ describe("DBML constraints", () => {
       `@table model User { @key id: uuid; @unique email: string; }`,
       "users.dbml",
     );
+    // Single-column @unique without a name override now renders inline as a
+    // column-level [unique] (no indexes-block entry).
+    expect(output).toContain("email text [not null, unique]");
+    expect(output).not.toMatch(/indexes \{[^}]*email \[unique\]/);
+  });
+
+  it("preserves @unique name override via the indexes block", async () => {
+    const output = await emitDbmlFile(
+      `@table model User { @key id: uuid; @unique("uq_user_email") email: string; }`,
+      "users.dbml",
+    );
+    // Named @unique keeps the column inline AND the indexes-block entry so
+    // the constraint name survives — DBML has no column-level name surface.
     expect(output).toContain("email text [not null]");
+    expect(output).toContain("indexes {");
     expect(output).toContain("email [unique]");
   });
 
@@ -77,7 +91,9 @@ describe("DBML constraints", () => {
       "users.dbml",
     );
     expect(output).toContain("indexes {");
-    expect(output).toContain("(email, deleted_at) [unique]");
+    // Composite uniques carry the (auto-derived or @@tableUnique-supplied)
+    // constraint name so dbdocs renders the explicit identifier.
+    expect(output).toMatch(/\(email, deleted_at\) \[name: '[^']+', unique\]/);
   });
 
   it("generates inherited composite constraints", async () => {
@@ -99,7 +115,7 @@ describe("DBML constraints", () => {
 
     expect(output).toContain("tenant_id uuid [not null]");
     expect(output).toContain("code text [not null]");
-    expect(output).toContain("(tenant_id, code) [unique]");
+    expect(output).toMatch(/\(tenant_id, code\) \[name: '[^']+', unique\]/);
   });
 
   it("generates composite primary key via composite<> type with @key", async () => {

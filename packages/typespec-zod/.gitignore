@@ -1,0 +1,11 @@
+# Generated build output and coverage are not source.
+# These directories are slipping into the working tree because the workspace
+# root .gitignore patterns (`dist/`, `coverage/`) match anchored entries that
+# git applied before the tree was reorganized into packages/. A package-local
+# .gitignore makes the intent explicit and survives any future restructuring.
+#
+# To untrack files already committed (do this manually, NOT via the emitter):
+#   git rm -r --cached packages/typespec-zod/dist packages/typespec-zod/coverage
+dist/
+coverage/
+*.tsbuildinfo

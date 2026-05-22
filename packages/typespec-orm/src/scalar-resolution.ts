@@ -49,6 +49,15 @@ export const STANDARD_SCALAR_MAP: Record<string, string> = {
   duration: "duration",
   bytes: "bytes",
   url: "string",
+  // PG-canonical types: surface scalar name so emitters can branch.
+  ipv4: "ipv4",
+  ipv6: "ipv6",
+  cidr: "cidr",
+  inet: "inet",
+  citext: "citext",
+  tsvector: "tsvector",
+  tsquery: "tsquery",
+  interval: "interval",
 };
 
 /** DB-specific scalars that need custom column type handling */

@@ -120,7 +120,12 @@ export function PyModelFile(props: PyModelFileProps): Children {
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
   const fkInfoMap = buildForeignKeyInfoMap(model, relations);
 
-  const tableArgEntries = buildTableArgEntries(program, model, compositeTypeFields, builder.saImports);
+  const tableArgEntries = buildTableArgEntries(
+    program,
+    model,
+    compositeTypeFields,
+    builder.saImports,
+  );
 
   const allCustomScalars = collectAliasableCustomScalars(program, model);
 
@@ -300,12 +305,21 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     versionColumnName,
   } = context;
   let code = FILE_HEADER;
+  // `from __future__ import annotations` makes ALL annotations lazy strings,
+  // letting forward references (e.g. inverse relationship class names) resolve
+  // without TYPE_CHECKING gymnastics. MUST be the first import statement.
+  code += "from __future__ import annotations\n\n";
   code += buildPythonImportBlock(stdImports, saImports, sqlmodelImports, "sqlmodel");
   code += buildRuntimeImportBlock(runtimeImports);
   code += buildSourceModelImportBlock(sourceModels, modelLookup, namespacePath);
   code += buildTypeCheckingBlock(relationTargetModels, modelLookup, namespacePath);
   if (scalarNames && scalarNames.length > 0) {
-    code += `from ${".".repeat(Math.max(namespacePath.length, 1))}_scalars import ${dedupeImportNames(scalarNames).join(", ")}\n`;
+    // `_scalars.py` lives at the top-level package root. Walk up
+    // `namespacePath.length` levels; clamp to 1 so a root-namespace model
+    // (length 0) still emits `from ._scalars import ...` rather than the
+    // Python-invalid `from _scalars import ...`.
+    const dots = ".".repeat(Math.max(namespacePath.length, 1));
+    code += `from ${dots}_scalars import ${dedupeImportNames(scalarNames).join(", ")}\n`;
   }
   code += "\n\n";
   code += buildEnumClasses(enumTypes);
@@ -318,6 +332,7 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     fieldDefs,
     relationDefs,
     versionColumnName,
+    stdImports,
   );
   return code;
 }
@@ -344,6 +359,7 @@ function buildModelClass(
   fieldDefs: string[],
   relationDefs: string[],
   versionColumnName: string | undefined,
+  stdImports: Set<string>,
 ): string {
   const baseList = sourceModelNames.length > 0 ? sourceModelNames.join(", ") : "SQLModel";
   const isTable = !!tableName;
@@ -353,7 +369,10 @@ function buildModelClass(
   code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc)}\n\n`;
 
   if (tableName) {
-    code += `${FOUR_SPACES}__tablename__ = ${pythonStringLiteral(tableName)} # type: ignore \n`;
+    // ClassVar tells SQLModel/SQLAlchemy this is a class attribute, not a column.
+    // Without it, the metaclass would try to treat `__tablename__` as a field.
+    stdImports.add("typing.ClassVar");
+    code += `${FOUR_SPACES}__tablename__: ClassVar[str] = ${pythonStringLiteral(tableName)}\n`;
   }
 
   if (tableArgEntries.length > 0) {

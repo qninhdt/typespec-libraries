@@ -1,5 +1,10 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { emitGoFile } from "./utils.jsx";
+import { emit } from "../src/emitter.js";
+import { createTestRunner, emitGoFile, renderGoOutput } from "./utils.jsx";
+import { listAllFiles } from "@qninhdt/typespec-orm/testing";
 
 describe("P1 contract additions (Ent)", () => {
   describe("@schema", () => {
@@ -70,6 +75,163 @@ describe("P1 contract additions (Ent)", () => {
 
       expect(output).toContain('entsql.Default("now()")');
       expect(output).not.toContain("2024-01-01");
+    });
+  });
+
+  // ─── Group A: @ignore respected in EntDataFile ────────────────────────────
+  describe("@ignore in @data structs", () => {
+    it("excludes @ignore'd fields from the generated Go struct", async () => {
+      const output = await emitGoFile(
+        `
+        @data("User profile form")
+        model UserForm {
+          name: string;
+          @ignore internalToken: string;
+        }
+      `,
+        "user_form.go",
+      );
+
+      expect(output).toContain('json:"name"');
+      expect(output).not.toContain("InternalToken");
+      expect(output).not.toContain("internal_token");
+      expect(output).not.toContain('json:"internalToken"');
+    });
+  });
+
+  // ─── Group B: strict-by-default in EntDataFile ────────────────────────────
+  describe("strict diagnostics in @data structs", () => {
+    async function runEmit(code: string) {
+      const runner = await createTestRunner();
+      await runner.compile(code);
+      const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-data-strict-"));
+      await emit({
+        program: runner.program,
+        options: {},
+        emitterOutputDir: outDir,
+      } as never);
+      return runner.program.diagnostics;
+    }
+
+    it("reports unsupported-type and aborts the file when a data field has no Go mapping", async () => {
+      const code = `
+        @data("Bad form")
+        model BadForm {
+          name: string;
+          payload: unknown;
+        }
+      `;
+
+      const diagnostics = await runEmit(code);
+      const diags = diagnostics.filter((d) => d.code === "@qninhdt/typespec-ent/unsupported-type");
+      expect(diags.length).toBeGreaterThan(0);
+      expect(diags.every((d) => d.severity === "error")).toBe(true);
+
+      // The file should be omitted entirely rather than emitting `interface{}`.
+      const output = await renderGoOutput(code);
+      expect(listAllFiles(output)).not.toContain("/bad_form.go");
+    });
+  });
+
+  // ─── Group C: @version and @tenantId surfaced as annotations ─────────────
+  describe("@version and @tenantId annotations", () => {
+    it("emits a Comment marker for @version on the table-level entsql.Annotation", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model Document {
+          @key id: uuid;
+          title: string;
+          @version revision: int32 = 1;
+        }
+      `,
+        "document.go",
+      );
+
+      expect(output).toContain('entsql.Annotation{Table: "documents"');
+      expect(output).toContain("Comment:");
+      expect(output).toContain("version:revision");
+    });
+
+    it("emits a Comment marker for @tenantId on the table-level entsql.Annotation", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model Project {
+          @key id: uuid;
+          @tenantId tenantId: uuid;
+          name: string;
+        }
+      `,
+        "project.go",
+      );
+
+      expect(output).toContain('entsql.Annotation{Table: "projects"');
+      expect(output).toContain("tenant_id:tenant_id");
+    });
+  });
+
+  // ─── Group D: native PG enum types ────────────────────────────────────────
+  describe("native Postgres ENUM types", () => {
+    it("emits SchemaType + Annotations(Type:) for enum-typed fields", async () => {
+      const output = await emitGoFile(
+        `
+        enum AccountStatus { Active, Suspended, Closed }
+
+        @table
+        model Account {
+          @key id: uuid;
+          status: AccountStatus;
+        }
+      `,
+        "account.go",
+      );
+
+      expect(output).toContain('field.Enum("status")');
+      expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "account_status"})');
+      expect(output).toContain('Annotations(entsql.Annotation{Type: "account_status"})');
+    });
+  });
+
+  // ─── Group E: @schema flows into atlas.hcl ────────────────────────────────
+  describe("@schema flows into atlas.hcl", () => {
+    async function runEmitToDir(code: string) {
+      const runner = await createTestRunner();
+      await runner.compile(code);
+      const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-atlas-"));
+      await emit({
+        program: runner.program,
+        options: {},
+        emitterOutputDir: outDir,
+      } as never);
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
+      return fs.readFile(path.join(outDir, "atlas.hcl"), "utf8");
+    }
+
+    it("lists the custom schema in atlas.hcl when @schema is used", async () => {
+      const hcl = await runEmitToDir(`
+        @schema("billing")
+        @table
+        model Invoice {
+          @key id: uuid;
+        }
+      `);
+
+      expect(hcl).toContain('schemas = ["billing"]');
+      expect(hcl).toContain("search_path=billing");
+    });
+
+    it("defaults to public when no @schema is set", async () => {
+      const hcl = await runEmitToDir(`
+        @table
+        model Account {
+          @key id: uuid;
+        }
+      `);
+
+      expect(hcl).toContain('schemas = ["public"]');
+      expect(hcl).toContain("search_path=public");
     });
   });
 });

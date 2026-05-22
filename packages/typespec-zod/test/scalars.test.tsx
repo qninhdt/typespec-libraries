@@ -68,7 +68,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).toContain("z.number()");
   });
 
-  it("maps decimal to z.number()", async () => {
+  it("maps decimal to a precision-safe string regex", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -79,7 +79,25 @@ describe("Zod scalar type mappings", () => {
       "Product.ts",
     );
 
-    expect(output).toContain("z.number()");
+    // Decimal must not collapse into z.number() — that loses precision
+    // for arbitrary-precision values. We render a string + regex instead.
+    expect(output).toContain('z.string().regex(/^-?\\d+(\\.\\d+)?$/).describe("decimal")');
+    expect(output).not.toMatch(/price:\s*z\.number\(\)/);
+  });
+
+  it("maps decimal128 to a precision-safe string regex", async () => {
+    const output = await emitZodFile(
+      `
+      @data("Form")
+      model Product {
+        price: decimal128;
+      }
+    `,
+      "Product.ts",
+    );
+
+    expect(output).toContain('z.string().regex(/^-?\\d+(\\.\\d+)?$/).describe("decimal")');
+    expect(output).not.toMatch(/price:\s*z\.number\(\)/);
   });
 
   it("maps bytes to z.instanceof() with Uint8Array", async () => {
@@ -142,7 +160,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).not.toContain("z.string().time()");
   });
 
-  it("maps utcDateTime to z.coerce.date()", async () => {
+  it("maps utcDateTime to z.iso.datetime() (string-typed, no coercion)", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -153,7 +171,11 @@ describe("Zod scalar type mappings", () => {
       "User.ts",
     );
 
-    expect(output).toContain("z.coerce.date()");
+    // Default utcDateTime maps to a *string* ISO-8601 schema. We deliberately
+    // do not use z.coerce.date() — coercion mutates input from string to Date,
+    // changing the value type after parse() and surprising callers.
+    expect(output).toContain("z.iso.datetime()");
+    expect(output).not.toContain("z.coerce.date()");
   });
 
   it("maps duration to z.iso.duration()", async () => {
@@ -171,7 +193,7 @@ describe("Zod scalar type mappings", () => {
     expect(output).not.toContain("z.string().duration()");
   });
 
-  it("maps safeint to z.number().int().safe()", async () => {
+  it("maps safeint to z.number().int() (no .safe() in Zod 4)", async () => {
     const output = await emitZodFile(
       `
       @data("Form")
@@ -182,9 +204,11 @@ describe("Zod scalar type mappings", () => {
       "User.ts",
     );
 
+    // Zod 4's `z.number().int()` already enforces the safe-integer range and
+    // there is no `.safe()` method on number schemas. We must not emit it.
     expect(output).toContain("z.number()");
     expect(output).toContain(".int()");
-    expect(output).toContain(".safe()");
+    expect(output).not.toContain(".safe()");
   });
 });
 
@@ -389,6 +413,8 @@ describe("Zod semantic scalars", () => {
         macAddr: mac;
       }
     `,
+      false,
+      { "branded-scalars": true },
     );
     const scalarsFile = getOutputFileContent(output, "_scalars.ts");
     const modelFile = getOutputFileContent(output, "Device.ts");
@@ -520,6 +546,8 @@ describe("Zod user-defined scalars", () => {
         age: AdultAge;
       }
     `,
+      false,
+      { "branded-scalars": true },
     );
     const scalarsFile = getOutputFileContent(output, "_scalars.ts");
     const modelFile = getOutputFileContent(output, "RegistrationForm.ts");
@@ -542,6 +570,8 @@ describe("Zod user-defined scalars", () => {
         password: StrongPassword;
       }
     `,
+      false,
+      { "branded-scalars": true },
     );
     const scalarsFile = getOutputFileContent(output, "_scalars.ts");
     const modelFile = getOutputFileContent(output, "LoginForm.ts");
@@ -586,6 +616,8 @@ describe("Zod user-defined scalars", () => {
         completion: Percentage;
       }
     `,
+      false,
+      { "branded-scalars": true },
     );
     const scalarsFile = getOutputFileContent(output, "_scalars.ts");
     const modelFile = getOutputFileContent(output, "Stats.ts");
@@ -609,6 +641,8 @@ describe("Zod user-defined scalars", () => {
         code: ProductCode;
       }
     `,
+      false,
+      { "branded-scalars": true },
     );
     const scalarsFile = getOutputFileContent(output, "_scalars.ts");
     const modelFile = getOutputFileContent(output, "Product.ts");

@@ -118,6 +118,35 @@ describe("@unique decorator", () => {
 
     expect(isUnique(runner.program, email)).toBe(true);
   });
+
+  it("honors an explicit @unique(name) override", async () => {
+    const runner = await createTestRunner();
+    const { email } = (await runner.compile(`
+      @table
+      model User {
+        @test @key id: uuid;
+        @test @unique("user_email_uq") email: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    expect(isUnique(runner.program, email)).toBe(true);
+    const { getUniqueName } = await import("@qninhdt/typespec-orm");
+    expect(getUniqueName(runner.program, email)).toBe("user_email_uq");
+  });
+
+  it("falls back to the auto-derived unique name when no argument given", async () => {
+    const runner = await createTestRunner();
+    const { email } = (await runner.compile(`
+      @table
+      model User {
+        @test @key id: uuid;
+        @test @unique email: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    const { getUniqueName } = await import("@qninhdt/typespec-orm");
+    expect(getUniqueName(runner.program, email)).toBe("users_email_unique");
+  });
 });
 
 describe("@autoIncrement decorator", () => {

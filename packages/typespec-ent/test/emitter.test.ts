@@ -107,4 +107,61 @@ describe("Ent emitter entrypoint", () => {
     expect(user).toContain("func (User) Fields() []ent.Field");
     expect(form).toContain("type RegisterForm struct");
   });
+
+  it("documents the typical Atlas migration commands in ent/generate.go", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+      }
+    `);
+
+    const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-atlas-doc-"));
+    await emit({
+      program: runner.program,
+      options: {
+        standalone: true,
+        "library-name": "github.com/example/demo",
+      },
+      emitterOutputDir: outDir,
+    } as never);
+
+    const generate = await readFile(join(outDir, "ent/generate.go"), "utf8");
+    expect(generate).toContain("atlas migrate diff --env ent");
+    expect(generate).toContain("atlas migrate apply --env ent");
+    expect(generate).toContain("go generate ./ent");
+  });
+
+  it("emits a README and .gitignore in standalone output", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+      }
+    `);
+
+    const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-standalone-extras-"));
+    await emit({
+      program: runner.program,
+      options: {
+        standalone: true,
+        "library-name": "github.com/example/demo",
+        version: "1.2.3",
+      },
+      emitterOutputDir: outDir,
+    } as never);
+
+    const readme = await readFile(join(outDir, "README.md"), "utf8");
+    const gitignore = await readFile(join(outDir, ".gitignore"), "utf8");
+
+    expect(readme).toContain("github.com/example/demo");
+    expect(readme).toContain("1.2.3");
+    expect(readme).toContain("go mod tidy");
+    expect(readme).toContain("atlas migrate diff");
+    expect(gitignore).toContain(".env");
+    expect(gitignore).toContain("dev.db");
+    expect(gitignore).not.toContain("atlas.sum");
+  });
 });

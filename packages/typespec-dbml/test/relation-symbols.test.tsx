@@ -99,7 +99,7 @@ describe("DBML relation symbols", () => {
       "posts.dbml",
     );
 
-    expect(output).toContain("delete: CASCADE");
+    expect(output).toContain("delete: cascade");
   });
 
   it("includes ON UPDATE action in relation", async () => {
@@ -124,7 +124,7 @@ describe("DBML relation symbols", () => {
       "posts.dbml",
     );
 
-    expect(output).toContain("update: SET NULL");
+    expect(output).toContain("update: set null");
   });
 
   it("includes both ON DELETE and ON UPDATE actions", async () => {
@@ -150,7 +150,7 @@ describe("DBML relation symbols", () => {
       "posts.dbml",
     );
 
-    expect(output).toContain("delete: CASCADE");
-    expect(output).toContain("update: CASCADE");
+    expect(output).toContain("delete: cascade");
+    expect(output).toContain("update: cascade");
   });
 });

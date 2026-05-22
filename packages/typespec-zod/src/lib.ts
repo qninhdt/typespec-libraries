@@ -26,6 +26,23 @@ export interface ZodEmitterOptions {
    * - `"number"`: emit `z.number().int()`. Values >2^53 lose precision.
    */
   "int64-strategy"?: "bigint" | "string" | "number";
+  /**
+   * Append `.brand("ScalarName")` to user-defined scalar declarations.
+   * Defaults to `false`. Branding produces nominal types and leaks into
+   * downstream code; opt in only when nominal types are desired.
+   */
+  "branded-scalars"?: boolean;
+  /**
+   * `description` field for the generated standalone package.json.
+   * Defaults to "Generated Zod schemas".
+   */
+  description?: string;
+  /**
+   * `license` field for the generated standalone package.json.
+   * Defaults to "UNLICENSED" since the output is typically a private
+   * monorepo artifact.
+   */
+  license?: string;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
@@ -43,6 +60,9 @@ const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
       enum: ["bigint", "string", "number"],
       nullable: true,
     },
+    "branded-scalars": { type: "boolean", nullable: true },
+    description: { type: "string", nullable: true },
+    license: { type: "string", nullable: true },
   },
   required: [],
 };

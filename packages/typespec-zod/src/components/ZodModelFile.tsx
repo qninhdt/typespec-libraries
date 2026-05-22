@@ -4,13 +4,7 @@
 
 import { Children } from "@alloy-js/core";
 import { SourceFile } from "@alloy-js/typescript";
-import {
-  type Enum,
-  type Model,
-  type Program,
-  type Scalar,
-  type Union,
-} from "@typespec/compiler";
+import { type Enum, type Model, type Program, type Scalar, type Union } from "@typespec/compiler";
 import {
   generatedHeader,
   getInputTypeForProperty,
@@ -21,6 +15,7 @@ import {
 import { ZodSchemaDeclaration } from "./ZodSchemaDeclaration.js";
 import { getModelOwnProperties, shouldReference, toPascalCase } from "../utils.js";
 import { walkReferencedTypes } from "../traversal.js";
+import { buildMetaEntry, FORM_FIELD_META_INTERFACE_NAME } from "./meta-builder.js";
 
 export interface ZodModelFileProps {
   readonly program: Program;
@@ -33,6 +28,7 @@ export interface ZodModelFileProps {
  * Generates a separate Zod schema file for each data model.
  * Each file contains:
  * - const ClassSchema = z.object({...})
+ * - const ClassMeta = { field: { ...FormFieldMeta }, ... }
  */
 export function ZodModelFile(props: ZodModelFileProps): Children {
   // Convert to PascalCase for schema name
@@ -48,20 +44,9 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
   );
   const metadataEntries = getModelOwnProperties(props.model)
     .map((prop) => {
-      const title = getTitle(props.program, prop);
-      const placeholder = getPlaceholder(props.program, prop);
-      const inputType = getInputTypeForProperty(props.program, prop);
-      const parts = [
-        title ? `title: ${JSON.stringify(title)}` : undefined,
-        placeholder ? `placeholder: ${JSON.stringify(placeholder)}` : undefined,
-        inputType ? `inputType: ${JSON.stringify(inputType)}` : undefined,
-      ].filter((item): item is string => !!item);
-
-      if (parts.length === 0) {
-        return undefined;
-      }
-
-      return `  ${renderPropertyName(prop.name)}: { ${parts.join(", ")} },`;
+      const entry = buildMetaEntry(props.program, prop);
+      if (!entry) return undefined;
+      return `  ${renderPropertyName(prop.name)}: ${entry},`;
     })
     .filter((item): item is string => !!item);
 
@@ -77,11 +62,19 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
       <ZodSchemaDeclaration type={props.model} name={schemaName} export />
       {`\nexport type ${pascalName} = z.infer<typeof ${schemaName}>;\n`}
       {metadataEntries.length > 0
-        ? `\nexport const ${metaName} = {\n${metadataEntries.join("\n")}\n} as const;\n`
+        ? `\nexport const ${metaName}: Record<string, ${FORM_FIELD_META_INTERFACE_NAME}> = {\n${metadataEntries.join("\n")}\n};\nexport type ${metaName}Shape = typeof ${metaName};\nexport type ${metaName}Type = ${metaName}Shape;\n`
         : ""}
     </SourceFile>
   );
 }
+
+/**
+ * Suppress legacy uses; placeholder/title/inputType are now read by
+ * the meta-builder module so this file stays focused on file shape.
+ */
+void getTitle;
+void getPlaceholder;
+void getInputTypeForProperty;
 
 function renderPropertyName(name: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);

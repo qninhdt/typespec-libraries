@@ -90,11 +90,20 @@ export function PyDataFile(props: PyDataFileProps): Children {
   if (enumTypes.size > 0) stdImports.add("enum.Enum");
 
   let code = FILE_HEADER;
+  // `from __future__ import annotations` makes ALL annotations lazy strings,
+  // letting forward references resolve without TYPE_CHECKING gymnastics.
+  // MUST be the first import statement.
+  code += "from __future__ import annotations\n\n";
   code += buildPythonImportBlock(stdImports, new Set(), pydanticImports, "pydantic");
   const allReferenced = new Set<Model>([...sourceModels, ...referencedModels]);
   code += buildReferencedModelImportBlock(allReferenced, modelLookup, namespacePath);
   if (scalarNames.length > 0) {
-    code += `from ${".".repeat(Math.max(namespacePath.length, 1))}_scalars import ${[...new Set(scalarNames)].join(", ")}\n`;
+    // `_scalars.py` sits at the top-level package root. Walk up
+    // `namespacePath.length` levels; clamp to 1 so a root-namespace model
+    // (length 0) still emits `from ._scalars import ...` rather than the
+    // Python-invalid `from _scalars import ...`.
+    const dots = ".".repeat(Math.max(namespacePath.length, 1));
+    code += `from ${dots}_scalars import ${[...new Set(scalarNames)].join(", ")}\n`;
   }
   code += "\n\n";
 

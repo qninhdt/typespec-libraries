@@ -1,6 +1,9 @@
 import type { Model, Program } from "@typespec/compiler";
 import {
+  findTenantIdProperty,
+  findVersionProperty,
   getCheck,
+  getColumnName,
   getSchemaName,
   getTableName,
   type NormalizedOrmModel,
@@ -37,6 +40,22 @@ export function buildEntAnnotations(
   }
   if (checks.length > 0) {
     annotationParts.push(`Checks: map[string]string{${checks.join(", ")}}`);
+  }
+
+  // Surface ORM-core decorators (@version / @tenantId) as a Comment marker
+  // on the table-level entsql.Annotation. Downstream policy/hook code can
+  // grep for these markers without us inventing automatic indexes.
+  const markers: string[] = [];
+  const versionProp = findVersionProperty(program, model);
+  if (versionProp) {
+    markers.push(`version:${getColumnName(program, versionProp)}`);
+  }
+  const tenantProp = findTenantIdProperty(program, model);
+  if (tenantProp) {
+    markers.push(`tenant_id:${getColumnName(program, tenantProp)}`);
+  }
+  if (markers.length > 0) {
+    annotationParts.push(`Comment: ${goStringLiteral(markers.join(";"))}`);
   }
 
   ctx.usesEntSql = true;

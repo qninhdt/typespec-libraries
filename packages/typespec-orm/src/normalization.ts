@@ -16,15 +16,23 @@ import {
 import {
   camelToSnake,
   collectOrmManagedModels,
+  findTenantIdProperty,
+  findVersionProperty,
+  getAuditRole,
+  getColumnName,
   getDataLabel,
+  getEnumMembers,
   getManyToMany,
   getMappedBy,
   getNamespaceFullName,
   getNamespaceSegments,
+  getSchemaName,
+  getScopes,
   getTableName,
   getTypeFullName,
   getForeignKeyConfig,
   isData,
+  isEnum,
   isOrmManagedModel,
   isIgnored,
   isTable,
@@ -32,6 +40,7 @@ import {
   resolveDbType,
   resolveRelation,
   unwrapArrayType,
+  type EnumMemberInfo,
 } from "./helpers.js";
 
 export type OrmSelector =
@@ -42,7 +51,8 @@ export interface NormalizedDependency {
   kind: "model" | "mixin" | "enum" | "scalar";
   fullName: string;
   namespace?: string;
-  soft?: boolean;
+  /** Pre-resolved enum members; only populated when `kind === "enum"`. */
+  enumMembers?: EnumMemberInfo[];
 }
 
 export interface NormalizedOrmModel {
@@ -59,6 +69,16 @@ export interface NormalizedOrmModel {
   label?: string;
   mixins: Model[];
   dependencies: NormalizedDependency[];
+  /** PostgreSQL schema for the table (resolved up the namespace chain), or undefined for default. */
+  schema?: string;
+  /** Scopes applied to the model itself via `@scope`. Empty when none. */
+  scopes: string[];
+  /** Column name (after @map) of the @version property, or undefined when none. */
+  versionColumn?: string;
+  /** Column name (after @map) of the @tenantId property, or undefined when none. */
+  tenantIdColumn?: string;
+  /** Column names (after @map) carrying @audit, sorted ascending. */
+  auditColumns: string[];
 }
 
 export interface NormalizedOrmGraph {
@@ -161,6 +181,41 @@ export function normalizeOrmGraph(program: Program): NormalizedOrmGraph {
   return graph;
 }
 
+function collectModelMetadata(
+  program: Program,
+  model: Model,
+  kind: NormalizedOrmModel["kind"],
+): {
+  schema?: string;
+  scopes: string[];
+  versionColumn?: string;
+  tenantIdColumn?: string;
+  auditColumns: string[];
+} {
+  const scopes = [...getScopes(program, model)];
+  // Schema only meaningful for tables; mixins/data inherit no PG schema.
+  const schema = kind === "table" ? getSchemaName(program, model) : undefined;
+
+  let versionColumn: string | undefined;
+  let tenantIdColumn: string | undefined;
+  const auditColumns: string[] = [];
+
+  const versionProp = findVersionProperty(program, model);
+  if (versionProp) versionColumn = getColumnName(program, versionProp);
+
+  const tenantProp = findTenantIdProperty(program, model);
+  if (tenantProp) tenantIdColumn = getColumnName(program, tenantProp);
+
+  for (const prop of model.properties.values()) {
+    if (getAuditRole(program, prop)) {
+      auditColumns.push(getColumnName(program, prop));
+    }
+  }
+  auditColumns.sort();
+
+  return { schema, scopes, versionColumn, tenantIdColumn, auditColumns };
+}
+
 function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
   const entities = new Map<Model, NormalizedOrmModel>();
   const globalNamespace = program.getGlobalNamespaceType();
@@ -204,6 +259,7 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
     const namespaceSegments = getNamespaceSegments(model.namespace, globalNamespace);
     const namespacePath = namespaceSegments.map((segment) => camelToSnake(segment));
     const packageName = namespacePath.at(-1) ?? camelToSnake(model.name);
+    const metadata = collectModelMetadata(program, model, kind);
     entities.set(model, {
       kind,
       model,
@@ -218,6 +274,11 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
       label: kind === "data" ? (getDataLabel(program, model) ?? model.name) : undefined,
       mixins: collectMixinSources(program, model, kind),
       dependencies: [],
+      schema: metadata.schema,
+      scopes: metadata.scopes,
+      versionColumn: metadata.versionColumn,
+      tenantIdColumn: metadata.tenantIdColumn,
+      auditColumns: metadata.auditColumns,
     });
   };
 
@@ -276,7 +337,6 @@ export function selectModelsForEmitter(
     while (queue.length > 0) {
       const current = queue.shift()!;
       for (const dependency of current.dependencies) {
-        if (dependency.soft) continue;
         if (dependency.fullName === current.fullName) continue;
         if (seen.has(dependency.fullName)) continue;
         const depModel = graph.models.find((entry) => entry.fullName === dependency.fullName);
@@ -291,11 +351,8 @@ export function selectModelsForEmitter(
   } else {
     for (const model of selected) {
       for (const dependency of model.dependencies) {
-        if (dependency.soft) continue;
         if (dependency.fullName === model.fullName) continue;
-        const depGraphModel = graph.models.find(
-          (entry) => entry.fullName === dependency.fullName,
-        );
+        const depGraphModel = graph.models.find((entry) => entry.fullName === dependency.fullName);
         const depTags = depGraphModel ? getModelScopes(program, depGraphModel.model) : [];
         if (
           !isDeclarationSelected(
@@ -366,10 +423,35 @@ function reportSelectorWarnings(
     }
   }
 
+  // Per-list dedup pass: warn on exact-string duplicates within include / exclude.
+  // Catches `["#frontend", "#frontend"]` which `selectorMatchesName` does not flag.
+  for (const [list, label] of [
+    [include, "include"],
+    [exclude, "exclude"],
+  ] as const) {
+    const seen = new Set<string>();
+    const reported = new Set<string>();
+    for (const selector of list) {
+      if (seen.has(selector.raw)) {
+        if (!reported.has(selector.raw)) {
+          reported.add(selector.raw);
+          reportDiagnostic(program, {
+            code: "redundant-include-selector",
+            target: program.getGlobalNamespaceType(),
+            format: { selector: selector.raw, list: label },
+          });
+        }
+      } else {
+        seen.add(selector.raw);
+      }
+    }
+  }
+
   for (const selectors of [include, exclude]) {
     const sorted = [...selectors].sort((a, b) => a.raw.length - b.raw.length);
     for (let i = 0; i < sorted.length; i++) {
       for (let j = i + 1; j < sorted.length; j++) {
+        if (sorted[i].raw === sorted[j].raw) continue;
         if (selectorMatchesName(sorted[i].raw, sorted[j].raw, undefined)) {
           reportDiagnostic(program, {
             code: "filter-selector-redundant",
@@ -379,6 +461,41 @@ function reportSelectorWarnings(
         }
       }
     }
+  }
+
+  reportUnusedScopes(program, include, exclude);
+}
+
+function reportUnusedScopes(
+  program: Program,
+  include: OrmSelector[],
+  exclude: OrmSelector[],
+): void {
+  const referenced = new Set<string>();
+  for (const selectors of [include, exclude]) {
+    for (const selector of selectors) {
+      if (selector.kind === "tag") referenced.add(selector.value);
+    }
+  }
+
+  const declared = new Set<string>();
+  for (const [, scopes] of program.stateMap(ScopesKey)) {
+    if (Array.isArray(scopes)) {
+      for (const value of scopes as unknown[]) {
+        if (typeof value === "string") declared.add(value);
+      }
+    }
+  }
+
+  const reported = new Set<string>();
+  for (const scope of declared) {
+    if (referenced.has(scope) || reported.has(scope)) continue;
+    reported.add(scope);
+    reportDiagnostic(program, {
+      code: "unused-scope",
+      target: program.getGlobalNamespaceType(),
+      format: { scope },
+    });
   }
 }
 
@@ -473,6 +590,27 @@ function validateMixinFieldConflicts(program: Program, model: Model, reported: S
   const mixinSources = getModelMixinSources(program, model);
   for (const source of mixinSources) {
     registerMixinOwnership(program, model, source, ownership, reported);
+  }
+  // Register the child model's own properties as a final source so that any
+  // overlap with an inherited mixin field is reported as a conflict (the
+  // README documents this is intentional rather than allowed override).
+  registerOwnPropertyOwnership(program, model, ownership, reported);
+}
+
+function registerOwnPropertyOwnership(
+  program: Program,
+  model: Model,
+  ownership: Map<string, string>,
+  reported: Set<string>,
+): void {
+  const incomingSource = getTypeFullName(program, model);
+  for (const [fieldName] of model.properties) {
+    const existingSource = ownership.get(fieldName);
+    if (existingSource && existingSource !== incomingSource) {
+      reportMixinConflict(program, model, fieldName, incomingSource, existingSource, reported);
+    } else {
+      ownership.set(fieldName, incomingSource);
+    }
   }
 }
 
@@ -573,7 +711,13 @@ function pushEnumDependency(
     return;
   }
 
-  push({ kind: "enum", fullName: getTypeFullName(program, type), namespace });
+  const members = isEnum(type) ? getEnumMembers(type) : undefined;
+  push({
+    kind: "enum",
+    fullName: getTypeFullName(program, type),
+    namespace,
+    enumMembers: members,
+  });
 }
 
 function pushScalarDependency(

@@ -493,4 +493,104 @@ describe("normalizeOrmGraph", () => {
     const codes = runner.program.diagnostics.map((diag) => diag.code);
     expect(codes).not.toContain("@qninhdt/typespec-orm/filtered-dependency");
   });
+
+  it("populates schema, scopes, version, tenant and audit metadata", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @Qninhdt.Orm.schema("audit")
+      namespace Demo.Audit {
+        @table
+        @Qninhdt.Orm.scope("frontend")
+        @Qninhdt.Orm.scope("audit")
+        model EventLog {
+          @key id: uuid;
+          @Qninhdt.Orm.tenantId tenantId: uuid;
+          @version revision: int32 = 0;
+          @audit("createdBy") createdBy: uuid;
+          @audit("updatedBy") updatedBy: uuid;
+          message: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const log = graph.models.find((entry) => entry.name === "EventLog");
+    expect(log).toBeDefined();
+    expect(log!.schema).toBe("audit");
+    expect(log!.scopes.sort()).toEqual(["audit", "frontend"]);
+    expect(log!.versionColumn).toBe("revision");
+    expect(log!.tenantIdColumn).toBe("tenant_id");
+    expect(log!.auditColumns).toEqual(["created_by", "updated_by"]);
+  });
+
+  it("warns when an include list repeats a tag selector", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("frontend")
+        model User {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    selectModelsForEmitter(runner.program, graph, {
+      include: ["#frontend", "#frontend"],
+      kinds: ["table"],
+    });
+
+    const codes = runner.program.diagnostics.map((diag) => diag.code);
+    expect(codes).toContain("@qninhdt/typespec-orm/redundant-include-selector");
+  });
+
+  it("pre-resolves enum members onto enum dependencies", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        enum Plan {
+          Free,
+          Pro,
+        }
+
+        @table
+        model User {
+          @key id: uuid;
+          plan: Plan;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const user = graph.models.find((entry) => entry.name === "User");
+    expect(user).toBeDefined();
+    const enumDep = user!.dependencies.find((dep) => dep.kind === "enum");
+    expect(enumDep).toBeDefined();
+    expect(enumDep!.enumMembers).toBeDefined();
+    expect(enumDep!.enumMembers!.map((member) => member.name).sort()).toEqual(["Free", "Pro"]);
+  });
+
+  it("warns about scopes declared via @scope but never referenced by a selector", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("ghost")
+        model User {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    selectModelsForEmitter(runner.program, graph, {
+      kinds: ["table"],
+    });
+
+    const unused = runner.program.diagnostics.filter(
+      (diag) => diag.code === "@qninhdt/typespec-orm/unused-scope",
+    );
+    expect(unused.length).toBeGreaterThan(0);
+  });
 });

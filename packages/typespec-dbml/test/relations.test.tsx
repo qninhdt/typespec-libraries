@@ -136,7 +136,7 @@ model Post {
 `,
       "posts.dbml",
     );
-    expect(output).toContain("Ref: posts.author_id > users.id [delete: CASCADE, update: CASCADE]");
+    expect(output).toContain("Ref: posts.author_id > users.id [delete: cascade, update: cascade]");
   });
 
   it("keeps indexes for enum columns", async () => {

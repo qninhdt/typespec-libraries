@@ -39,7 +39,9 @@ export function unionBaseType(type: Union): Children {
       <For each={Array.from(type.variants.values())} comma line>
         {(variant: UnionVariant) => {
           if (discriminated.options.envelope === "object") {
-            return <ZodSchema type={createEnvelopeModel($, propKey, envKey, variant)} nested />;
+            return (
+              <ZodSchema type={createEnvelopeModel($, type, propKey, envKey, variant)} nested />
+            );
           }
           return <ZodSchema type={variant.type} nested />;
         }}
@@ -50,17 +52,31 @@ export function unionBaseType(type: Union): Children {
   return zodMemberExpr(callPart("discriminatedUnion", ...unionArgs));
 }
 
+/**
+ * Build the synthetic envelope model that backs an `envelope: "object"`
+ * discriminated union. We deliberately keep the model anonymous (no `name`)
+ * so it falls into the inline-emission path of `ZodSchema` — giving it a
+ * name would flip `shouldReference` and require a separate declaration.
+ *
+ * What we DO change: stamp the parent union's namespace on the synthetic
+ * model. This way any future collision-detection that keys models by
+ * `kind:namespace.name` won't lump every emitter-generated envelope into
+ * the global namespace; two unions with the same variant names in two
+ * different namespaces get unambiguous identities.
+ */
 function createEnvelopeModel(
   $: Typekit,
+  parent: Union,
   propKey: string,
   envKey: string,
   variant: { name: string | symbol; type: Type },
 ): Model {
-  return $.model.create({
+  const variantName = typeof variant.name === "string" ? variant.name : "";
+  const created = $.model.create({
     properties: {
       [propKey]: $.modelProperty.create({
         name: propKey,
-        type: $.literal.create(typeof variant.name === "string" ? variant.name : ""),
+        type: $.literal.create(variantName),
       }),
       [envKey]: $.modelProperty.create({
         name: envKey,
@@ -68,4 +84,8 @@ function createEnvelopeModel(
       }),
     },
   });
+  if (parent.namespace) {
+    (created as { namespace?: typeof parent.namespace }).namespace = parent.namespace;
+  }
+  return created;
 }

@@ -9,10 +9,11 @@ import { useTsp } from "@typespec/emitter-framework";
 import { ValueExpression } from "@typespec/emitter-framework/typescript";
 import { callPart } from "./utils.js";
 import { getZodOptions } from "./context/zod-options.js";
+import { isPropertyNullable } from "./nullable.js";
 
 export function zodMemberParts(member?: ModelProperty) {
   const { $ } = useTsp();
-  return [...defaultParts($, member), ...optionalParts(member)];
+  return [...defaultParts($, member), ...optionalParts(member), ...nullableParts($, member)];
 }
 
 function defaultParts($: Typekit, member?: ModelProperty) {
@@ -29,6 +30,20 @@ function optionalParts(member?: ModelProperty) {
   }
 
   return [callPart("optional")];
+}
+
+function nullableParts($: Typekit, member?: ModelProperty) {
+  if (!member) return [];
+  // A property's `nullable` modifier in TypeSpec surfaces as `T | null`
+  // (or a literal `null`) in the property's resolved type. The base
+  // schema renders that union faithfully; when this property carries a
+  // null branch we ALSO append `.nullable()` so the wrapper schema
+  // accepts `null` after `.optional()` / `.default()` chains apply.
+  if (!isPropertyNullable($, member)) {
+    return [];
+  }
+
+  return [callPart("nullable")];
 }
 
 function renderDefaultExpression($: Typekit, member: ModelProperty): Children {

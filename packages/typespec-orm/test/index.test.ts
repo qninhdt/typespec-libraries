@@ -13,4 +13,16 @@ describe("ORM index exports", () => {
     expect(orm.normalizeOrmGraph).toBe(normalizeOrmGraph);
     expect(typeof orm.reportDiagnostic).toBe("function");
   });
+
+  it("buildGeneratedHeader returns the canonical marker by default and prepends extras", () => {
+    expect(orm.buildGeneratedHeader()).toBe(orm.generatedHeader);
+    expect(orm.buildGeneratedHeader("")).toBe(orm.generatedHeader);
+    expect(orm.buildGeneratedHeader("   ")).toBe(orm.generatedHeader);
+
+    const composed = orm.buildGeneratedHeader("// SPDX-License-Identifier: MIT\n// see TICKET-123");
+    expect(composed).toContain("SPDX-License-Identifier: MIT");
+    expect(composed).toContain("TICKET-123");
+    expect(composed).toContain(orm.generatedHeader);
+    expect(composed.endsWith(orm.generatedHeader)).toBe(true);
+  });
 });

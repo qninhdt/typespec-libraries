@@ -54,13 +54,14 @@ options:
 
 Supported options:
 
-| Option               | Type       | Meaning                                            |
-| -------------------- | ---------- | -------------------------------------------------- |
-| `output-dir`         | `string`   | target directory handled by the TypeSpec compiler  |
-| `filename`           | `string`   | single-file output name without the `.dbml` suffix |
-| `split-by-namespace` | `boolean`  | emit one DBML file per namespace group             |
-| `include`            | `string[]` | namespace or declaration selectors to keep         |
-| `exclude`            | `string[]` | namespace or declaration selectors to drop         |
+| Option               | Type       | Meaning                                                                                       |
+| -------------------- | ---------- | --------------------------------------------------------------------------------------------- |
+| `output-dir`         | `string`   | target directory handled by the TypeSpec compiler                                             |
+| `filename`           | `string`   | single-file output name without the `.dbml` suffix                                            |
+| `split-by-namespace` | `boolean`  | emit one DBML file per namespace group                                                        |
+| `include`            | `string[]` | namespace or declaration selectors to keep                                                    |
+| `exclude`            | `string[]` | namespace or declaration selectors to drop                                                    |
+| `project-name`       | `string`   | identifier rendered in the DBML `Project { ... }` header (single-file mode, default `schema`) |
 
 Notes:
 
@@ -206,7 +207,7 @@ For `@manyToMany(...)`, the emitter synthesizes:
 
 DBML is documentation-oriented output, so some runtime-level concepts are represented in DBML-friendly ways:
 
-- named checks are preserved in column notes
+- named checks are preserved in column notes with property names rewritten to their mapped column names
 - lookup-derived fields resolve to the source property's scalar type instead of rendering as opaque TypeSpec syntax
 - FK delete and update actions are preserved in `Ref:` metadata
 
@@ -224,8 +225,10 @@ This makes DBML useful for review even when the source schema uses richer TypeSp
 
 ## Limitations
 
-- DBML is documentation-oriented output, so named checks are preserved as notes rather than a richer DBML-native construct
+- DBML is documentation-oriented output, so named checks are preserved as notes rather than a richer DBML-native construct (with column-mapped expressions so the rendered note matches the actual schema)
 - many-to-many shorthand remains simple join-table generation; payload-column junctions should be explicit models
+- in split-by-namespace mode, each generated `.dbml` carries its own `Project` header and is parsed standalone; cross-file `Ref:` imports are not synthesized
+- `TableGroup` blocks are emitted in single-file mode for namespace-grouped diagrams in dbdiagram.io
 
 ## Review Workflow
 

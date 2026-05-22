@@ -1,13 +1,25 @@
-import type { ModelProperty, Program } from "@typespec/compiler";
+import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import {
   camelToSnake,
   getOnDelete,
+  getOnUpdate,
+  isKey,
+  type NormalizedOrmModel,
   type ResolvedRelation,
 } from "@qninhdt/typespec-orm";
 import { goStringLiteral } from "./EntConstants.js";
 import { buildChain, type EntFileContext } from "./ent-context.js";
 import { reportDiagnostic } from "../lib.js";
 import { deduplicateParts } from "@qninhdt/typespec-orm";
+
+export interface EntEdgeOptions {
+  /**
+   * When true, surface ON UPDATE actions as a `Comment("on_update: <action>")`
+   * Ent annotation that downstream Atlas tooling can detect via custom rules.
+   * When false (default), ON UPDATE is dropped with the existing warning.
+   */
+  readonly onUpdateEmitRawSql?: boolean;
+}
 
 /**
  * Builds an Ent edge declaration line for a relation property.
@@ -20,10 +32,54 @@ export function buildEntEdge(
   prop: ModelProperty,
   rel: ResolvedRelation,
   ctx: EntFileContext,
+  modelLookup?: Map<Model, NormalizedOrmModel>,
+  options?: EntEdgeOptions,
 ): string {
   const edgeName = camelToSnake(prop.name);
   const targetType = `${rel.targetModel.name}.Type`;
   const chains: string[] = [];
+
+  // Ent generates all schemas into a single Go package (`ent/schema`), but the
+  // ORM normalization preserves namespace-derived Go packages for downstream
+  // tooling. If the source and target tables resolve to different namespaces,
+  // the user has likely modeled a relation that crosses bounded contexts in a
+  // way Ent will silently flatten — surface that mismatch instead.
+  const sourceModel = prop.model;
+  if (modelLookup && sourceModel) {
+    const sourceInfo = modelLookup.get(sourceModel);
+    const targetInfo = modelLookup.get(rel.targetModel);
+    if (sourceInfo && targetInfo && sourceInfo.namespaceDir !== targetInfo.namespaceDir) {
+      reportDiagnostic(program, {
+        code: "cross-package-edge",
+        target: prop,
+        format: {
+          propName: prop.name,
+          sourceModel: sourceModel.name,
+          targetModel: rel.targetModel.name,
+          sourcePackage: sourceInfo.namespaceDir || "<root>",
+          targetPackage: targetInfo.namespaceDir || "<root>",
+        },
+      });
+    }
+  }
+
+  // Ent edges always reference the target's primary key. `@foreignKey("col",
+  // "otherCol")` referencing a non-`@key` column is silently dropped by Ent —
+  // catch it here.
+  if (
+    (rel.kind === "many-to-one" || rel.kind === "one-to-one") &&
+    !isKey(program, rel.targetProperty)
+  ) {
+    reportDiagnostic(program, {
+      code: "referenced-column-fk-not-supported-by-ent",
+      target: prop,
+      format: {
+        propName: prop.name,
+        targetModel: rel.targetModel.name,
+        targetColumn: rel.fkTargetColumn,
+      },
+    });
+  }
 
   let builder: string;
   if (rel.kind === "many-to-many") {
@@ -40,9 +96,12 @@ export function buildEntEdge(
     if (ownerName === targetName) {
       if (!rel.backPopulates) {
         reportDiagnostic(program, {
-          code: "unsupported-type",
+          code: "missing-back-reference",
           target: prop,
-          format: { typeName: "self-many-to-many-without-backPopulates", propName: prop.name },
+          format: {
+            propName: prop.name,
+            modelName: ownerName,
+          },
         });
         isOwner = true;
       } else {
@@ -93,6 +152,21 @@ export function buildEntEdge(
   // entgo.io/ent/dialect/entsql does not export OnUpdate; @onUpdate is preserved
   // in the ORM graph for downstream emitters (DBML, SQLModel) but cannot be
   // surfaced through Ent's edge annotation API. Apply ON UPDATE via Atlas/SQL.
+  const onUpdate = getOnUpdate(program, prop) ?? rel.onUpdate;
+  if (onUpdate) {
+    if (options?.onUpdateEmitRawSql) {
+      // Escape hatch: surface the action as a Comment marker so downstream
+      // Atlas custom rules can apply ON UPDATE in raw SQL. We deliberately
+      // don't synthesize a real trigger here — that's left to the consumer.
+      chains.push(`Comment(${goStringLiteral(`on_update: ${onUpdate}`)})`);
+    } else {
+      reportDiagnostic(program, {
+        code: "on-update-not-supported-by-ent",
+        target: prop,
+        format: { action: onUpdate, relationName: prop.name },
+      });
+    }
+  }
   const annotations: string[] = [];
   if (onDelete) {
     annotations.push(`entsql.OnDelete(${formatEntReferentialAction(onDelete)})`);

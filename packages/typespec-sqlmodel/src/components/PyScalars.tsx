@@ -19,14 +19,28 @@ export interface PyScalarsFileProps {
   readonly scalars: readonly Scalar[];
   readonly aliasNames: ReadonlyMap<Scalar, string>;
   readonly path?: string;
+  /**
+   * Scalars in `scalars` that should be re-exported from `reexportFromModule`
+   * rather than defined inline. Used for cross-namespace scalar deduplication
+   * — a shared scalar lives once in `_shared/scalars.py` and each top-level
+   * `_scalars.py` re-exports it so `from <top>._scalars import X` keeps working.
+   */
+  readonly reexports?: ReadonlySet<Scalar>;
+  /** Python module path containing the shared definitions (e.g. ".._shared.scalars"). */
+  readonly reexportFromModule?: string;
 }
 
 export function PyScalarsFile(props: PyScalarsFileProps): Children {
-  if (props.scalars.length === 0) return null;
+  const reexports = props.reexports ?? new Set<Scalar>();
+  const reexportFromModule = props.reexportFromModule;
+  const inlineScalars = props.scalars.filter((scalar) => !reexports.has(scalar));
+  const reexportedScalars = props.scalars.filter((scalar) => reexports.has(scalar));
+
+  if (inlineScalars.length === 0 && reexportedScalars.length === 0) return null;
 
   const stdImports = new Set<string>();
   const pydanticImports = new Set<string>();
-  const aliases = props.scalars.map((scalar) =>
+  const aliases = inlineScalars.map((scalar) =>
     generateScalarAlias(
       props.program,
       scalar,
@@ -38,8 +52,20 @@ export function PyScalarsFile(props: PyScalarsFileProps): Children {
 
   let code = `# ${generatedHeader}\n`;
   code += buildPythonImportBlock(stdImports, new Set(), pydanticImports, "pydantic");
-  code += "\n\n";
-  code += aliases.join("\n") + "\n";
+
+  if (reexportedScalars.length > 0 && reexportFromModule) {
+    const names = reexportedScalars
+      .map((scalar) => props.aliasNames.get(scalar) ?? scalar.name)
+      .sort((a, b) => a.localeCompare(b));
+    code += `\nfrom ${reexportFromModule} import ${names.join(", ")}\n`;
+  }
+
+  if (aliases.length > 0) {
+    code += "\n\n";
+    code += aliases.join("\n") + "\n";
+  } else {
+    code += "\n";
+  }
 
   return (
     <SourceFile path={props.path ?? "_scalars.py"} filetype="py" printWidth={9999}>

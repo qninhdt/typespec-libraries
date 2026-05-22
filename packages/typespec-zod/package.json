@@ -63,7 +63,8 @@
     "@alloy-js/core": ">=0.22.0",
     "@alloy-js/typescript": ">=0.22.0",
     "@typespec/compiler": ">=1.0.0",
-    "@typespec/emitter-framework": ">=0.15.0"
+    "@typespec/emitter-framework": ">=0.15.0",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "@typespec/compiler": {
@@ -77,6 +78,9 @@
     },
     "@typespec/emitter-framework": {
       "optional": false
+    },
+    "zod": {
+      "optional": false
     }
   },
   "devDependencies": {
@@ -89,7 +93,7 @@
     "@typespec/emitter-framework": "^0.17.0",
     "@vitest/coverage-v8": "^4.1.6",
     "prettier": "^3.8.3",
-    "typescript": "~6.0.3",
+    "typescript": "^5.0.0",
     "vitest": "^4.1.6",
     "zod": "^4.4.3"
   }

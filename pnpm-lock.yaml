@@ -75,6 +75,9 @@ importers:
       "@alloy-js/typescript":
         specifier: ^0.22.0
         version: 0.22.0
+      "@dbml/core":
+        specifier: ^8.2.0
+        version: 8.2.0
       "@typespec/compiler":
         specifier: ^1.12.0
         version: 1.12.0(@types/node@25.9.1)
@@ -647,6 +650,20 @@ packages:
         integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==,
       }
     engines: { node: ">=0.1.90" }
+
+  "@dbml/core@8.2.0":
+    resolution:
+      {
+        integrity: sha512-LywCZ2c8JTvoMJ2MQ4C1OJcYJtxajHan2xX5ibVvCzyOdX1ds0Xkkki1zphmPkCMKI/lPPyUH0SKbtfRYhm8Ww==,
+      }
+    engines: { node: ">=16" }
+
+  "@dbml/parse@8.2.0":
+    resolution:
+      {
+        integrity: sha512-L+T/HCtFjGwKj7viYfpNFyex4D310f83cEd9sqNWea9wy+voWQu0IrDXuasrKdYYn7vOUtKN4tEMpDQz4eWl6Q==,
+      }
+    engines: { node: ">=18" }
 
   "@esbuild/aix-ppc64@0.27.7":
     resolution:
@@ -1782,6 +1799,13 @@ packages:
       }
     engines: { node: ">=12" }
 
+  antlr4@4.13.2:
+    resolution:
+      {
+        integrity: sha512-QiVbZhyy4xAZ17UPEuG3YTOt8ZaoeOR1CvEAqrEsDBsOqINslaB147i9xqljZqoyf5S+EUlGStaj+t22LT9MOg==,
+      }
+    engines: { node: ">=16" }
+
   argparse@1.0.10:
     resolution:
       {
@@ -2589,10 +2613,22 @@ packages:
       }
     engines: { node: ">=10" }
 
+  lodash-es@4.18.1:
+    resolution:
+      {
+        integrity: sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A==,
+      }
+
   lodash.startcase@4.4.0:
     resolution:
       {
         integrity: sha512-+WKqsK294HMSc2jEbNgpHpd0JfIBhp7rEV4aqXWqFr6AlXov+SlcgB1Fv01y2kGe3Gc8nMW7VA0SrGuSkRfIEg==,
+      }
+
+  lodash@4.18.1:
+    resolution:
+      {
+        integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==,
       }
 
   log-update@6.1.0:
@@ -2607,6 +2643,13 @@ packages:
       {
         integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==,
       }
+
+  luxon@3.7.2:
+    resolution:
+      {
+        integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==,
+      }
+    engines: { node: ">=12" }
 
   magic-string@0.30.21:
     resolution:
@@ -2805,6 +2848,12 @@ packages:
         integrity: sha512-BEnLolu+yuz22S56CU1SUKq3XC3PkwD5wv4ikR4MfGvnRVcmzXR9DwSlW2fEamyTPyXHomBJRzgapeuBvRNzJQ==,
       }
 
+  parsimmon@1.18.1:
+    resolution:
+      {
+        integrity: sha512-u7p959wLfGAhJpSDJVYXoyMCXWYwHia78HhRBWqk7AIbxdmlrfdp5wX0l3xv/iTSH5HvhN9K7o26hwwpgS5Nmw==,
+      }
+
   path-exists@4.0.0:
     resolution:
       {
@@ -2858,6 +2907,13 @@ packages:
         integrity: sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g==,
       }
     engines: { node: ">=6" }
+
+  pluralize@8.0.0:
+    resolution:
+      {
+        integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==,
+      }
+    engines: { node: ">=4" }
 
   postcss@8.5.15:
     resolution:
@@ -3906,6 +3962,22 @@ snapshots:
   "@colors/colors@1.5.0":
     optional: true
 
+  "@dbml/core@8.2.0":
+    dependencies:
+      "@dbml/parse": 8.2.0
+      antlr4: 4.13.2
+      lodash: 4.18.1
+      lodash-es: 4.18.1
+      luxon: 3.7.2
+      parsimmon: 1.18.1
+      pluralize: 8.0.0
+
+  "@dbml/parse@8.2.0":
+    dependencies:
+      lodash-es: 4.18.1
+      luxon: 3.7.2
+      pathe: 2.0.3
+
   "@esbuild/aix-ppc64@0.27.7":
     optional: true
 
@@ -4540,6 +4612,8 @@ snapshots:
 
   ansi-styles@6.2.3: {}
 
+  antlr4@4.13.2: {}
+
   argparse@1.0.10:
     dependencies:
       sprintf-js: 1.0.3
@@ -4984,7 +5058,11 @@ snapshots:
     dependencies:
       p-locate: 5.0.0
 
+  lodash-es@4.18.1: {}
+
   lodash.startcase@4.4.0: {}
+
+  lodash@4.18.1: {}
 
   log-update@6.1.0:
     dependencies:
@@ -4997,6 +5075,8 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  luxon@3.7.2: {}
 
   magic-string@0.30.21:
     dependencies:
@@ -5092,6 +5172,8 @@ snapshots:
     dependencies:
       quansync: 0.2.11
 
+  parsimmon@1.18.1: {}
+
   path-exists@4.0.0: {}
 
   path-key@3.1.1: {}
@@ -5107,6 +5189,8 @@ snapshots:
   picomatch@4.0.4: {}
 
   pify@4.0.1: {}
+
+  pluralize@8.0.0: {}
 
   postcss@8.5.15:
     dependencies:

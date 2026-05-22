@@ -7,7 +7,7 @@ This emitter consumes `@qninhdt/typespec-orm` schemas and generates:
 - SQLModel classes for `@table`
 - Pydantic-style data models for default form models
 - package scaffolding for standalone distribution
-- Alembic-friendly package metadata
+- Atlas-friendly package metadata via `atlas-provider-sqlalchemy`
 
 ## What This Emitter Is For
 
@@ -18,7 +18,7 @@ It is designed for:
 - namespace-derived Python package layouts
 - explicit relation mapping
 - strict persistence behavior that fails unsupported mappings by default
-- easy migration setup through `target_metadata = SQLModel.metadata`
+- easy migration setup through `target_metadata = SQLModel.metadata` (consumed by `atlas-provider-sqlalchemy`)
 
 ## Installation
 
@@ -37,7 +37,7 @@ pnpm add -D \
 Generated Python output targets the SQLModel and SQLAlchemy ecosystem.
 
 - standalone mode writes `pyproject.toml`
-- package roots export `target_metadata = SQLModel.metadata`
+- every emitted namespace `__init__.py` exports `target_metadata = SQLModel.metadata`
 - many-to-many shorthand generates `__associations__.py`
 - collection persistence uses PostgreSQL-oriented JSONB or ARRAY types depending on the configured strategy
 
@@ -62,14 +62,18 @@ exclude: - "Demo.Platform.Audit"
 
 Supported options:
 
-| Option                | Type                    | Meaning                                           |
-| --------------------- | ----------------------- | ------------------------------------------------- |
-| `output-dir`          | `string`                | target directory handled by the TypeSpec compiler |
-| `standalone`          | `boolean`               | write `pyproject.toml` and package scaffolding    |
-| `library-name`        | `string`                | distribution name used in standalone mode         |
-| `collection-strategy` | `"jsonb" \| "postgres"` | persistence strategy for list-like fields         |
-| `include`             | `string[]`              | namespace or declaration selectors to keep        |
-| `exclude`             | `string[]`              | namespace or declaration selectors to drop        |
+| Option                      | Type                    | Meaning                                                                           |
+| --------------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| `output-dir`                | `string`                | target directory handled by the TypeSpec compiler                                 |
+| `standalone`                | `boolean`               | write `pyproject.toml` and package scaffolding                                    |
+| `library-name`              | `string`                | distribution name used in standalone mode                                         |
+| `version`                   | `string`                | distribution version written to the standalone `pyproject.toml` (default `0.0.0`) |
+| `description`               | `string`                | optional description written to the standalone `pyproject.toml`                   |
+| `collection-strategy`       | `"jsonb" \| "postgres"` | persistence strategy for list-like fields                                         |
+| `emit-atlas`                | `boolean`               | when true, write `atlas.hcl` alongside the generated package (default: false)     |
+| `include`                   | `string[]`              | namespace or declaration selectors to keep                                        |
+| `exclude`                   | `string[]`              | namespace or declaration selectors to drop                                        |
+| `auto-include-dependencies` | `boolean`               | when true, transitively pulls required dependencies into the selection            |
 
 Not supported:
 
@@ -120,9 +124,9 @@ Rules:
 
 - namespace segments become Python package directories
 - `__init__.py` files are generated at every emitted package level
-- top-level package roots expose `target_metadata = SQLModel.metadata`
+- every package level (including multi-segment ones) exposes `target_metadata = SQLModel.metadata`
 
-That root-level `target_metadata` export is the intended Alembic integration point.
+That `target_metadata` export is the intended Atlas integration point. Atlas via `atlas-provider-sqlalchemy` auto-detects type changes and server defaults from the SQLAlchemy metadata, so no Alembic-style `env.py` configuration is required.
 
 ## Generated Package Contract
 

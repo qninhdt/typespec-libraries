@@ -2,8 +2,49 @@
  * DBML type mappings and constants.
  */
 
-import type { Program, Type } from "@typespec/compiler";
-import { resolveDbType } from "@qninhdt/typespec-orm";
+import type { Model, Program, Type } from "@typespec/compiler";
+import { getSchemaName, getTableName, resolveDbType } from "@qninhdt/typespec-orm";
+
+/**
+ * DBML reserved tokens that MUST be quoted whenever used as identifiers,
+ * regardless of shape. Comparison is case-insensitive because DBML keywords
+ * are recognized case-insensitively by the parser.
+ */
+export const DBML_RESERVED_WORDS: ReadonlySet<string> = new Set([
+  "table",
+  "ref",
+  "note",
+  "enum",
+  "project",
+  "indexes",
+  "pk",
+  "tablegroup",
+]);
+
+/**
+ * Quote a DBML identifier when it is not a bare ASCII identifier or when it
+ * collides with a DBML reserved token. Use this for every emitted identifier
+ * (schema, table, column) so refs and table headings stay parseable.
+ */
+export function quoteDbmlIdentifier(name: string): string {
+  if (DBML_RESERVED_WORDS.has(name.toLowerCase())) {
+    return `"${name.replaceAll('"', '\\"')}"`;
+  }
+  return /^[A-Za-z_][\w]*$/.test(name) ? name : `"${name.replaceAll('"', '\\"')}"`;
+}
+
+/**
+ * Build a DBML-qualified table reference (`schema.table` when @schema is set,
+ * just `table` otherwise). Shared by association and relation-field emitters
+ * so split-by-namespace docs render cross-schema FKs consistently. Each
+ * component is quoted independently when needed.
+ */
+export function qualifyDbmlTable(program: Program, model: Model): string {
+  const schema = getSchemaName(program, model);
+  const table = getTableName(program, model);
+  const quotedTable = quoteDbmlIdentifier(table);
+  return schema ? `${quoteDbmlIdentifier(schema)}.${quotedTable}` : quotedTable;
+}
 
 /**
  * Map TypeSpec types to DBML types.
@@ -32,6 +73,16 @@ export const DBML_TYPE_MAP: Record<string, string> = {
   duration: "interval",
   bytes: "bytea",
   jsonb: "jsonb",
+  // Common PostgreSQL scalars that previously fell through to `unsupported-type`.
+  // dbdocs / dbml2sql treat unknown types as opaque strings, so passing the
+  // PG-canonical name preserves intent for niche but common production types.
+  citext: "citext",
+  inet: "inet",
+  cidr: "cidr",
+  macaddr: "macaddr",
+  tsvector: "tsvector",
+  xml: "xml",
+  money: "money",
 };
 
 /**
@@ -43,20 +94,31 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
   }
 
   if (type.kind === "Model" && type.indexer) {
-    const itemType = getDbmlType(program, type.indexer.value);
+    const inner = type.indexer.value;
+    // Enum arrays: dbdocs accepts `EnumName[]`. Without this branch enum-typed
+    // arrays returned undefined and tripped `unsupported-type` despite scalar
+    // arrays already round-tripping fine.
+    if (inner.kind === "Enum") {
+      return `${inner.name}[]`;
+    }
+    const itemType = getDbmlType(program, inner);
     return itemType ? `${itemType}[]` : "jsonb";
   }
 
   // Handle scalar types
   if (type.kind === "Scalar") {
+    // Look up by the scalar's own name first so semantic PG scalars declared
+    // as `scalar citext extends string` render as `citext` rather than
+    // collapsing to the base `text`. The same path covers ORM semantic
+    // scalars (cidr, inet, ...) that are now first-class in DBML_TYPE_MAP.
+    const scalarName = type.name;
+    if (scalarName && DBML_TYPE_MAP[scalarName]) {
+      return DBML_TYPE_MAP[scalarName];
+    }
+
     const dbType = resolveDbType(type);
     if (dbType) {
       return DBML_TYPE_MAP[dbType];
-    }
-    // For custom scalars, try using the name
-    const scalarName = type.name;
-    if (scalarName) {
-      return DBML_TYPE_MAP[scalarName];
     }
   }
 

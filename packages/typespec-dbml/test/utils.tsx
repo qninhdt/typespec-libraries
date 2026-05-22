@@ -49,7 +49,7 @@ export async function renderDbmlOutput(code: string): Promise<OutputDirectory> {
       {tables.map(({ model, tableName }) => {
         const { enumTypes, relations } = classifyProperties(program, model);
         const tableDef = DbmlTable({ program, model, tableName });
-        const refs = generateRelationFields(program, relations, tableName);
+        const refs = generateRelationFields(program, relations, model);
 
         const codeParts: string[] = ["// Database Schema", ""];
         for (const [enumName, members] of enumTypes) {

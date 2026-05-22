@@ -25,10 +25,11 @@ export interface EntModelFileProps {
   readonly normalizedModel: NormalizedOrmModel;
   readonly modelLookup: Map<Model, NormalizedOrmModel>;
   readonly collectionStrategy?: EntEmitterOptions["collection-strategy"];
+  readonly onUpdateEmitRawSql?: boolean;
 }
 
 export function EntModelFile(props: EntModelFileProps): Children {
-  const { program, normalizedModel, collectionStrategy } = props;
+  const { program, normalizedModel, collectionStrategy, onUpdateEmitRawSql } = props;
   const { model } = normalizedModel;
   const tableName = normalizedModel.tableName;
   const fileName = camelToSnake(model.name) + ".go";
@@ -70,7 +71,7 @@ export function EntModelFile(props: EntModelFileProps): Children {
   void ignored;
 
   const edgeLines = relations.map(({ prop, resolved }) =>
-    buildEntEdge(program, prop, resolved, ctx),
+    buildEntEdge(program, prop, resolved, ctx, props.modelLookup, { onUpdateEmitRawSql }),
   );
   const indexLines = buildEntIndexes(program, model, compositeTypeFields, indexedFields);
   const annotationLines = buildEntAnnotations(program, model, normalizedModel, ctx);

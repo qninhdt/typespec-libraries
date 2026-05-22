@@ -55,6 +55,17 @@ export function scalarBaseType($: Typekit, type: Scalar): Children {
 }
 
 function numericScalarBaseType($: Typekit, type: Scalar): Children {
+  // Decimal types map to a string-precise representation to avoid the
+  // precision loss that comes with parsing arbitrary-precision decimals
+  // through the JS `number` type.
+  if ($.scalar.extendsDecimal(type) || $.scalar.extendsDecimal128(type)) {
+    return zodMemberExpr(
+      callPart("string"),
+      callPart("regex", "/^-?\\d+(\\.\\d+)?$/"),
+      callPart("describe", JSON.stringify("decimal")),
+    );
+  }
+
   if (!$.scalar.extendsInteger(type)) {
     return zodMemberExpr(callPart("number"));
   }
@@ -95,11 +106,14 @@ function stringScalarBaseType($: Typekit, type: Scalar): Children {
     case "ip":
       // Zod 4 removed `z.ip()` in favor of separate ipv4/ipv6 functions.
       return zodMemberExpr(
-        callPart("union", <ArrayExpression>
-          <For each={["ipv4", "ipv6"]} comma line>
-            {(name: string) => zodMemberExpr(callPart(name))}
-          </For>
-        </ArrayExpression>),
+        callPart(
+          "union",
+          <ArrayExpression>
+            <For each={["ipv4", "ipv6"]} comma line>
+              {(name: string) => zodMemberExpr(callPart(name))}
+            </For>
+          </ArrayExpression>,
+        ),
       );
     case "cidr":
       return zodMemberExpr(callPart("cidr"));
@@ -125,15 +139,20 @@ function stringScalarBaseType($: Typekit, type: Scalar): Children {
       break;
   }
 
-  return $.scalar.extendsUrl(type)
-    ? zodMemberExpr(callPart("url"))
-    : zodMemberExpr(callPart("string"));
+  // Note: `extendsUrl` is unreachable here — `case "url"` above matches first
+  // for the built-in scalar. User-defined scalars extending `url` would also
+  // hit `case "url"` after stdBase resolution, so the explicit branch was
+  // dead. Plain string is the safe fallback.
+  return zodMemberExpr(callPart("string"));
 }
 
 function datetimeScalarBaseType($: Typekit, type: Scalar): Children {
   const encoding = $.scalar.getEncoding(type);
   if (!encoding) {
-    return zodMemberExpr(idPart("coerce"), callPart("date"));
+    // Default: render an ISO-8601 datetime *string* schema. We deliberately
+    // avoid `z.coerce.date()` because coercion mutates input (string -> Date)
+    // and would cause `parse(input)` to silently change the value type.
+    return zodMemberExpr(idPart("iso"), callPart("datetime"));
   }
 
   if (encoding.encoding === "unixTimestamp") {

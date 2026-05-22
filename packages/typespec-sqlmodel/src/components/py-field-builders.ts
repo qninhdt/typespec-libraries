@@ -8,13 +8,19 @@
 
 import type { Model, ModelProperty, Program, Type } from "@typespec/compiler";
 import {
+  getAuditRole,
+  getClassification,
   getDefaultExpression,
   getDefaultValue,
   getDoc,
   getForeignKeyConfig,
   getOnDelete,
   getOnUpdate,
+  getOwner,
+  getPlaceholder,
+  getScopes,
   getTableName,
+  getTitle,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
@@ -267,14 +273,26 @@ export interface FinalizeColumnArgs {
 }
 
 export function finalizeColumn(args: FinalizeColumnArgs): string {
-  const { pyFieldName, pyType, dbType, mapping, isPk, overrideSaColumnType, doc, state, imports, flags } =
-    args;
+  const {
+    pyFieldName,
+    pyType,
+    dbType,
+    mapping,
+    isPk,
+    overrideSaColumnType,
+    doc,
+    state,
+    imports,
+    flags,
+  } = args;
 
   if (doc) {
     flags.needsColumn.value = true;
     state.columnArgs.push(`comment=${pythonStringLiteral(doc)}`);
   }
-  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
+  // The doc text is round-tripped to the DB via the SQLModel `comment=` kwarg
+  // above, so we deliberately do NOT also emit it as a `# comment` line — that
+  // would duplicate the same text in two places and drift if one is updated.
 
   const effectiveSaColumnType = overrideSaColumnType ?? mapping.saColumnType ?? "";
   const needsExplicitColumn =
@@ -287,13 +305,17 @@ export function finalizeColumn(args: FinalizeColumnArgs): string {
     imports.sa.add("sqlalchemy.Column");
     flags.needsColumn.value = true;
     flags.needsField.value = true;
-    const filteredFieldArgs = promoteFieldArgsToColumn(state.fieldArgs, state.columnArgs, imports.sa);
+    const filteredFieldArgs = promoteFieldArgsToColumn(
+      state.fieldArgs,
+      state.columnArgs,
+      imports.sa,
+    );
     const saType = effectiveSaColumnType || mapping.saColumnType;
     const allColumnArgs = saType
       ? [saType, ...state.columnArgs].join(", ")
       : state.columnArgs.join(", ");
     filteredFieldArgs.push(`sa_column=Column(${allColumnArgs})`);
-    return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${filteredFieldArgs.join(", ")})\n`;
+    return `${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${filteredFieldArgs.join(", ")})\n`;
   }
 
   if (state.fieldArgs.length > 0 || state.columnArgs.length > 0) {
@@ -301,10 +323,10 @@ export function finalizeColumn(args: FinalizeColumnArgs): string {
     if (state.columnArgs.length > 0) {
       state.fieldArgs.push(`sa_column_kwargs=${serializeColumnKwargs(state.columnArgs)}`);
     }
-    return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${state.fieldArgs.join(", ")})\n`;
+    return `${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${state.fieldArgs.join(", ")})\n`;
   }
 
-  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType}\n`;
+  return `${FOUR_SPACES}${pyFieldName}: ${pyType}\n`;
 }
 
 export function buildSoftDeleteIndex(
@@ -317,6 +339,61 @@ export function buildSoftDeleteIndex(
   flags.needsField.value = true;
   if (!state.fieldArgs.some((a) => a.startsWith("index="))) {
     state.fieldArgs.push("index=True");
+  }
+}
+
+/**
+ * Surface form-metadata (`@title`, `@placeholder`) as a Pydantic
+ * `json_schema_extra={...}` Field arg, and catalog metadata (`@audit`,
+ * `@owner`, `@classification`, `@scope`) as SQLAlchemy `info={...}` on the
+ * column.
+ *
+ * Form metadata stays in `Field(json_schema_extra=...)` so Pydantic
+ * JSON-Schema surfaces it (matches the PyDataModel side). Catalog metadata is
+ * more useful next to the SQL column, so it lands in `info=` (mapped through
+ * `sa_column_kwargs` when no explicit `Column(...)` is generated).
+ */
+export function buildMetadataArgs(
+  program: Program,
+  prop: ModelProperty,
+  state: FieldArgState,
+  flags: FieldFlags,
+): void {
+  // ─── Form metadata → Pydantic json_schema_extra ─────────────────────────
+  const titleVal = getTitle(program, prop);
+  const placeholderVal = getPlaceholder(program, prop);
+  const schemaExtra: Record<string, string> = {};
+  if (titleVal) schemaExtra["title"] = pythonStringLiteral(titleVal);
+  if (placeholderVal) schemaExtra["placeholder"] = pythonStringLiteral(placeholderVal);
+  if (Object.keys(schemaExtra).length > 0) {
+    flags.needsField.value = true;
+    const entries = Object.entries(schemaExtra)
+      .map(([k, v]) => `"${k}": ${v}`)
+      .join(", ");
+    state.fieldArgs.push(`json_schema_extra={${entries}}`);
+  }
+
+  // ─── Catalog metadata → SQLAlchemy Column.info ──────────────────────────
+  const info: Record<string, string> = {};
+  const auditRole = getAuditRole(program, prop);
+  if (auditRole) info["audit"] = pythonStringLiteral(auditRole);
+  // `@owner` only attaches to models/namespaces. Inherit it from the property's
+  // parent model so per-column info still carries the catalog owner.
+  const ownerTarget = prop.model;
+  const owner = ownerTarget ? getOwner(program, ownerTarget) : undefined;
+  if (owner) info["owner"] = pythonStringLiteral(owner);
+  const classification = getClassification(program, prop);
+  if (classification) info["classification"] = pythonStringLiteral(classification);
+  const scopes = getScopes(program, prop);
+  if (scopes.length > 0) {
+    info["scope"] = `[${scopes.map((s) => pythonStringLiteral(s)).join(", ")}]`;
+  }
+  if (Object.keys(info).length > 0) {
+    flags.needsField.value = true;
+    const entries = Object.entries(info)
+      .map(([k, v]) => `"${k}": ${v}`)
+      .join(", ");
+    state.columnArgs.push(`info={${entries}}`);
   }
 }
 

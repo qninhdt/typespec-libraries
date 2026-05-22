@@ -6,7 +6,6 @@ import * as ay from "@alloy-js/core";
 import * as ts from "@alloy-js/typescript";
 import { Children } from "@alloy-js/core";
 import { refkeySym } from "../utils.js";
-import { ZodCustomTypeComponent } from "./ZodCustomTypeComponent.js";
 import { ZodSchema, ZodSchemaProps } from "./ZodSchema.js";
 
 interface ZodSchemaDeclarationProps
@@ -34,16 +33,17 @@ export function ZodSchemaDeclaration(props: ZodSchemaDeclarationProps): Children
       props.type.kind,
   });
 
+  // The trailing `;` is emitted explicitly so every declaration ends in a
+  // deterministic terminator regardless of which Zod chain shape (`.brand`,
+  // `.describe`, plain `z.object`) the schema renders to. Without it, schemas
+  // whose final part is `.describe(...)` or `z.object(...)` produced files
+  // missing the statement terminator after some emitter changes.
   return (
-    <ZodCustomTypeComponent
-      declare
-      type={props.type}
-      Declaration={ts.VarDeclaration}
-      declarationProps={newProps}
-    >
+    <>
       <ts.VarDeclaration {...newProps}>
         <ZodSchema {...zodSchemaProps} />
       </ts.VarDeclaration>
-    </ZodCustomTypeComponent>
+      ;
+    </>
   );
 }

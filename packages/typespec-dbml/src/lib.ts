@@ -17,6 +17,8 @@ export interface DbmlEmitterOptions {
   exclude?: string[];
   /** When true, transitively pull required dependencies into the selection */
   "auto-include-dependencies"?: boolean;
+  /** Identifier rendered in the DBML `Project { ... }` header (default: "schema") */
+  "project-name"?: string;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
@@ -29,6 +31,7 @@ const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
     "auto-include-dependencies": { type: "boolean", nullable: true },
+    "project-name": { type: "string", nullable: true },
   },
   required: [],
 };
@@ -52,6 +55,12 @@ export const $lib = createTypeSpecLibrary({
       severity: "error",
       messages: {
         default: paramMessage`Failed to write DBML output: ${"message"}.`,
+      },
+    },
+    "association-column-type-fallback": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Many-to-many join table '${"table"}' has an endpoint key whose type cannot be mapped to DBML; refusing to fall back to a generic type.`,
       },
     },
   },

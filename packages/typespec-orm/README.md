@@ -125,8 +125,8 @@ normalizes to:
 - `@index(name?)`
   Adds a non-unique index.
 
-- `@unique`
-  Adds a unique constraint for the field.
+- `@unique(name?)`
+  Adds a unique constraint for the field. Pass `name` to override the auto-derived constraint name (`{table}_{column}_unique`).
 
 - `@check(name, expression)`
   Adds a named database check constraint anchored to the property.
@@ -171,6 +171,8 @@ normalizes to:
 - `@title(text)`
 - `@placeholder(text)`
 - `@@inputType(scalar, htmlType)`
+- `@data(label?)`
+  Marks a model as a non-DB form / DTO shape and sets an optional label.
 
 `@@inputType` targets a scalar. When applied to a field, use `Field::type` or the source scalar for lookup-typed fields:
 
@@ -178,6 +180,64 @@ normalizes to:
 @@inputType(CreateWorldForm.summary::type, "textarea");
 @@inputType(Demo.Worlds.World.prompt::type, "textarea");
 `
+
+### Schema and defaults
+
+- `@schema(name)`
+  PostgreSQL schema scope for a `@table` model or namespace; model-level wins over namespace-level.
+
+- `@defaultExpression(expression)`
+  Raw SQL default evaluated by the database (e.g. `gen_random_uuid()`); mutually exclusive with literal defaults.
+
+### Optimistic locking, audit, multi-tenant
+
+- `@version`
+  Marks a column as the optimistic-locking version. One per model.
+
+- `@audit("createdBy" | "updatedBy")`
+  Marks a column as a lifecycle audit field.
+
+- `@tenantId`
+  Marks the tenant-scope foreign key. One per model.
+
+### Catalog metadata
+
+- `@scope(name)`
+  Tags a model or property for selector matching (`#name`); accumulates across decorators.
+
+- `@owner(team)`
+  Records the owning team on a model or namespace.
+
+- `@classification(level)`
+  Records the data-classification level on a model or column (e.g. `"pii"`, `"internal"`).
+
+### Model-level augments
+
+- `@@tableIndex(Model, ["a", "b"], name?)`
+  Multi-column non-unique index defined off the table.
+
+- `@@tableUnique(Model, ["a", "b"], name?)`
+  Multi-column unique constraint defined off the table.
+
+## Scalars
+
+This library exposes a small set of custom scalars on top of the TypeSpec built-ins. The DB layer maps each one to a concrete column type.
+
+| Scalar                                                                                                                | DB column type             | Notes                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `uuid`                                                                                                                | `UUID`                     | PostgreSQL UUID column.                                                                                      |
+| `text`                                                                                                                | `TEXT`                     | Unlimited text (vs `VARCHAR` for plain `string`).                                                            |
+| `jsonb`                                                                                                               | `JSONB`                    | Binary JSON.                                                                                                 |
+| `serial`                                                                                                              | `SERIAL`                   | Auto-incrementing 32-bit integer.                                                                            |
+| `bigserial`                                                                                                           | `BIGSERIAL`                | Auto-incrementing 64-bit integer.                                                                            |
+| `citext`                                                                                                              | `CITEXT`                   | Case-insensitive text (PostgreSQL CITEXT extension).                                                         |
+| `tsvector`                                                                                                            | `TSVECTOR`                 | Full-text search vector.                                                                                     |
+| `tsquery`                                                                                                             | `TSQUERY`                  | Full-text search query.                                                                                      |
+| `interval`                                                                                                            | `INTERVAL`                 | Time interval; extends `duration`.                                                                           |
+| `inet`                                                                                                                | `INET`                     | IPv4 or IPv6 host address.                                                                                   |
+| `email`, `ipv4`, `ipv6`, `ip`, `cidr`, `mac`, `base64`, `hostname`, `cuid`, `cuid2`, `ulid`, `nanoid`, `jwt`, `emoji` | `string` (with `@pattern`) | Semantic string scalars; emitters with native validation use them directly, others fall back to the pattern. |
+| `latitude`, `longitude`                                                                                               | `DOUBLE PRECISION`         | `float64` with `@minValue` / `@maxValue` bounds.                                                             |
+| `url`                                                                                                                 | `string`                   | The TypeSpec built-in `url` aliases to `string` at the DB layer (no dedicated PostgreSQL URL type).          |
 
 ## Basic Example
 
@@ -385,6 +445,18 @@ Important diagnostics surfaced by the core include:
 - `many-to-many-conflicting-table`
 - `many-to-many-conflicting-explicit-table`
 - `duplicate-constraint-name`
+- `multiple-version-columns` — more than one `@version` column on a model.
+- `multiple-tenant-id-columns` — more than one `@tenantId` column on a model.
+- `multiple-soft-deletes` — more than one `@softDelete` column on a model.
+- `multiple-auto-increment-columns` — more than one `@autoIncrement` column on a model.
+- `auto-increment-requires-key` — `@autoIncrement` must sit on a non-optional `@key`.
+- `auto-create-and-update-conflict` — `@autoCreateTime` and `@autoUpdateTime` cannot share a property.
+- `cascade-without-relation` — `@onDelete`/`@onUpdate` on a non-relation column.
+- `foreign-key-without-index` — `@foreignKey` without an index/unique/key (PG hot-spot).
+- `pg-reserved-identifier` — table or column name collides with a PostgreSQL reserved word.
+- `auto-increment-on-non-integer` — `@autoIncrement` requires an integer scalar.
+- `soft-delete-on-non-datetime` — `@softDelete` requires a datetime scalar.
+- `auto-time-on-non-datetime` — `@autoCreateTime`/`@autoUpdateTime` require a datetime scalar.
 
 ## Troubleshooting Common Diagnostics
 

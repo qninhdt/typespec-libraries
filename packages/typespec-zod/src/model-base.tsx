@@ -12,16 +12,9 @@ import {
   ObjectProperty,
   ObjectSpreadProperty,
 } from "@alloy-js/typescript";
-import {
-  Model,
-  ModelProperty,
-  Program,
-  Tuple,
-  walkPropertiesInherited,
-} from "@typespec/compiler";
+import { Model, ModelProperty, Program, Tuple, walkPropertiesInherited } from "@typespec/compiler";
 import { useTsp } from "@typespec/emitter-framework";
 import { isData, isTableMixin } from "@qninhdt/typespec-orm";
-import { ZodCustomTypeComponent } from "./components/ZodCustomTypeComponent.js";
 import { ZodSchema } from "./components/ZodSchema.js";
 import {
   callPart,
@@ -108,16 +101,9 @@ function buildModelObjectExpression(properties: ModelProperty[], extraSourceMode
       </For>
       <For each={properties} comma enderPunctuation>
         {(prop: ModelProperty) => (
-          <ZodCustomTypeComponent
-            type={prop}
-            declare
-            Declaration={ObjectProperty}
-            declarationProps={{ name: prop.name }}
-          >
-            <ObjectProperty name={prop.name}>
-              <ZodSchema type={prop} nested />
-            </ObjectProperty>
-          </ZodCustomTypeComponent>
+          <ObjectProperty name={prop.name}>
+            <ZodSchema type={prop} nested />
+          </ObjectProperty>
         )}
       </For>
     </ObjectExpression>

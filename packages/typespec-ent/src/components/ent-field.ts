@@ -1,5 +1,6 @@
 import type { ModelProperty, Program, Type } from "@typespec/compiler";
 import {
+  camelToSnake,
   getArrayElementType,
   getDefaultExpression,
   getDefaultValue,
@@ -9,6 +10,7 @@ import {
   getMaxLength,
   getPrecision,
   getPropertyEnum,
+  getScopes,
   isArrayType,
   isAutoCreateTime,
   isAutoIncrement,
@@ -61,8 +63,18 @@ export function buildEntField(
 
   const builder = buildEntFieldBuilder(program, prop, columnName, ctx, collectionStrategy);
   const chains = buildCommonFieldChains(program, prop, ctx, compositeUniqueColumns, columnName);
+  const docParts: string[] = [];
   const doc = getDoc(program, prop);
-  if (doc) chains.push(`Comment(${goStringLiteral(doc)})`);
+  if (doc) docParts.push(doc);
+  // Surface field-level @scope so downstream tooling (codegen filters,
+  // policy hooks) can grep for it without re-walking TypeSpec metadata.
+  const scopes = getScopes(program, prop);
+  if (scopes.length > 0) {
+    docParts.push(`scope: ${scopes.join(", ")}`);
+  }
+  if (docParts.length > 0) {
+    chains.push(`Comment(${goStringLiteral(docParts.join("\n"))})`);
+  }
   if (prop.optional || isSoftDelete(program, prop)) {
     chains.push("Optional()");
     if (!builder.startsWith("field.JSON(")) {
@@ -88,7 +100,18 @@ function buildEntFieldBuilder(
   const enumInfo = getPropertyEnum(prop);
   if (enumInfo) {
     const values = enumInfo.members.map((member) => goStringLiteral(member.value)).join(", ");
-    return `field.Enum(${goStringLiteral(columnName)}).Values(${values})`;
+    // Map TypeSpec enum -> native Postgres ENUM type. Atlas reads
+    // entsql.Annotation{Type: ...} and creates `CREATE TYPE foo AS ENUM (...)`
+    // automatically; SchemaType ensures Ent uses the same type name in DDL.
+    const pgEnumName = camelToSnake(enumInfo.enumType.name);
+    ctx.imports.add("entgo.io/ent/dialect");
+    ctx.usesEntSql = true;
+    return (
+      `field.Enum(${goStringLiteral(columnName)}).` +
+      `Values(${values}).` +
+      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(pgEnumName)}}).` +
+      `Annotations(entsql.Annotation{Type: ${goStringLiteral(pgEnumName)}})`
+    );
   }
 
   if (isArrayType(prop.type)) {
@@ -140,7 +163,13 @@ function buildEntFieldBuilder(
     case "jsonb":
       return `field.JSON(${goStringLiteral(columnName)}, map[string]any{})`;
     case "string":
+      return `field.String(${goStringLiteral(columnName)})`;
     default:
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        target: prop,
+        format: { typeName: dbType ?? "unknown", propName: prop.name },
+      });
       return `field.String(${goStringLiteral(columnName)})`;
   }
 }
@@ -186,10 +215,19 @@ function buildCommonFieldChains(
   }
 
   const prec = getPrecision(program, prop);
-  if (prec && dbType === "decimal") {
+  if (dbType === "decimal") {
+    ctx.imports.add("entgo.io/ent/dialect");
+    const schema = prec ? `numeric(${prec.precision},${prec.scale})` : "numeric";
+    chains.push(`SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(schema)}})`);
+  }
+
+  // Ent's `field.Time` defaults to `timestamp without time zone` on Postgres,
+  // which silently strips offsets. `utcDateTime` is timezone-aware in TypeSpec,
+  // so force `timestamptz`. `date`/`time` keep Ent's defaults.
+  if (dbType === "utcDateTime") {
     ctx.imports.add("entgo.io/ent/dialect");
     chains.push(
-      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(`numeric(${prec.precision},${prec.scale})`)}})`,
+      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("timestamptz")}})`,
     );
   }
 

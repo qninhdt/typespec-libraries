@@ -2,10 +2,13 @@ import { render, writeOutput, SourceDirectory, SourceFile } from "@alloy-js/core
 import { type EmitContext } from "@typespec/compiler";
 import { Output } from "@typespec/emitter-framework";
 import { bootstrapEmitter, isBootstrapSuccess } from "@qninhdt/typespec-orm";
-import { zod } from "./external-packages/zod.js";
+import { zod, ZOD_VERSION } from "./external-packages/zod.js";
 import { ZodModelFile } from "./components/ZodModelFile.js";
 import { collectScalarsForModels, ZodScalarsFile } from "./components/ZodScalarsFile.js";
+import { ZodMetaFile } from "./components/ZodMetaFile.js";
 import { reportDiagnostic, type ZodEmitterOptions } from "./lib.js";
+import { generatePackageJson } from "./emitter/package-json.js";
+import { generateRootBarrel } from "./emitter/root-barrel.js";
 
 export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   const options = context.options;
@@ -34,6 +37,12 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
 
   const { selection, namespaceGroups } = result;
   const basePath = isStandalone ? "src" : ".";
+  const scalars = collectScalarsForModels(
+    context.program,
+    selection.models.map((model) => model.model),
+  );
+  const hasScalarsFile = scalars.length > 0;
+  const rootBarrelSource = generateRootBarrel(selection.models, hasScalarsFile);
 
   const tree = (
     <Output program={context.program} externals={[zod]}>
@@ -41,36 +50,12 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
         {isStandalone && (
           <>
             <SourceFile path="package.json" filetype="json" printWidth={9999}>
-              {JSON.stringify(
-                {
-                  name: libraryName,
-                  version: "0.0.0",
-                  private: true,
-                  type: "module",
-                  main: "./dist/index.js",
-                  types: "./dist/index.d.ts",
-                  exports: {
-                    ".": {
-                      import: "./dist/index.js",
-                      types: "./dist/index.d.ts",
-                    },
-                    "./*": {
-                      types: "./dist/*.d.ts",
-                    },
-                  },
-                  scripts: {
-                    build: "tsc",
-                  },
-                  dependencies: {
-                    zod: "^4.4.3",
-                  },
-                  devDependencies: {
-                    typescript: "^5.0.0",
-                  },
-                },
-                null,
-                2,
-              )}
+              {generatePackageJson({
+                libraryName: libraryName!,
+                models: selection.models,
+                description: options.description,
+                license: options.license,
+              })}
             </SourceFile>
             <SourceFile path="tsconfig.json" filetype="json" printWidth={9999}>
               {JSON.stringify(
@@ -86,6 +71,12 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                     esModuleInterop: true,
                     strict: true,
                     skipLibCheck: true,
+                    // Stricter defaults: align generated packages with the
+                    // safety knobs we expect in the workspace itself.
+                    noUncheckedIndexedAccess: true,
+                    exactOptionalPropertyTypes: true,
+                    verbatimModuleSyntax: true,
+                    forceConsistentCasingInFileNames: true,
                   },
                   include: ["src/**/*.ts"],
                   exclude: ["node_modules", "dist"],
@@ -97,13 +88,8 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
           </>
         )}
         <SourceDirectory path={basePath}>
-          <ZodScalarsFile
-            program={context.program}
-            scalars={collectScalarsForModels(
-              context.program,
-              selection.models.map((model) => model.model),
-            )}
-          />
+          <ZodMetaFile />
+          <ZodScalarsFile program={context.program} scalars={scalars} />
           {namespaceGroups.map((models) => (
             <SourceDirectory path={models[0].namespaceDir}>
               {models.map((model) => (
@@ -117,9 +103,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
             </SourceDirectory>
           ))}
           <SourceFile path="index.ts" filetype="typescript" printWidth={9999}>
-            {selection.models
-              .map((model) => `export * from "./${model.namespaceDir}/${model.model.name}.js";`)
-              .join("\n")}
+            {rootBarrelSource}
           </SourceFile>
         </SourceDirectory>
       </SourceDirectory>
@@ -137,3 +121,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
     });
   }
 }
+
+// Re-export ZOD_VERSION so it remains tree-shakable for users importing
+// the emitter package directly. Not part of the public API contract.
+export { ZOD_VERSION };

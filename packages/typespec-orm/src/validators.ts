@@ -11,7 +11,8 @@ import {
   type ModelProperty,
   type Program,
 } from "@typespec/compiler";
-import { reportDiagnostic, MapKey } from "./lib.js";
+import { reportDiagnostic, MapKey, ModelIndexesKey, ModelUniquesKey } from "./lib.js";
+import type { ModelIndexSpec } from "./decorators.js";
 import { normalizeOrmGraph } from "./normalization.js";
 import { resolveCompositeColumnName } from "./emitter-utils.js";
 import {
@@ -23,6 +24,8 @@ import {
   isKey,
   isUnique,
   isIndex,
+  getIndexName,
+  getUniqueName,
   isAutoIncrement,
   isSoftDelete,
   isAutoCreateTime,
@@ -38,6 +41,7 @@ import {
   getOnUpdate,
   getMappedBy,
   getCompositeFields,
+  getDefaultExpression,
   getTypeFullName,
   resolveDbType,
   camelToSnake,
@@ -47,7 +51,9 @@ import {
   resolvePropertyByName,
   resolveMappedByTarget,
   unwrapArrayType,
+  findPrimaryKey,
 } from "./helpers.js";
+import { isPgReservedWord } from "./identifier-policy.js";
 
 // ─── Type‐check Sets (module‐level to avoid per‐call allocation) ─────────────
 
@@ -96,6 +102,9 @@ export function $onValidate(program: Program): void {
   // 5. Additional shared constraint and shorthand validations
   validateManyToMany(program, tableModels);
 
+  // 5b. PG reserved-word identifier check
+  validatePgReservedIdentifiers(program, tableModels);
+
   // 6. Namespace, mixin, and dependency-shape validations shared with emitters
   normalizeOrmGraph(program);
 }
@@ -128,6 +137,7 @@ function validateModel(program: Program, model: Model): void {
   let softDeleteCount = 0;
   let versionCount = 0;
   let tenantIdCount = 0;
+  let autoIncrementCount = 0;
   const columnNames = new Map<string, string>(); // columnName → propName
   const constraintNames = new Map<string, string>(); // constraintName -> decorator
 
@@ -140,10 +150,23 @@ function validateModel(program: Program, model: Model): void {
       continue;
     }
 
-    if (isKey(program, prop)) idCount++;
+    if (isKey(program, prop)) {
+      idCount++;
+    }
 
     // Count @softDelete
     if (isSoftDelete(program, prop)) softDeleteCount++;
+
+    if (isAutoIncrement(program, prop)) {
+      autoIncrementCount++;
+      if (!isKey(program, prop) || prop.optional) {
+        reportDiagnostic(program, {
+          code: "auto-increment-requires-key",
+          target: prop,
+          format: { propName: prop.name },
+        });
+      }
+    }
 
     if (isVersionColumn(program, prop)) versionCount++;
     if (isTenantIdColumn(program, prop)) tenantIdCount++;
@@ -219,8 +242,18 @@ function validateModel(program: Program, model: Model): void {
     });
   }
 
+  if (autoIncrementCount > 1) {
+    reportDiagnostic(program, {
+      code: "multiple-auto-increment-columns",
+      target: model,
+    });
+  }
+
   // Composite constraint column references
   validateCompositeConstraints(program, model, columnNames);
+
+  // Model-level @@tableIndex / @@tableUnique column references
+  validateModelLevelIndexes(program, model, columnNames);
 }
 
 // ─── Property-level validations ──────────────────────────────────────────────
@@ -264,6 +297,26 @@ function validatePropertyDecorators(program: Program, prop: ModelProperty): void
       code: "redundant-map",
       target: prop,
       format: { propName: prop.name, columnName: colName },
+    });
+  }
+
+  // @defaultExpression and a literal default are mutually exclusive — picking
+  // both leaves the emitter to silently choose one and is almost always a bug.
+  if (getDefaultExpression(program, prop) !== undefined && prop.defaultValue !== undefined) {
+    reportDiagnostic(program, {
+      code: "default-expression-conflicts-literal",
+      target: prop,
+      format: { propName: prop.name },
+    });
+  }
+
+  // @autoCreateTime and @autoUpdateTime are mutually exclusive on the same property —
+  // a column can be set on insert OR refreshed on update, but not both.
+  if (isAutoCreateTime(program, prop) && isAutoUpdateTime(program, prop)) {
+    reportDiagnostic(program, {
+      code: "auto-create-and-update-conflict",
+      target: prop,
+      format: { propName: prop.name },
     });
   }
 }
@@ -353,6 +406,59 @@ function reportInvalidDecoratorType(
   }
 
   options.report();
+}
+
+// ─── PG reserved-word identifier check ──────────────────────────────────────
+
+function validatePgReservedIdentifiers(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  const reportedNames = new Set<string>();
+
+  const reportOnce = (name: string, target: Model | ModelProperty, cacheKey: string): void => {
+    if (!isPgReservedWord(name)) return;
+    if (reportedNames.has(cacheKey)) return;
+    reportedNames.add(cacheKey);
+    reportDiagnostic(program, {
+      code: "pg-reserved-identifier",
+      target,
+      format: { name },
+    });
+  };
+
+  for (const { model, tableName } of tableModels) {
+    reportOnce(tableName, model, `table:${tableName}`);
+
+    for (const prop of walkPropertiesInherited(model)) {
+      if (isIgnored(program, prop)) continue;
+
+      // Skip relation/array properties that are not real columns.
+      const isRelationModel = prop.type.kind === "Model" && isTable(program, prop.type as Model);
+      const isRelationArray =
+        prop.type.kind === "Model" && (prop.type as Model).indexer?.value?.kind === "Model";
+      const isRelation = isRelationModel || isRelationArray;
+
+      if (!isRelation) {
+        const colName = getColumnName(program, prop);
+        reportOnce(colName, prop, `col:${tableName}.${colName}`);
+      }
+
+      if (!isRelation && isIndex(program, prop)) {
+        const indexName = getIndexName(program, prop);
+        if (indexName) {
+          reportOnce(indexName, prop, `idx:${indexName}`);
+        }
+      }
+
+      if (!isRelation && isUnique(program, prop)) {
+        const uniqueName = getUniqueName(program, prop);
+        if (uniqueName) {
+          reportOnce(uniqueName, prop, `uniq:${uniqueName}`);
+        }
+      }
+    }
+  }
 }
 
 // ─── Cascade on non-relation check ───────────────────────────────────────────
@@ -522,6 +628,7 @@ function validateManyToManyProperty(
   }
 
   reportManyToManyInverseProblems(program, model, prop, joinTable, arrayTarget);
+  reportManyToManyMissingKey(program, model, prop, joinTable, arrayTarget);
   reportExplicitJoinConflict(
     program,
     model,
@@ -569,6 +676,31 @@ function reportManyToManyInverseProblems(
       },
     });
   }
+}
+
+function reportManyToManyMissingKey(
+  program: Program,
+  model: Model,
+  prop: ModelProperty,
+  joinTable: string,
+  arrayTarget: Model,
+): void {
+  const localKey = findPrimaryKey(program, model);
+  const targetKey = findPrimaryKey(program, arrayTarget);
+  if (localKey && targetKey) return;
+
+  const missingModel = !localKey ? model.name : arrayTarget.name;
+  reportDiagnostic(program, {
+    code: "many-to-many-target-missing-key",
+    target: prop,
+    format: {
+      tableName: joinTable,
+      modelName: model.name,
+      propName: prop.name,
+      targetModel: arrayTarget.name,
+      missingModel,
+    },
+  });
 }
 
 function reportExplicitJoinConflict(
@@ -672,7 +804,10 @@ function validateOwnedRelation(
     });
   }
 
-  const onDelete = getOnDelete(program, relationProp)?.trim().toUpperCase().replace(/[\s_-]+/g, " ");
+  const onDelete = getOnDelete(program, relationProp)
+    ?.trim()
+    .toUpperCase()
+    .replace(/[\s_-]+/g, " ");
   if (onDelete === "SET NULL" && !localProperty.optional) {
     reportDiagnostic(program, {
       code: "foreign-key-set-null-non-nullable",
@@ -789,6 +924,71 @@ function validateCompositeConstraints(
           },
         });
       }
+    }
+  }
+}
+
+// ─── Model-level @@tableIndex / @@tableUnique column validation ──────────────
+
+function validateModelLevelIndexes(
+  program: Program,
+  model: Model,
+  columnNames: Map<string, string>,
+): void {
+  const validColumns = new Set(columnNames.keys());
+  const indexSpecs =
+    (program.stateMap(ModelIndexesKey).get(model) as ModelIndexSpec[] | undefined) ?? [];
+  const uniqueSpecs =
+    (program.stateMap(ModelUniquesKey).get(model) as ModelIndexSpec[] | undefined) ?? [];
+
+  for (const spec of indexSpecs) {
+    validateIndexSpec(program, model, spec, "tableIndex", validColumns);
+  }
+  for (const spec of uniqueSpecs) {
+    validateIndexSpec(program, model, spec, "tableUnique", validColumns);
+  }
+}
+
+function validateIndexSpec(
+  program: Program,
+  model: Model,
+  spec: ModelIndexSpec,
+  decorator: "tableIndex" | "tableUnique",
+  validColumns: Set<string>,
+): void {
+  const constraintName = spec.name ?? `${model.name}_${decorator}`;
+
+  if (!spec.columns || spec.columns.length === 0) {
+    reportDiagnostic(program, {
+      code: "empty-index-columns",
+      target: model,
+      format: { decorator, constraintName },
+    });
+    return;
+  }
+
+  const seen = new Set<string>();
+  for (const col of spec.columns) {
+    const resolved = resolveCompositeColumnName(program, model, col);
+    if (seen.has(resolved)) {
+      reportDiagnostic(program, {
+        code: "duplicate-column-in-index",
+        target: model,
+        format: { columnName: col, decorator, constraintName },
+      });
+    }
+    seen.add(resolved);
+
+    if (!validColumns.has(resolved)) {
+      reportDiagnostic(program, {
+        code: "composite-column-not-found",
+        target: model,
+        format: {
+          columnName: col,
+          decorator,
+          constraintName,
+        },
+      });
     }
   }
 }

@@ -19,7 +19,7 @@ describe("SQLModel emitter end-to-end", () => {
     );
 
     expect(output).toContain("class User(SQLModel, table=True):");
-    expect(output).toContain('__tablename__ = "users"');
+    expect(output).toContain('__tablename__: ClassVar[str] = "users"');
     expect(output).toContain("id: UUID = Field(default_factory=uuid4, primary_key=True)");
     expect(output).toContain("name: str = Field(max_length=255");
     expect(output).toContain("contact: EmailStr = Field(unique=True");
@@ -64,7 +64,7 @@ describe("SQLModel emitter end-to-end", () => {
     expect(user).toContain("class Status(str, Enum):");
     expect(user).toContain('active = "active"');
     expect(user).toContain("status: Status = Field(");
-    expect(user).toContain("SAEnum(Status)");
+    expect(user).toContain('SAEnum(Status, name="status")');
     expect(user).toContain("posts: list[Post]");
     expect(user).toContain("Relationship(");
     expect(post).toContain("content: str");
@@ -209,6 +209,6 @@ describe("SQLModel emitter end-to-end", () => {
     expect(init).toContain("from .user import User");
     expect(init).toContain('"User"');
     expect(user).toContain("class User(SQLModel, table=True):");
-    expect(user).toContain('__tablename__ = "users"');
+    expect(user).toContain('__tablename__: ClassVar[str] = "users"');
   });
 });

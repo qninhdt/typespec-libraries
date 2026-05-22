@@ -59,8 +59,8 @@ export function $index(context: DecoratorContext, target: ModelProperty, name?: 
 
 // ─── @unique ─────────────────────────────────────────────────────────────────
 
-export function $unique(context: DecoratorContext, target: ModelProperty): void {
-  context.program.stateMap(UniqueKey).set(target, true);
+export function $unique(context: DecoratorContext, target: ModelProperty, name?: string): void {
+  context.program.stateMap(UniqueKey).set(target, name ?? "");
 }
 
 // ─── @check ──────────────────────────────────────────────────────────────────
@@ -166,11 +166,7 @@ export function $ignore(context: DecoratorContext, target: ModelProperty): void 
  * PostgreSQL schema scope for a `@table` model or namespace. Model-level value
  * wins over a namespace-level value.
  */
-export function $schema(
-  context: DecoratorContext,
-  target: Model | Namespace,
-  name: string,
-): void {
+export function $schema(context: DecoratorContext, target: Model | Namespace, name: string): void {
   context.program.stateMap(SchemaKey).set(target, name);
 }
 
@@ -247,11 +243,7 @@ export function $scope(
  * Records the owning team / squad for a model or namespace. Catalog tools
  * read this to attach SLA + on-call metadata to the generated schema.
  */
-export function $owner(
-  context: DecoratorContext,
-  target: Model | Namespace,
-  team: string,
-): void {
+export function $owner(context: DecoratorContext, target: Model | Namespace, team: string): void {
   context.program.stateMap(OwnerKey).set(target, team);
 }
 

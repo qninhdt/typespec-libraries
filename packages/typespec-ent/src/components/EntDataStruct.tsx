@@ -18,6 +18,7 @@ import {
   getTitle,
   getModelOwnProperties,
   isArrayType,
+  isIgnored,
   resolveDbType,
   camelToPascal,
   camelToSnake,
@@ -34,6 +35,7 @@ import {
   type GoPackageImport,
 } from "./EntConstants.js";
 import { buildValidateTag } from "./EntValidateTag.js";
+import { reportDiagnostic } from "../lib.js";
 
 export interface EntDataFileProps {
   readonly program: Program;
@@ -66,20 +68,34 @@ export function EntDataFile(props: EntDataFileProps): Children {
   );
 
   const shouldCollectEnums = props.emitEnums !== false;
+  let hasUnsupported = false;
   for (const prop of getModelOwnProperties(model)) {
+    // Mirror EntSchema's @ignore handling: ignored properties are excluded
+    // from data structs entirely (no field, no enum collection).
+    if (isIgnored(program, prop)) continue;
     if (shouldCollectEnums) collectGoEnumTypes(prop.type, enumTypes);
-    fieldLineStrs.push(
-      generateDataFieldLine(
-        program,
-        prop,
-        model,
-        normalizedModel,
-        modelLookup,
-        libraryName,
-        imports,
-        packageImports,
-      ),
+    const line = generateDataFieldLine(
+      program,
+      prop,
+      model,
+      normalizedModel,
+      modelLookup,
+      libraryName,
+      imports,
+      packageImports,
     );
+    if (line === undefined) {
+      hasUnsupported = true;
+      continue;
+    }
+    fieldLineStrs.push(line);
+  }
+
+  // Strict-by-default: when any property maps to no Go type, abort the file
+  // instead of silently emitting `interface{}`. The diagnostic was already
+  // reported inside generateDataFieldLine.
+  if (hasUnsupported) {
+    return null;
   }
 
   const structName = model.name;
@@ -154,7 +170,7 @@ function generateDataFieldLine(
   libraryName: string | undefined,
   imports: Set<string>,
   packageImports: Map<string, GoPackageImport>,
-): string {
+): string | undefined {
   const fieldName = camelToPascal(prop.name);
   const goType = resolveGoDataType(
     program,
@@ -167,6 +183,15 @@ function generateDataFieldLine(
     imports,
     packageImports,
   );
+
+  if (goType === undefined) {
+    reportDiagnostic(program, {
+      code: "unsupported-type",
+      target: prop,
+      format: { typeName: prop.type.kind, propName: prop.name },
+    });
+    return undefined;
+  }
 
   const isOpt = prop.optional;
   const finalGoType =
@@ -198,7 +223,7 @@ function resolveGoDataType(
   libraryName: string | undefined,
   imports: Set<string>,
   packageImports: Map<string, GoPackageImport>,
-): string {
+): string | undefined {
   if (type.kind === "ModelProperty") {
     return resolveGoDataType(
       program,
@@ -215,19 +240,19 @@ function resolveGoDataType(
 
   if (isArrayType(type)) {
     const elementType = getArrayElementType(type);
-    const elementGoType = elementType
-      ? resolveGoDataType(
-          program,
-          prop,
-          elementType,
-          currentModel,
-          currentInfo,
-          modelLookup,
-          libraryName,
-          imports,
-          packageImports,
-        )
-      : "interface{}";
+    if (!elementType) return undefined;
+    const elementGoType = resolveGoDataType(
+      program,
+      prop,
+      elementType,
+      currentModel,
+      currentInfo,
+      modelLookup,
+      libraryName,
+      imports,
+      packageImports,
+    );
+    if (elementGoType === undefined) return undefined;
     return `[]${elementGoType}`;
   }
 
@@ -248,13 +273,17 @@ function resolveGoDataType(
 
   const dbType = resolveDbType(type);
   const mapping = dbType ? GO_TYPE_MAP[dbType] : undefined;
-  let goType = mapping?.goType ?? "interface{}";
+  let goType = mapping?.goType;
 
   if (type.kind === "Scalar" && isCustomScalar(program, type)) {
     const semanticScalarName = getOrmScalarName(type);
     if (!semanticScalarName && !mapping) {
       goType = camelToPascal(type.name);
     }
+  }
+
+  if (goType === undefined) {
+    return undefined;
   }
 
   if (mapping?.imports) {

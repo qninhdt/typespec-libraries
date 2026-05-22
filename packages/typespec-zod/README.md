@@ -174,7 +174,7 @@ Example shape:
 import { z } from "zod";
 
 export const CreateInvitationFormSchema = z.object({
-inviteeEmail: z.string().max(320).email(),
+inviteeEmail: z.email().max(320),
 message: z.string().optional(),
 });
 
@@ -247,6 +247,7 @@ That keeps validation, TypeScript inference, and form hints sourced from one sch
 
 - only default form models and `@tableMixin` schemas are emitted
 - relation-heavy `@table` models are not the target of this emitter
+- foreign-key lookups to a non-`id` column (e.g. `organizationCode: Organization.code`) are emitted as a plain scalar reference matching the column's underlying scalar; the relationship is not preserved in the Zod output
 - if a default form model references a shape that cannot be represented cleanly as Zod output, emission fails; fix the source schema instead of expecting silent fallback behavior
 
 ## Common Diagnostics And Gotchas

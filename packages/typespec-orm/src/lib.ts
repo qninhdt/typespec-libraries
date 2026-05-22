@@ -137,6 +137,18 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`@manyToMany("${"tableName"}") on "${"modelName"}"."${"propName"}" conflicts with explicit @table model "${"existingModel"}". Use an explicit junction model instead of shorthand.`,
       },
     },
+    "many-to-many-target-missing-key": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@manyToMany("${"tableName"}") on "${"modelName"}"."${"propName"}" requires both "${"modelName"}" and "${"targetModel"}" to declare a @key, but "${"missingModel"}" has none.`,
+      },
+    },
+    "default-expression-conflicts-literal": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@defaultExpression on "${"propName"}" cannot be combined with a literal default value. Use one or the other.`,
+      },
+    },
     "unsupported-persistence-type": {
       severity: "error",
       messages: {
@@ -191,10 +203,46 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`@${"decorator"} requires a datetime type (utcDateTime, offsetDateTime), but "${"propName"}" has type "${"actualType"}".`,
       },
     },
+    "auto-create-and-update-conflict": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Property "${"propName"}" cannot have both @autoCreateTime and @autoUpdateTime. Use one or the other.`,
+      },
+    },
+    "multiple-auto-increment-columns": {
+      severity: "error",
+      messages: {
+        default: `Model has multiple @autoIncrement properties. Only one auto-incrementing column is allowed per table.`,
+      },
+    },
+    "auto-increment-requires-key": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@autoIncrement on "${"propName"}" requires the property to be a non-optional @key.`,
+      },
+    },
     "ignore-conflicts": {
       severity: "error",
       messages: {
         default: paramMessage`@ignore on "${"propName"}" conflicts with @${"conflicting"} - ignored properties cannot have database decorators.`,
+      },
+    },
+    "duplicate-constraint-name": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@${"decorator"}("${"constraintName"}") has a duplicate name in this model.`,
+      },
+    },
+    "empty-index-columns": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@${"decorator"}("${"constraintName"}") must have at least one column.`,
+      },
+    },
+    "duplicate-column-in-index": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Column "${"columnName"}" is listed multiple times in @${"decorator"}("${"constraintName"}").`,
       },
     },
 
@@ -236,30 +284,6 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`@foreignKey on "${"propName"}" has no @index/@unique/@key. PostgreSQL will not auto-create an index, which usually causes lookup hot-spots.`,
       },
     },
-    "invalid-foreign-key": {
-      severity: "warning",
-      messages: {
-        default: `@foreignKey reference could not be validated. Ensure the target table and column exist.`,
-      },
-    },
-    "duplicate-constraint-name": {
-      severity: "error",
-      messages: {
-        default: paramMessage`@${"decorator"}("${"constraintName"}") has a duplicate name in this model.`,
-      },
-    },
-    "empty-index-columns": {
-      severity: "error",
-      messages: {
-        default: paramMessage`@${"decorator"}("${"constraintName"}") must have at least one column.`,
-      },
-    },
-    "duplicate-column-in-index": {
-      severity: "error",
-      messages: {
-        default: paramMessage`Column "${"columnName"}" is listed multiple times in @${"decorator"}("${"constraintName"}").`,
-      },
-    },
     "filter-selector-conflict": {
       severity: "warning",
       messages: {
@@ -270,6 +294,24 @@ export const $lib = createTypeSpecLibrary({
       severity: "warning",
       messages: {
         default: paramMessage`Selector "${"selector"}" is redundant because "${"coveredBy"}" already covers it.`,
+      },
+    },
+    "redundant-include-selector": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Selector "${"selector"}" appears more than once in "${"list"}".`,
+      },
+    },
+    "unused-scope": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Scope "${"scope"}" is declared via @scope but no selector references it (#${"scope"}).`,
+      },
+    },
+    "pg-reserved-identifier": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Identifier "${"name"}" is a PostgreSQL reserved word and will require quoting in DDL. Consider renaming.`,
       },
     },
   },
@@ -314,7 +356,7 @@ export const $lib = createTypeSpecLibrary({
       description: "Maps ModelProperty → SQL expression evaluated at insert time",
     },
     version: { description: "Marks ModelProperty as the optimistic-locking version column" },
-    audit: { description: "Maps ModelProperty → audit role (\"createdBy\" or \"updatedBy\")" },
+    audit: { description: 'Maps ModelProperty → audit role ("createdBy" or "updatedBy")' },
     tenantId: { description: "Marks ModelProperty as the tenant-scope foreign key" },
     modelIndexes: {
       description: "Maps Model → array of @@index([...]) augment specs",
