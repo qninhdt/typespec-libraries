@@ -11,6 +11,8 @@ export interface EntEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /** When true, transitively pull required dependencies into the selection */
+  "auto-include-dependencies"?: boolean;
   /** Explicit persistence strategy for collection fields */
   "collection-strategy"?: "jsonb" | "postgres";
 }
@@ -24,6 +26,7 @@ const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "auto-include-dependencies": { type: "boolean", nullable: true },
     "collection-strategy": { type: "string", nullable: true },
   },
   required: [],

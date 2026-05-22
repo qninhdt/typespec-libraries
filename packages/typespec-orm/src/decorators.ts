@@ -24,7 +24,7 @@ import {
   TenantIdKey,
   ModelIndexesKey,
   ModelUniquesKey,
-  TagsKey,
+  ScopesKey,
   OwnerKey,
   ClassificationKey,
   DataKey,
@@ -223,18 +223,19 @@ export function $tenantId(context: DecoratorContext, target: ModelProperty): voi
   context.program.stateMap(TenantIdKey).set(target, true);
 }
 
-// ─── @tag / @owner / @classification (catalog metadata) ──────────────────────
+// ─── @scope / @owner / @classification (catalog metadata) ───────────────────
 
 /**
- * Tag a model or property for selector matching. Multiple `@tag` decorators
- * accumulate. Tags can be referenced via emitter `include`/`exclude` selectors.
+ * Scope a model or property for selector matching. Multiple `@scope`
+ * decorators accumulate. Scopes drive emitter `include`/`exclude` selectors
+ * of the form `#scopeName`.
  */
-export function $tag(
+export function $scope(
   context: DecoratorContext,
   target: Model | ModelProperty,
   name: string,
 ): void {
-  const map = context.program.stateMap(TagsKey);
+  const map = context.program.stateMap(ScopesKey);
   const existing = (map.get(target) as string[] | undefined) ?? [];
   if (!existing.includes(name)) {
     existing.push(name);

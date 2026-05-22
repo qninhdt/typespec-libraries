@@ -1,0 +1,11 @@
+output-dir: "{cwd}/outputs/file-vault/frontend"
+emit:
+  - "@qninhdt/typespec-zod"
+options:
+  "@qninhdt/typespec-zod":
+    output-dir: "{cwd}/outputs/file-vault/frontend/zod"
+    standalone: true
+    library-name: "file-vault-frontend"
+    include:
+      - "#frontend"
+    auto-include-dependencies: true

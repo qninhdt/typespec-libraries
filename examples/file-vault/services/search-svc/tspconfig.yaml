@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/search-svc"
+emit:
+  - "@qninhdt/typespec-sqlmodel"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-sqlmodel":
+    output-dir: "{cwd}/outputs/file-vault/search-svc/sqlmodel"
+    standalone: true
+    library-name: "file-vault-search-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Search"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/search-svc/protobuf"

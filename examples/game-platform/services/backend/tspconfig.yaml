@@ -1,0 +1,20 @@
+output-dir: "{cwd}/outputs/game-platform/backend"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/game-platform/backend/ent"
+    standalone: true
+    library-name: "github.com/example/game-platform/backend"
+    collection-strategy: "jsonb"
+    include:
+      - "GamePlatform.Accounts"
+      - "GamePlatform.Worlds"
+      - "GamePlatform.Content"
+      - "GamePlatform.Collaboration"
+      - "GamePlatform.Audit"
+      - "GamePlatform.Backend"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/game-platform/backend/protobuf"

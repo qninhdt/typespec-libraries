@@ -1,0 +1,11 @@
+output-dir: "{cwd}/outputs/game-platform/frontend"
+emit:
+  - "@qninhdt/typespec-zod"
+options:
+  "@qninhdt/typespec-zod":
+    output-dir: "{cwd}/outputs/game-platform/frontend/zod"
+    standalone: true
+    library-name: "game-platform-frontend"
+    include:
+      - "#frontend"
+    auto-include-dependencies: true

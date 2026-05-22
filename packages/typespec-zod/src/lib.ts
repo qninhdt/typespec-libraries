@@ -15,6 +15,8 @@ export interface ZodEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /** When true, transitively pull required dependencies into the selection */
+  "auto-include-dependencies"?: boolean;
   /**
    * How to render TypeSpec `int64`/`uint64` (and other >32-bit integer)
    * scalars. Defaults to `"string"` to preserve precision over JSON.
@@ -35,6 +37,7 @@ const EmitterOptionsSchema: JSONSchemaType<ZodEmitterOptions> = {
     "library-name": { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "auto-include-dependencies": { type: "boolean", nullable: true },
     "int64-strategy": {
       type: "string",
       enum: ["bigint", "string", "number"],

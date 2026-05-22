@@ -276,20 +276,29 @@ Behavior:
 
 ### Selector Reference
 
-Selectors are plain dotted declaration names. There is no wildcard syntax.
+Selectors are either dotted declaration names (namespace selectors) or
+`#`-prefixed scope names. There is no wildcard syntax.
 
-| Selector                               | Meaning                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| `Demo.GamePlatform`                    | everything under that namespace subtree                                   |
-| `Demo.GamePlatform.Forms`              | only the forms subtree                                                    |
-| `Demo.GamePlatform.Worlds.World`       | one concrete declaration plus anything nested below it                    |
-| `Demo.GamePlatform.Audit` in `exclude` | removes the audit subtree even if a broader parent namespace was included |
+| Selector                         | Meaning                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| `GamePlatform`                   | everything under that namespace subtree                                   |
+| `GamePlatform.Worlds`            | only the worlds subtree                                                   |
+| `GamePlatform.Worlds.World`      | one concrete declaration plus anything nested below it                    |
+| `GamePlatform.Audit` in `exclude` | removes the audit subtree even if a broader parent namespace was included |
+| `#frontend`                      | every model decorated with `@scope("frontend")`, regardless of namespace  |
+| `#kafka:upload-events`           | every model decorated with `@scope("kafka:upload-events")`                |
 
 Practical guidance:
 
-- use namespace selectors for bounded-context level output
-- use concrete declaration selectors sparingly, usually for targeted tests or partial package generation
-- if a selected model depends on an excluded enum, alias, mixin, or relation target, emission fails before files are written
+- use namespace selectors for bounded-context-level output (one service owns one namespace)
+- use `#scope` selectors for cross-cutting concerns that don't fit a single namespace —
+  frontend exposure, Kafka event payloads consumed by services that don't own the namespace
+- a model can carry multiple `@scope(...)` decorators; selectors union across them
+- enable `auto-include-dependencies: true` on an emitter to transitively pull required
+  mixins / FK targets so service configs don't enumerate `*.Shared` mixins by hand;
+  default `false` keeps the strict `filtered-dependency` diagnostic
+- if a selected model depends on an excluded enum, alias, mixin, or relation target
+  (and closure is off), emission fails before files are written
 
 ## Output Philosophy
 
@@ -336,31 +345,81 @@ Practical guidance:
 
 ## Example Project In This Repo
 
-The checked-in example under [`examples/`](examples/) is deliberately more than a toy schema. It demonstrates:
+Two checked-in examples under [`examples/`](examples/) demonstrate the
+per-service generation pattern at different scales. Both use the same
+folder convention: a shared `contracts/` tree (single source of truth)
+plus per-service generation roots under `services/`.
+
+### Layout
+
+```
+examples/<system>/
+  contracts/
+    shared/                 # @tableMixin bases, cross-service primitives
+    <bounded-context>/      # tables.tsp + dtos.tsp per service-owned namespace
+    frontend/               # @scope("frontend") forms + DTOs
+  services/
+    <service>-svc/
+      main.tsp              # imports the contracts subset this service needs
+      grpc.tsp              # @Protobuf.service interfaces
+      tspconfig.yaml        # one persistence language + protobuf
+    frontend/               # Zod
+    docs/                   # DBML, no filter
+```
+
+Rules:
+
+- `contracts/` is read-only schema — no `tspconfig.yaml`, no `@Protobuf.service`
+- each service owns its namespace; cross-service consumption is via Kafka events
+  or gRPC, never by importing another team's `tables.tsp`
+- one persistence language per service (Ent *or* SQLModel — never both)
+- frontend uses `include: ["#frontend"]`; docs uses no filter
+
+### `examples/file-vault` — multi-service, mixed-language
+
+| Service              | Language          |
+| -------------------- | ----------------- |
+| `identity-svc`       | Go (Ent)          |
+| `metadata-svc`       | Go (Ent)          |
+| `storage-svc`        | Go (Ent)          |
+| `sharing-svc`        | Go (Ent)          |
+| `notifications-svc`  | Go (Ent)          |
+| `audit-svc`          | Go (Ent)          |
+| `processing-svc`     | Python (SQLModel) |
+| `search-svc`         | Python (SQLModel) |
+| `assistant-svc`      | Python (SQLModel) |
+| `frontend`           | TypeScript (Zod)  |
+| `docs`               | DBML              |
+
+### `examples/game-platform` — single backend, same convention
+
+`backend` (Go/Ent) + `frontend` (Zod) + `docs` (DBML). Proves the
+convention works for small systems too.
+
+The schemas demonstrate:
 
 - nested namespaces across several bounded contexts
-- reusable mixins
+- reusable mixins under `contracts/shared/`
 - lookup types across namespaces
-- named checks
-- many-to-many shorthand
-- collection persistence
+- named checks, many-to-many shorthand, collection persistence
 - upstream Protobuf contracts with explicit `@field(number)`
-- Zod metadata
+- per-service auto-include-dependencies pulling shared mixins automatically
+- `@scope("frontend")` Zod surface that's a strict subset of the persistence schema
 - namespace-split DBML generation
 
 Useful commands:
 
-`sh
+```sh
 pnpm run compile-examples
 pnpm run compile-example:file-vault
 pnpm run compile-example:game-platform
 pnpm run validate-examples
-`
+```
 
 Generated outputs are checked into:
 
-- [`outputs/file-vault`](outputs/file-vault)
-- [`outputs/game-platform`](outputs/game-platform)
+- [`outputs/file-vault/`](outputs/file-vault) — one subdirectory per service
+- [`outputs/game-platform/`](outputs/game-platform) — `backend/`, `frontend/`, `docs/`
 
 ## Migration Notes
 

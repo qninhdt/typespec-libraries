@@ -47,6 +47,7 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
   const selection = selectModelsForEmitter(program, graph, {
     include: options.include,
     exclude: options.exclude,
+    autoIncludeDependencies: options["auto-include-dependencies"],
     kinds: ["table"],
   });
   const tables = selection.models;

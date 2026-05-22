@@ -322,8 +322,8 @@ export const $lib = createTypeSpecLibrary({
     modelUniques: {
       description: "Maps Model → array of @@unique([...]) augment specs",
     },
-    tags: {
-      description: "Maps Model | ModelProperty → string[] of tag selectors",
+    scopes: {
+      description: "Maps Model | ModelProperty → string[] of scope selectors",
     },
     owner: {
       description: "Maps Model | Namespace → owning team identifier",
@@ -371,7 +371,7 @@ export const AuditKey = $lib.stateKeys.audit;
 export const TenantIdKey = $lib.stateKeys.tenantId;
 export const ModelIndexesKey = $lib.stateKeys.modelIndexes;
 export const ModelUniquesKey = $lib.stateKeys.modelUniques;
-export const TagsKey = $lib.stateKeys.tags;
+export const ScopesKey = $lib.stateKeys.scopes;
 export const OwnerKey = $lib.stateKeys.owner;
 export const ClassificationKey = $lib.stateKeys.classification;
 export const DataKey = $lib.stateKeys.data;

@@ -5,7 +5,14 @@ import {
   type Program,
   type Type,
 } from "@typespec/compiler";
-import { DataKey, ORM_NAMESPACE, TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
+import {
+  DataKey,
+  ORM_NAMESPACE,
+  TableKey,
+  TableMixinKey,
+  ScopesKey,
+  reportDiagnostic,
+} from "./lib.js";
 import {
   camelToSnake,
   collectOrmManagedModels,
@@ -27,9 +34,9 @@ import {
   unwrapArrayType,
 } from "./helpers.js";
 
-export interface OrmSelector {
-  raw: string;
-}
+export type OrmSelector =
+  | { raw: string; kind: "name" }
+  | { raw: string; kind: "tag"; value: string };
 
 export interface NormalizedDependency {
   kind: "model" | "mixin" | "enum" | "scalar";
@@ -69,6 +76,7 @@ interface SelectionOptions {
   include?: string[];
   exclude?: string[];
   kinds: Array<NormalizedOrmModel["kind"]>;
+  autoIncludeDependencies?: boolean;
 }
 
 const BUILTIN_NAMESPACE = "TypeSpec";
@@ -129,6 +137,18 @@ export function selectorMatchesName(
     namespace === selector ||
     (namespace?.startsWith(`${selector}.`) ?? false)
   );
+}
+
+function selectorMatches(
+  selector: OrmSelector,
+  fullName: string,
+  namespace: string | undefined,
+  tags: string[],
+): boolean {
+  if (selector.kind === "tag") {
+    return tags.includes(selector.value);
+  }
+  return selectorMatchesName(selector.raw, fullName, namespace);
 }
 
 const normalizedGraphCache = new WeakMap<Program, NormalizedOrmGraph>();
@@ -246,25 +266,56 @@ export function selectModelsForEmitter(
     if (!options.kinds.includes(model.kind)) {
       return false;
     }
-    return isDeclarationSelected(model.fullName, model.namespace, include, exclude);
+    const tags = getModelScopes(program, model.model);
+    return isDeclarationSelected(model.fullName, model.namespace, tags, include, exclude);
   });
 
-  for (const model of selected) {
-    for (const dependency of model.dependencies) {
-      if (dependency.soft) continue;
-      if (
-        !isDeclarationSelected(dependency.fullName, dependency.namespace, include, exclude) &&
-        dependency.fullName !== model.fullName
-      ) {
-        reportDiagnostic(program, {
-          code: "filtered-dependency",
-          target: model.model,
-          format: {
-            typeName: model.fullName,
-            dependencyKind: dependency.kind,
-            dependencyName: dependency.fullName,
-          },
-        });
+  if (options.autoIncludeDependencies) {
+    const seen = new Set(selected.map((model) => model.fullName));
+    const queue = [...selected];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const dependency of current.dependencies) {
+        if (dependency.soft) continue;
+        if (dependency.fullName === current.fullName) continue;
+        if (seen.has(dependency.fullName)) continue;
+        const depModel = graph.models.find((entry) => entry.fullName === dependency.fullName);
+        if (!depModel) continue;
+        if (!options.kinds.includes(depModel.kind)) continue;
+        seen.add(depModel.fullName);
+        selected.push(depModel);
+        queue.push(depModel);
+      }
+    }
+    selected.sort((a, b) => a.fullName.localeCompare(b.fullName));
+  } else {
+    for (const model of selected) {
+      for (const dependency of model.dependencies) {
+        if (dependency.soft) continue;
+        if (dependency.fullName === model.fullName) continue;
+        const depGraphModel = graph.models.find(
+          (entry) => entry.fullName === dependency.fullName,
+        );
+        const depTags = depGraphModel ? getModelScopes(program, depGraphModel.model) : [];
+        if (
+          !isDeclarationSelected(
+            dependency.fullName,
+            dependency.namespace,
+            depTags,
+            include,
+            exclude,
+          )
+        ) {
+          reportDiagnostic(program, {
+            code: "filtered-dependency",
+            target: model.model,
+            format: {
+              typeName: model.fullName,
+              dependencyKind: dependency.kind,
+              dependencyName: dependency.fullName,
+            },
+          });
+        }
       }
     }
   }
@@ -290,7 +341,12 @@ function normalizeSelectors(values: string[] | undefined): OrmSelector[] {
   return (values ?? [])
     .map((value) => value.trim())
     .filter((value) => value !== "")
-    .map((raw) => ({ raw }));
+    .map((raw) => {
+      if (raw.startsWith("#")) {
+        return { raw, kind: "tag", value: raw.slice(1) } as const;
+      }
+      return { raw, kind: "name" } as const;
+    });
 }
 
 function reportSelectorWarnings(
@@ -329,16 +385,21 @@ function reportSelectorWarnings(
 function isDeclarationSelected(
   fullName: string,
   namespace: string | undefined,
+  tags: string[],
   include: OrmSelector[],
   exclude: OrmSelector[],
 ): boolean {
   const included =
     include.length === 0 ||
-    include.some((selector) => selectorMatchesName(selector.raw, fullName, namespace));
+    include.some((selector) => selectorMatches(selector, fullName, namespace, tags));
   if (!included) {
     return false;
   }
-  return !exclude.some((selector) => selectorMatchesName(selector.raw, fullName, namespace));
+  return !exclude.some((selector) => selectorMatches(selector, fullName, namespace, tags));
+}
+
+function getModelScopes(program: Program, model: Model): string[] {
+  return (program.stateMap(ScopesKey).get(model) as string[] | undefined) ?? [];
 }
 
 function collectMixinSources(

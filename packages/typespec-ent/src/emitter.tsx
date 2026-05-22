@@ -22,6 +22,7 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
     kinds: ["table", "mixin", "data"],
     include: options.include,
     exclude: options.exclude,
+    autoIncludeDependencies: options["auto-include-dependencies"],
     standalone: options.standalone,
     libraryName: options["library-name"],
   });

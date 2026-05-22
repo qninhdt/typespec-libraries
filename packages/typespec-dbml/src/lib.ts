@@ -15,6 +15,8 @@ export interface DbmlEmitterOptions {
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /** When true, transitively pull required dependencies into the selection */
+  "auto-include-dependencies"?: boolean;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
@@ -26,6 +28,7 @@ const EmitterOptionsSchema: JSONSchemaType<DbmlEmitterOptions> = {
     "split-by-namespace": { type: "boolean", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
+    "auto-include-dependencies": { type: "boolean", nullable: true },
   },
   required: [],
 };

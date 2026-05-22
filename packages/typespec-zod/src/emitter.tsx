@@ -17,6 +17,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
     kinds: ["mixin", "data"],
     include: options.include,
     exclude: options.exclude,
+    autoIncludeDependencies: options["auto-include-dependencies"],
     standalone: options.standalone,
     libraryName,
   });

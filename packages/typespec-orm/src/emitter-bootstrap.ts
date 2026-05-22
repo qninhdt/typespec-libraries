@@ -11,6 +11,7 @@ export interface EmitterBootstrapConfig {
   kinds: Array<"table" | "data" | "mixin">;
   include?: string[];
   exclude?: string[];
+  autoIncludeDependencies?: boolean;
   standalone?: boolean;
   libraryName?: string;
 }
@@ -44,6 +45,7 @@ export function bootstrapEmitter<T extends object>(
     include: config.include,
     exclude: config.exclude,
     kinds: config.kinds,
+    autoIncludeDependencies: config.autoIncludeDependencies,
   });
 
   if (selection.models.length === 0) {

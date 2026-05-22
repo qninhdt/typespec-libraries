@@ -85,8 +85,8 @@ export {
   findVersionProperty,
   findTenantIdProperty,
   // Catalog metadata
-  getTags,
-  hasTag,
+  getScopes,
+  hasScope,
   getOwner,
   getClassification,
   // Ignore

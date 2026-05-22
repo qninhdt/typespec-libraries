@@ -53,7 +53,7 @@ import {
   VersionKey,
   AuditKey,
   TenantIdKey,
-  TagsKey,
+  ScopesKey,
   OwnerKey,
   ClassificationKey,
   DataKey,
@@ -511,18 +511,18 @@ export function findTenantIdProperty(program: Program, model: Model): ModelPrope
 
 // ─── Catalog metadata helpers ────────────────────────────────────────────────
 
-/** Returns the tags applied to a model or property via `@tag`. Empty array if none. */
-export function getTags(program: Program, target: Model | ModelProperty): readonly string[] {
-  return (program.stateMap(TagsKey).get(target) as string[] | undefined) ?? [];
+/** Returns the scopes applied to a model or property via `@scope`. Empty array if none. */
+export function getScopes(program: Program, target: Model | ModelProperty): readonly string[] {
+  return (program.stateMap(ScopesKey).get(target) as string[] | undefined) ?? [];
 }
 
-/** True when the model or property carries the given tag (or any namespace ancestor for models). */
-export function hasTag(
+/** True when the model or property carries the given scope. */
+export function hasScope(
   program: Program,
   target: Model | ModelProperty,
-  tag: string,
+  scope: string,
 ): boolean {
-  return getTags(program, target).includes(tag);
+  return getScopes(program, target).includes(scope);
 }
 
 /** Returns the owning team set via `@owner`, walking up the namespace chain for models. */

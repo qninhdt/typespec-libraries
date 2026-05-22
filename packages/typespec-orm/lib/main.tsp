@@ -312,11 +312,11 @@ extern dec tableUnique(target: Model, columns: valueof string[], name?: valueof 
 // ─── Catalog metadata ────────────────────────────────────────────────────────
 
 /**
- * Tag a model or property for selector matching. Multiple `@tag` decorators
- * accumulate. Tags surface to catalog tooling and can drive emitter
- * `include` / `exclude` selectors.
+ * Scope a model or property for selector matching. Multiple `@scope`
+ * decorators accumulate. Scopes drive emitter `include` / `exclude`
+ * selectors of the form `#scopeName` and surface to catalog tooling.
  */
-extern dec tag(target: Model | ModelProperty, name: valueof string);
+extern dec scope(target: Model | ModelProperty, name: valueof string);
 
 /**
  * Records the owning team for a model or namespace. Catalog tools read this
