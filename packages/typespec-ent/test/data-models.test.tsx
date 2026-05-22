@@ -20,7 +20,6 @@ describe("Ent @data model generation", () => {
   it("generates struct WITHOUT ent tags and WITHOUT TableName()", async () => {
     const output = await emitGoFile(
       `
-      @data("User creation form")
       model CreateUserForm {
         name: string;
         email: string;
@@ -43,7 +42,6 @@ describe("Ent @data model generation", () => {
   it("generates validate tags for constraints", async () => {
     const output = await emitGoFile(
       `
-      @data("Form")
       model TestForm {
         @maxLength(100) name: string;
         email: email;
@@ -123,7 +121,6 @@ describe("Ent @data model generation", () => {
   it("generates form tags with @title and @placeholder", async () => {
     const output = await emitGoFile(
       `
-      @data("Invite form")
       model InviteForm {
         @title("Email Address") @placeholder("user@example.com") email: string;
         @title("Message") message?: string;
@@ -139,10 +136,9 @@ describe("Ent @data model generation", () => {
     expect(output).toContain("title=Message");
   });
 
-  it("generates doc comment on @data struct", async () => {
+  it("generates doc comment on data struct", async () => {
     const output = await emitGoFile(
       `
-      @data("User creation form")
       model CreateUserForm {
         name: string;
       }
@@ -150,13 +146,12 @@ describe("Ent @data model generation", () => {
       "create_user_form.go",
     );
 
-    expect(output).toContain("// CreateUserForm User creation form");
+    expect(output).toContain("// CreateUserForm CreateUserForm");
   });
 
   it("does not generate import block when no special types used", async () => {
     const output = await emitGoFile(
       `
-      @data("Simple form")
       model SimpleForm {
         name: string;
         age: int32;

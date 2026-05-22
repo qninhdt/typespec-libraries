@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -56,6 +57,7 @@ func (AuditLog) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.Time("created_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Default(time.Now).
 			Immutable(),
 	}

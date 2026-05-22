@@ -7,7 +7,6 @@ import { $onEmit } from "../src/emitter.js";
 import { createEmitterTestRunner, emitZodFile } from "./utils.jsx";
 
 const SAMPLE = `
-@data("Form")
 model Wallet {
   balance: int64;
 }
@@ -71,7 +70,6 @@ describe("Zod int64-strategy option", () => {
   it("renders int64 default literal as JSON string under default 'string' strategy", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Account {
         total: int64 = 42;
       }
@@ -85,7 +83,6 @@ describe("Zod int64-strategy option", () => {
   it("renders int64 default literal as bigint under 'bigint' strategy", async () => {
     const runner = await createEmitterTestRunner({ "int64-strategy": "bigint" });
     await runner.compile(`
-      @data("Form")
       model Account {
         total: int64 = 42;
       }

@@ -83,7 +83,6 @@ describe("P1 contract additions (Ent)", () => {
     it("excludes @ignore'd fields from the generated Go struct", async () => {
       const output = await emitGoFile(
         `
-        @data("User profile form")
         model UserForm {
           name: string;
           @ignore internalToken: string;
@@ -115,7 +114,6 @@ describe("P1 contract additions (Ent)", () => {
 
     it("reports unsupported-type and aborts the file when a data field has no Go mapping", async () => {
       const code = `
-        @data("Bad form")
         model BadForm {
           name: string;
           payload: unknown;

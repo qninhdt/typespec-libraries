@@ -19,7 +19,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
   it("generates BaseModel WITHOUT table=True or __tablename__", async () => {
     const output = await emitPyFile(
       `
-      @data("User creation form")
       model CreateUserForm {
         name: string;
         email: string;
@@ -37,7 +36,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
   it("generates Field(...) with validation kwargs for required fields", async () => {
     const output = await emitPyFile(
       `
-      @data("Form")
       model TestForm {
         @maxLength(100) name: string;
       }
@@ -110,7 +108,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
   it("generates T | None with Field(None) for optional fields", async () => {
     const output = await emitPyFile(
       `
-      @data("Form")
       model TestForm {
         message?: string;
       }
@@ -126,7 +123,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
   it("generates title and placeholder in Field kwargs", async () => {
     const output = await emitPyFile(
       `
-      @data("Invite form")
       model InviteForm {
         @title("Email Address") @placeholder("user@example.com") email: string;
       }
@@ -141,7 +137,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
   it("generates description from @doc", async () => {
     const output = await emitPyFile(
       `
-      @data("Form")
       model TestForm {
         /** The user display name */
         name: string;
@@ -153,10 +148,9 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
     expect(output).toContain('description="The user display name"');
   });
 
-  it("generates docstring from @data label", async () => {
+  it("generates docstring from model name", async () => {
     const output = await emitPyFile(
       `
-      @data("User creation form")
       model CreateUserForm {
         name: string;
       }
@@ -164,6 +158,6 @@ describe("SQLModel @data model (Pydantic BaseModel)", () => {
       "create_user_form.py",
     );
 
-    expect(output).toContain('"""User creation form"""');
+    expect(output).toContain('"""CreateUserForm"""');
   });
 });

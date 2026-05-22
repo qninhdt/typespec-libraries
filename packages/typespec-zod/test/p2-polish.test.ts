@@ -79,7 +79,6 @@ describe("P2 Group C - synthetic envelope models get a namespace", () => {
         model DogA { name: string; }
         @discriminated(#{ envelope: "object" })
         union PetA { cat: CatA, dog: DogA }
-        @data("Form")
         model HoldsPetA { pet: PetA; }
       }
       namespace B {
@@ -87,7 +86,6 @@ describe("P2 Group C - synthetic envelope models get a namespace", () => {
         model DogB { name: string; }
         @discriminated(#{ envelope: "object" })
         union PetB { cat: CatB, dog: DogB }
-        @data("Form")
         model HoldsPetB { pet: PetB; }
       }
     `);
@@ -108,7 +106,6 @@ describe("P2 Group C - synthetic envelope models get a namespace", () => {
 describe("P2 Group D - stricter tsconfig in standalone output", () => {
   it("includes the four stricter compiler options", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const tsconfig = JSON.parse(await readFile(join(outDir, "tsconfig.json"), "utf8"));
@@ -120,7 +117,6 @@ describe("P2 Group D - stricter tsconfig in standalone output", () => {
 
   it("bumps engines.node to >=20", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8"));
@@ -132,7 +128,6 @@ describe("P2 Group D - stricter tsconfig in standalone output", () => {
 describe("P2 Group E - standalone build script improvements", () => {
   it("uses tsc -p tsconfig.json and includes clean / prebuild / prepublishOnly", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8"));
@@ -147,7 +142,6 @@ describe("P2 Group G - MetaType alias coexists with MetaShape", () => {
   it("emits both `${pascal}MetaShape` and `${pascal}MetaType`", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         @title("Name")
         name: string;
@@ -176,7 +170,6 @@ describe("P2 Group H - form FK referencing a non-id column", () => {
         name: string;
       }
 
-      @data("Form")
       model OrgInviteForm {
         @doc("Code of the organization to invite into")
         organizationCode: Organization.code;

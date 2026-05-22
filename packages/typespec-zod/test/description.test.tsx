@@ -5,7 +5,6 @@ describe("Zod descriptions", () => {
   it("emits describe() from model property docs", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model InviteForm {
         @doc("Email of the invitee")
         inviteeEmail: string;
@@ -20,7 +19,6 @@ describe("Zod descriptions", () => {
   it("escapes quotes and collapses newlines in docs", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model InviteForm {
         @doc("""
           A "quoted"
@@ -38,7 +36,6 @@ describe("Zod descriptions", () => {
   it("does not leak intrinsic doc from built-in scalars onto fields", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Account {
         id: uuid;
         createdAt: utcDateTime;
@@ -57,7 +54,6 @@ describe("Zod descriptions", () => {
     const output = await emitZodFile(
       `
       @doc("Public user record")
-      @data("Form")
       model PublicUser {
         name: string;
       }
@@ -77,7 +73,6 @@ describe("Zod descriptions", () => {
       @maxLength(128)
       scalar StrongPassword extends string;
 
-      @data("Form")
       model SignInRequest {
         password: StrongPassword;
       }

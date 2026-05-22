@@ -76,7 +76,6 @@ describe("SQLModel emitter end-to-end", () => {
   it("emits @data model as a Pydantic BaseModel with validation metadata", async () => {
     const output = await emitPyFile(
       `
-      @data("Registration Form")
       model RegisterForm {
         @title("Full Name") @minLength(1) name: string;
         @title("Email") contact: email;
@@ -87,7 +86,7 @@ describe("SQLModel emitter end-to-end", () => {
     );
 
     expect(output).toContain("class RegisterForm(BaseModel):");
-    expect(output).toContain('"""Registration Form"""');
+    expect(output).toContain('"""RegisterForm"""');
     expect(output).toContain('name: str = Field(..., min_length=1, title="Full Name")');
     expect(output).toContain('contact: EmailStr = Field(..., title="Email")');
     expect(output).toContain('password: str = Field(..., min_length=8, title="Password")');
@@ -99,19 +98,16 @@ describe("SQLModel emitter end-to-end", () => {
     const output = await emitPyFile(
       `
       namespace App.Shared {
-        @data("Page Info")
         model PageInfo {
           nextPageToken?: string;
         }
       }
 
       namespace App.Metadata {
-        @data("Node")
         model NodeView {
           id: uuid;
         }
 
-        @data("File")
         model FileView {
           node: NodeView;
           labels: string[];

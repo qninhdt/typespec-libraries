@@ -5,6 +5,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -42,7 +43,7 @@ func (Invitation) Fields() []ent.Field {
 			MaxLen(64).
 			Comment("Unique redeem code sent through email or copied in the UI.").
 			Unique(),
-		field.Enum("status").Values("pending", "accepted", "revoked", "expired").
+		field.Enum("status").Values("pending", "accepted", "revoked", "expired").SchemaType(map[string]string{dialect.Postgres: "invitation_status"}).Annotations(entsql.Annotation{Type: "invitation_status"}).
 			Default("pending").
 			Comment("Current lifecycle state for the invitation."),
 		field.Text("message").
@@ -51,10 +52,12 @@ func (Invitation) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.Time("expires_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("When the invitation expires, if at all.").
 			Optional().
 			Nillable(),
 		field.Time("accepted_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("When the invitation was accepted by the recipient.").
 			Optional().
 			Nillable(),

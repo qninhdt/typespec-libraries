@@ -1,0 +1,14 @@
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Local databases / scratch files
+dev.db
+*.db-journal
+*.tmp
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

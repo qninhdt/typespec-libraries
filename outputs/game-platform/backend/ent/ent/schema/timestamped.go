@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"entgo.io/ent/schema/mixin"
@@ -26,14 +27,17 @@ func (Timestamped) Fields() []ent.Field {
 			Comment("Unique identifier shared by most persisted records.").
 			Immutable(),
 		field.Time("created_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Default(time.Now).
 			Immutable().
 			Comment("Timestamp when the record was created."),
 		field.Time("updated_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("Timestamp of the last update.").
 			Optional().
 			Nillable(),
 		field.Time("deleted_at").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("Soft delete marker for archival workflows.").
 			Optional().
 			Nillable(),

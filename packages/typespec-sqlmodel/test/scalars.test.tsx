@@ -310,7 +310,6 @@ describe("Python semantic scalar mappings", () => {
       @minLength(8)
       scalar StrongPassword extends string;
 
-      @data("Login form")
       model SignInRequest {
         password: StrongPassword;
       }
@@ -335,7 +334,6 @@ describe("Python semantic scalar mappings", () => {
         password: StrongPassword;
       }
 
-      @data("Login form")
       model SignInRequest {
         password: StrongPassword;
       }

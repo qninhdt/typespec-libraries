@@ -108,7 +108,6 @@ describe("normalizeOrmGraph", () => {
       }
 
       namespace Demo.Forms {
-        @data("Project Form")
         model ProjectForm {
           ownerId: uuid;
         }
@@ -149,7 +148,7 @@ describe("normalizeOrmGraph", () => {
       ]),
     );
     expect(projectForm.kind).toBe("data");
-    expect(projectForm.label).toBe("Project Form");
+    expect(projectForm.label).toBe("ProjectForm");
   });
 
   it("reports selector conflicts, redundant selectors, and filtered dependencies", async () => {
@@ -261,7 +260,6 @@ describe("normalizeOrmGraph", () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace Demo.Zeta {
-        @data("Z Form")
         model ZetaForm {
           value: string;
         }
@@ -294,7 +292,6 @@ describe("normalizeOrmGraph", () => {
           @key id: uuid;
         }
 
-        @data("User Form")
         model UserForm {
           name: string;
         }
@@ -319,7 +316,6 @@ describe("normalizeOrmGraph", () => {
           @key id: uuid;
         }
 
-        @data("User Form")
         model UserForm {
           name: string;
         }
@@ -365,7 +361,6 @@ describe("normalizeOrmGraph", () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace Demo.Forms {
-        @data("Form")
         model SignUpForm {
           email: string;
         }

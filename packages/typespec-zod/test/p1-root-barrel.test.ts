@@ -12,7 +12,6 @@ describe("P1 Group B — root barrel correctness", () => {
       @minLength(8)
       scalar StrongPassword extends string;
 
-      @data("Form")
       model LoginForm {
         password: StrongPassword;
       }
@@ -31,7 +30,6 @@ describe("P1 Group B — root barrel correctness", () => {
   it("does not re-export _scalars when no custom scalars exist", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
-      @data("Form")
       model Plain {
         name: string;
       }
@@ -51,15 +49,12 @@ describe("P1 Group B — root barrel correctness", () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace A {
-        @data("Form")
         model Item { value: string; }
       }
       namespace B {
-        @data("Form")
         model Item { value: int32; }
       }
       namespace C {
-        @data("Form")
         model Unique { name: string; }
       }
     `);

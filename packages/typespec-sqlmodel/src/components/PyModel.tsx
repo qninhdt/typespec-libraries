@@ -18,12 +18,18 @@ import {
   getCheck,
   getCompositeFields,
   getDoc,
+  getIndexUsing,
   classifyProperties,
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
   camelToSnake,
   getColumnName as getOrmColumnName,
+  getPolymorphicConfig,
   getSchemaName,
+  getTableName,
+  isIndex,
+  isKey,
+  isUnique,
   findVersionProperty,
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
@@ -215,6 +221,7 @@ function buildTableArgEntries(
 ): string[] {
   const tableArgEntries = buildCompositeTableArgEntries(compositeTypeFields, saImports);
   addCheckConstraints(program, model, saImports, tableArgEntries);
+  addIndexUsingEntries(program, model, saImports, tableArgEntries);
   const schemaName = getSchemaName(program, model);
   if (schemaName) {
     tableArgEntries.push(
@@ -253,6 +260,32 @@ function buildCompositeTableArgEntries(
   return tableArgEntries;
 }
 
+function addIndexUsingEntries(
+  program: Program,
+  model: Model,
+  saImports: Set<string>,
+  tableArgEntries: string[],
+): void {
+  const tableName = getTableName(program, model);
+  for (const prop of walkPropertiesInherited(model)) {
+    const method = getIndexUsing(program, prop);
+    if (!method) continue;
+    if (!isIndex(program, prop) && !isUnique(program, prop) && !isKey(program, prop)) continue;
+    const columnName = getColumnName(program, prop);
+    const idxName = `${tableName}_${columnName}_${method}_idx`;
+    saImports.add("sqlalchemy.Index");
+    const args = [
+      JSON.stringify(idxName),
+      JSON.stringify(columnName),
+      `postgresql_using=${JSON.stringify(method)}`,
+    ];
+    if (isUnique(program, prop)) {
+      args.push("unique=True");
+    }
+    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index(${args.join(", ")})`);
+  }
+}
+
 function addCheckConstraints(
   program: Program,
   model: Model,
@@ -261,12 +294,34 @@ function addCheckConstraints(
 ): void {
   for (const prop of walkPropertiesInherited(model)) {
     const check = getCheck(program, prop);
-    if (!check) continue;
+    if (check) {
+      saImports.add("sqlalchemy.CheckConstraint");
+      tableArgEntries.push(
+        `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(check.expression)}, name=${JSON.stringify(check.name)})`,
+      );
+    }
 
-    saImports.add("sqlalchemy.CheckConstraint");
-    tableArgEntries.push(
-      `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(check.expression)}, name=${JSON.stringify(check.name)})`,
-    );
+    const polymorphic = getPolymorphicConfig(program, prop);
+    if (polymorphic && polymorphic.allowedTypes.length > 0) {
+      const columnName = getColumnName(program, prop);
+      const tableName = getTableName(program, model);
+      const checkName = `${tableName}_${columnName}_polymorphic`;
+      const valuesList = polymorphic.allowedTypes
+        .map((value) => `'${value.replaceAll("'", "''")}'`)
+        .join(", ");
+      const expression = `${columnName} IN (${valuesList})`;
+      saImports.add("sqlalchemy.CheckConstraint");
+      tableArgEntries.push(
+        `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(expression)}, name=${JSON.stringify(checkName)})`,
+      );
+      if (polymorphic.idColumn) {
+        saImports.add("sqlalchemy.Index");
+        const idxName = `${tableName}_${columnName}_${polymorphic.idColumn}_idx`;
+        tableArgEntries.push(
+          `${FOUR_SPACES}${FOUR_SPACES}Index(${JSON.stringify(idxName)}, ${JSON.stringify(columnName)}, ${JSON.stringify(polymorphic.idColumn)})`,
+        );
+      }
+    }
   }
 }
 

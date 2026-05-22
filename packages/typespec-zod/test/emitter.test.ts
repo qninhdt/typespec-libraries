@@ -43,7 +43,6 @@ describe("Zod emitter entrypoint", () => {
   it("reports unsupported field types as errors", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
-      @data
       model Broken {
         payload: composite<"left", "right">;
       }
@@ -68,7 +67,6 @@ describe("Zod emitter entrypoint", () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace Demo.Forms {
-        @data("Register Form")
         model RegisterForm {
           email: string;
         }

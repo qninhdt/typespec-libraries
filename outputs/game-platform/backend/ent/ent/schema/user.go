@@ -5,6 +5,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -69,7 +70,7 @@ func (User) Fields() []ent.Field {
 		field.Int32("credits").
 			Default(0).
 			Comment("Entitlement credits or consumable balance."),
-		field.Enum("role").Values("player", "moderator", "admin").
+		field.Enum("role").Values("player", "moderator", "admin").SchemaType(map[string]string{dialect.Postgres: "user_role"}).Annotations(entsql.Annotation{Type: "user_role"}).
 			Default("player").
 			Comment("Role used by moderation features and internal tooling."),
 		field.Bool("is_active").

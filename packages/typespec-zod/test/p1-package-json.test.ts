@@ -25,7 +25,6 @@ describe("P1 Group A — generated package.json polish", () => {
   it("emits zod under peerDependencies (not dependencies) and pins via constant", async () => {
     const { outDir } = await emitStandalone(`
       namespace Demo {
-        @data("Form")
         model F { value: string; }
       }
     `);
@@ -39,7 +38,6 @@ describe("P1 Group A — generated package.json polish", () => {
 
   it("sets sideEffects: false", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8"));
@@ -48,7 +46,6 @@ describe("P1 Group A — generated package.json polish", () => {
 
   it("uses default description and UNLICENSED license when options not set", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8"));
@@ -59,7 +56,6 @@ describe("P1 Group A — generated package.json polish", () => {
   it("honors description and license overrides from emitter options", async () => {
     const { outDir } = await emitStandalone(
       `
-      @data("Form")
       model F { value: string; }
     `,
       { description: "My custom schemas", license: "Apache-2.0" },
@@ -72,7 +68,6 @@ describe("P1 Group A — generated package.json polish", () => {
   it("adds import + types per subpath in exports map", async () => {
     const { outDir } = await emitStandalone(`
       namespace Demo.Forms {
-        @data("Form")
         model RegisterForm { email: string; }
       }
     `);
@@ -89,7 +84,6 @@ describe("P1 Group A — generated package.json polish", () => {
 
   it("keeps version: '0.0.0' and private: true (not published)", async () => {
     const { outDir } = await emitStandalone(`
-      @data("Form")
       model F { value: string; }
     `);
     const pkg = JSON.parse(await readFile(join(outDir, "package.json"), "utf8"));

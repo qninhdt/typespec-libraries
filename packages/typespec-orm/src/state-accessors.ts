@@ -56,10 +56,13 @@ import {
   ScopesKey,
   OwnerKey,
   ClassificationKey,
-  DataKey,
   TitleKey,
   PlaceholderKey,
   InputTypeKey,
+  PolymorphicKey,
+  IndexUsingKey,
+  GoTypeKey,
+  RefineKey,
 } from "./lib.js";
 import { truncatePgIdentifier } from "./identifier-policy.js";
 import { camelToSnake, deriveTableName } from "./naming.js";
@@ -553,13 +556,8 @@ export function isIgnored(program: Program, prop: ModelProperty): boolean {
 
 export function isData(program: Program, model: Model): boolean {
   return (
-    program.stateMap(DataKey).has(model) ||
-    (isOrmManagedModel(program, model) && !isTable(program, model) && !isTableMixin(program, model))
+    isOrmManagedModel(program, model) && !isTable(program, model) && !isTableMixin(program, model)
   );
-}
-
-export function getDataLabel(program: Program, model: Model): string | undefined {
-  return program.stateMap(DataKey).get(model) as string | undefined;
 }
 
 export function getTitle(program: Program, prop: ModelProperty): string | undefined {
@@ -572,6 +570,55 @@ export function getPlaceholder(program: Program, prop: ModelProperty): string | 
 
 export function getInputType(program: Program, scalar: Scalar): string | undefined {
   return program.stateMap(InputTypeKey).get(scalar) as string | undefined;
+}
+
+// ─── Polymorphic / index-using / goType / refine accessors ───────────────────
+
+export interface PolymorphicConfig {
+  allowedTypes: string[];
+  idColumn?: string;
+}
+
+export function getPolymorphicConfig(
+  program: Program,
+  prop: ModelProperty,
+): PolymorphicConfig | undefined {
+  const value = program.stateMap(PolymorphicKey).get(prop) as PolymorphicConfig | undefined;
+  if (!value) return undefined;
+  return {
+    allowedTypes: [...value.allowedTypes],
+    idColumn: value.idColumn,
+  };
+}
+
+export function isPolymorphicProperty(program: Program, prop: ModelProperty): boolean {
+  return program.stateMap(PolymorphicKey).has(prop);
+}
+
+export type IndexMethod = "btree" | "gin" | "gist" | "brin" | "hash" | "spgist";
+
+export function getIndexUsing(program: Program, prop: ModelProperty): IndexMethod | undefined {
+  return program.stateMap(IndexUsingKey).get(prop) as IndexMethod | undefined;
+}
+
+export interface GoTypeSpec {
+  importPath: string;
+  typeName: string;
+  raw: string;
+}
+
+export function getGoType(program: Program, prop: ModelProperty): GoTypeSpec | undefined {
+  return program.stateMap(GoTypeKey).get(prop) as GoTypeSpec | undefined;
+}
+
+export interface RefineSpec {
+  name: string;
+  expression: string;
+}
+
+export function getRefines(program: Program, model: Model): RefineSpec[] {
+  const value = program.stateMap(RefineKey).get(model) as RefineSpec[] | undefined;
+  return value ? value.map((entry) => ({ ...entry })) : [];
 }
 
 export function getModelOwnProperties(model: Model): ModelProperty[] {

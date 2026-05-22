@@ -7,6 +7,7 @@ import {
   getDoc,
   getColumnName,
   getCompositeFields,
+  getGoType,
   getMaxLength,
   getPrecision,
   getPropertyEnum,
@@ -160,8 +161,47 @@ function buildEntFieldBuilder(
       return `field.Duration(${goStringLiteral(columnName)})`;
     case "bytes":
       return `field.Bytes(${goStringLiteral(columnName)})`;
-    case "jsonb":
+    case "jsonb": {
+      const goType = getGoType(program, prop);
+      if (goType && goType.importPath && goType.typeName) {
+        ctx.imports.add(goType.importPath);
+        const pkg = goType.importPath.split("/").at(-1) ?? "";
+        return `field.JSON(${goStringLiteral(columnName)}, &${pkg}.${goType.typeName}{})`;
+      }
       return `field.JSON(${goStringLiteral(columnName)}, map[string]any{})`;
+    }
+    case "tsvector":
+      ctx.imports.add("entgo.io/ent/dialect");
+      return (
+        `field.String(${goStringLiteral(columnName)}).` +
+        `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("tsvector")}})`
+      );
+    case "tsquery":
+      ctx.imports.add("entgo.io/ent/dialect");
+      return (
+        `field.String(${goStringLiteral(columnName)}).` +
+        `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("tsquery")}})`
+      );
+    case "citext":
+      ctx.imports.add("entgo.io/ent/dialect");
+      return (
+        `field.String(${goStringLiteral(columnName)}).` +
+        `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("citext")}})`
+      );
+    case "ipv4":
+    case "ipv6":
+    case "inet":
+      ctx.imports.add("entgo.io/ent/dialect");
+      return (
+        `field.String(${goStringLiteral(columnName)}).` +
+        `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("inet")}})`
+      );
+    case "cidr":
+      ctx.imports.add("entgo.io/ent/dialect");
+      return (
+        `field.String(${goStringLiteral(columnName)}).` +
+        `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("cidr")}})`
+      );
     case "string":
       return `field.String(${goStringLiteral(columnName)})`;
     default:

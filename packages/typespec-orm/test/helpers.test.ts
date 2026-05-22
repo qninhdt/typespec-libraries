@@ -127,7 +127,6 @@ describe("metadata and relation helpers", () => {
           createdAt: utcDateTime;
         }
 
-        @data("User Form")
         model UserForm {
           email: string;
         }
@@ -144,7 +143,7 @@ describe("metadata and relation helpers", () => {
     const mixins = collectTableMixins(runner.program);
 
     expect(dataModels).toHaveLength(1);
-    expect(dataModels[0].label).toBe("User Form");
+    expect(dataModels[0].label).toBe("UserForm");
     expect(getTypeFullName(runner.program, dataModels[0].model)).toBe(
       "Test.Demo.Accounts.UserForm",
     );

@@ -5,7 +5,6 @@ describe("Zod standalone mode", () => {
   it("generates model file in models/ folder with correct path", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         email: string;
@@ -24,7 +23,6 @@ describe("Zod standalone mode", () => {
   it("generates z.object with all field types", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         age: int32;
@@ -46,7 +44,6 @@ describe("Zod standalone mode", () => {
   it("generates optional fields correctly", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         bio?: string;

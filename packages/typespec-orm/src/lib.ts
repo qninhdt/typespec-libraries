@@ -314,6 +314,30 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Identifier "${"name"}" is a PostgreSQL reserved word and will require quoting in DDL. Consider renaming.`,
       },
     },
+    "polymorphic-empty-allowed-types": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@polymorphic on "${"propName"}" requires a non-empty list of allowed type tags.`,
+      },
+    },
+    "polymorphic-column-conflict": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@polymorphic on "${"propName"}" cannot reuse existing column "${"columnName"}". Pick distinct typeColumn / idColumn names.`,
+      },
+    },
+    "go-type-malformed": {
+      severity: "error",
+      messages: {
+        default: paramMessage`@goType("${"value"}") on "${"propName"}" must be of the form "import/path.TypeName".`,
+      },
+    },
+    "index-using-on-non-index": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`@indexUsing("${"method"}") on "${"propName"}" has no effect without @index, @unique, or @key.`,
+      },
+    },
   },
   state: {
     table: { description: "Maps Model → table name" },
@@ -374,10 +398,21 @@ export const $lib = createTypeSpecLibrary({
       description: "Maps Model | ModelProperty → data classification level",
     },
     // ─── Data / Form decorators ──────────────────────────────────────────────
-    data: { description: "Marks Model as a non-DB data/form shape" },
     title: { description: "Maps ModelProperty → human-readable field title" },
     placeholder: { description: "Maps ModelProperty → input placeholder text" },
     inputType: { description: "Maps Scalar → HTML input type hint" },
+    polymorphic: {
+      description:
+        "Maps ModelProperty → { typeColumn, idColumn, allowedTypes[] } for polymorphic relations",
+    },
+    indexUsing: {
+      description:
+        "Maps ModelProperty → PostgreSQL index method (gin / gist / brin / btree / hash)",
+    },
+    goType: { description: "Maps ModelProperty → Go custom type spec for Ent (import/path.Type)" },
+    refine: {
+      description: "Maps Model → array of { name, expression } for Zod .refine() emission",
+    },
   },
 } as const);
 
@@ -416,7 +451,10 @@ export const ModelUniquesKey = $lib.stateKeys.modelUniques;
 export const ScopesKey = $lib.stateKeys.scopes;
 export const OwnerKey = $lib.stateKeys.owner;
 export const ClassificationKey = $lib.stateKeys.classification;
-export const DataKey = $lib.stateKeys.data;
 export const TitleKey = $lib.stateKeys.title;
 export const PlaceholderKey = $lib.stateKeys.placeholder;
 export const InputTypeKey = $lib.stateKeys.inputType;
+export const PolymorphicKey = $lib.stateKeys.polymorphic;
+export const IndexUsingKey = $lib.stateKeys.indexUsing;
+export const GoTypeKey = $lib.stateKeys.goType;
+export const RefineKey = $lib.stateKeys.refine;

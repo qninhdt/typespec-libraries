@@ -6,7 +6,6 @@ describe("Zod scalar type mappings", () => {
   it("maps string to z.string()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
       }
@@ -20,7 +19,6 @@ describe("Zod scalar type mappings", () => {
   it("maps boolean to z.boolean()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         active: boolean;
       }
@@ -34,7 +32,6 @@ describe("Zod scalar type mappings", () => {
   it("maps integer types to z.number().int() for 32-bit and z.string().regex for wider", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model IntTest {
         a: int8;
         b: int16;
@@ -56,7 +53,6 @@ describe("Zod scalar type mappings", () => {
   it("maps float types to z.number()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model FloatTest {
         a: float32;
         b: float64;
@@ -71,7 +67,6 @@ describe("Zod scalar type mappings", () => {
   it("maps decimal to a precision-safe string regex", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         price: decimal;
       }
@@ -88,7 +83,6 @@ describe("Zod scalar type mappings", () => {
   it("maps decimal128 to a precision-safe string regex", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         price: decimal128;
       }
@@ -103,7 +97,6 @@ describe("Zod scalar type mappings", () => {
   it("maps bytes to z.instanceof() with Uint8Array", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         data: bytes;
       }
@@ -119,7 +112,6 @@ describe("Zod scalar type mappings", () => {
       `
       scalar uuid extends string;
 
-      @data("Form")
       model User {
         id: uuid;
       }
@@ -134,7 +126,6 @@ describe("Zod scalar type mappings", () => {
   it("maps plainDate to z.coerce.date()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         birthDate: plainDate;
       }
@@ -148,7 +139,6 @@ describe("Zod scalar type mappings", () => {
   it("maps plainTime to z.iso.time()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         time: plainTime;
       }
@@ -163,7 +153,6 @@ describe("Zod scalar type mappings", () => {
   it("maps utcDateTime to z.iso.datetime() (string-typed, no coercion)", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         createdAt: utcDateTime;
       }
@@ -181,7 +170,6 @@ describe("Zod scalar type mappings", () => {
   it("maps duration to z.iso.duration()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Task {
         duration: duration;
       }
@@ -196,7 +184,6 @@ describe("Zod scalar type mappings", () => {
   it("maps safeint to z.number().int() (no .safe() in Zod 4)", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         age: safeint;
       }
@@ -216,7 +203,6 @@ describe("Zod optional fields", () => {
   it("generates .optional() for optional fields", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         bio?: string;
@@ -235,7 +221,6 @@ describe("Zod optional fields", () => {
   it("generates .default() for fields with default values", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         enabled: boolean = true;
         count: int32 = 0;
@@ -250,7 +235,6 @@ describe("Zod optional fields", () => {
   it("preserves empty string default values", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         displayName: string = "";
       }
@@ -264,7 +248,6 @@ describe("Zod optional fields", () => {
   it("matches numeric default literals to the emitted schema type", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         count: int32 = 0;
         total: int64 = 42;
@@ -285,7 +268,6 @@ describe("Zod semantic scalars", () => {
   it("maps email to z.email()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         contact: email;
       }
@@ -300,7 +282,6 @@ describe("Zod semantic scalars", () => {
   it("maps ipv4 to z.ipv4()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Server {
         addr: ipv4;
       }
@@ -315,7 +296,6 @@ describe("Zod semantic scalars", () => {
   it("maps ipv6 to z.ipv6()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Server {
         addr: ipv6;
       }
@@ -330,7 +310,6 @@ describe("Zod semantic scalars", () => {
   it("maps ip to z.union of ipv4 and ipv6", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Server {
         addr: ip;
       }
@@ -347,7 +326,6 @@ describe("Zod semantic scalars", () => {
   it("maps url to z.url()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Link {
         href: url;
       }
@@ -362,7 +340,6 @@ describe("Zod semantic scalars", () => {
   it("maps cidr to z.cidr()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Network {
         subnet: cidr;
       }
@@ -377,7 +354,6 @@ describe("Zod semantic scalars", () => {
   it("maps base64 to z.base64()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Attachment {
         content: base64;
       }
@@ -392,7 +368,6 @@ describe("Zod semantic scalars", () => {
   it("does not add extra regex for email scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         contact: email;
       }
@@ -408,7 +383,6 @@ describe("Zod semantic scalars", () => {
   it("emits branded alias with regex for mac scalar", async () => {
     const output = await renderZodOutput(
       `
-      @data("Form")
       model Device {
         macAddr: mac;
       }
@@ -431,7 +405,6 @@ describe("Zod semantic scalars", () => {
   it("maps cuid to z.cuid()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Resource {
         id: cuid;
       }
@@ -446,7 +419,6 @@ describe("Zod semantic scalars", () => {
   it("maps cuid2 to z.cuid2()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Resource {
         id: cuid2;
       }
@@ -461,7 +433,6 @@ describe("Zod semantic scalars", () => {
   it("maps ulid to z.ulid()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Resource {
         id: ulid;
       }
@@ -476,7 +447,6 @@ describe("Zod semantic scalars", () => {
   it("maps nanoid to z.nanoid()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Resource {
         id: nanoid;
       }
@@ -491,7 +461,6 @@ describe("Zod semantic scalars", () => {
   it("maps jwt to z.jwt()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Auth {
         token: jwt;
       }
@@ -506,7 +475,6 @@ describe("Zod semantic scalars", () => {
   it("maps emoji to z.emoji()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Reaction {
         icon: emoji;
       }
@@ -521,7 +489,6 @@ describe("Zod semantic scalars", () => {
   it("does not add extra regex for cuid scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Resource {
         id: cuid;
       }
@@ -541,7 +508,6 @@ describe("Zod user-defined scalars", () => {
       @minValue(18)
       scalar AdultAge extends int32;
 
-      @data("Form")
       model RegistrationForm {
         age: AdultAge;
       }
@@ -565,7 +531,6 @@ describe("Zod user-defined scalars", () => {
       @maxLength(128)
       scalar StrongPassword extends string;
 
-      @data("Form")
       model LoginForm {
         password: StrongPassword;
       }
@@ -590,7 +555,6 @@ describe("Zod user-defined scalars", () => {
       @minValue(18) @maxValue(150)
       scalar AdultAge extends int32;
 
-      @data("Form")
       model Profile {
         name: string;
         age: AdultAge;
@@ -611,7 +575,6 @@ describe("Zod user-defined scalars", () => {
       @minValue(0) @maxValue(100)
       scalar Percentage extends float64;
 
-      @data("Form")
       model Stats {
         completion: Percentage;
       }
@@ -636,7 +599,6 @@ describe("Zod user-defined scalars", () => {
       @pattern("^[A-Z]{2}-[0-9]{4}$")
       scalar ProductCode extends string;
 
-      @data("Form")
       model Product {
         code: ProductCode;
       }
@@ -663,7 +625,6 @@ describe("Zod user-defined scalar constraint overrides", () => {
       @minValue(0) @maxValue(150)
       scalar Age extends int32;
 
-      @data("Form")
       model Player {
         @maxValue(13) age: Age;
       }
@@ -685,7 +646,6 @@ describe("Zod user-defined scalar constraint overrides", () => {
       @minValue(0)
       scalar PositiveInt extends int32;
 
-      @data("Form")
       model Bounded {
         @maxValue(100) value: PositiveInt;
       }
@@ -708,7 +668,6 @@ describe("Zod user-defined scalar constraint overrides", () => {
       @minLength(1) @maxLength(255)
       scalar ShortText extends string;
 
-      @data("Form")
       model Comment {
         @maxLength(100) body: ShortText;
       }
@@ -728,7 +687,6 @@ describe("Zod user-defined scalar constraint overrides", () => {
       @minLength(8)
       scalar StrongPassword extends string;
 
-      @data("Form")
       model LoginForm {
         password: StrongPassword;
       }

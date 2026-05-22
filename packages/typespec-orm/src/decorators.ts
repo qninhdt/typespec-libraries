@@ -27,10 +27,13 @@ import {
   ScopesKey,
   OwnerKey,
   ClassificationKey,
-  DataKey,
   TitleKey,
   PlaceholderKey,
   InputTypeKey,
+  PolymorphicKey,
+  IndexUsingKey,
+  GoTypeKey,
+  RefineKey,
 } from "./lib.js";
 
 // ─── @table ──────────────────────────────────────────────────────────────────
@@ -300,16 +303,6 @@ export function $tableUnique(
   map.set(target, existing);
 }
 
-// ─── @data ────────────────────────────────────────────────────────────────
-
-/**
- * Mark a model as a non-database data shape (form payload, API response DTO, etc.).
- * Unlike @table, this does NOT generate a DB schema.
- */
-export function $data(context: DecoratorContext, target: Model, label?: string): void {
-  context.program.stateMap(DataKey).set(target, label ?? target.name);
-}
-
 // ─── @title ────────────────────────────────────────────────────────────────
 
 /** Human-readable title for a form field (maps to Pydantic Field(title=...) / Go form tag). */
@@ -334,4 +327,95 @@ export function $placeholder(context: DecoratorContext, target: ModelProperty, t
  */
 export function $inputType(context: DecoratorContext, target: Scalar, htmlType: string): void {
   context.program.stateMap(InputTypeKey).set(target, htmlType);
+}
+
+// ─── @polymorphic ────────────────────────────────────────────────────────────
+
+export interface PolymorphicConfig {
+  allowedTypes: string[];
+  idColumn?: string;
+}
+
+/**
+ * Marks a string column as the discriminator of a polymorphic relation. The
+ * column itself is preserved verbatim; emitters add a CHECK constraint over
+ * the allowed type values and (when `idColumn` is supplied) an index over
+ * the (type, id) pair.
+ */
+export function $polymorphic(
+  context: DecoratorContext,
+  target: ModelProperty,
+  allowedTypes: string[],
+  idColumn?: string,
+): void {
+  context.program.stateMap(PolymorphicKey).set(target, {
+    allowedTypes: [...allowedTypes],
+    idColumn: idColumn === "" ? undefined : idColumn,
+  });
+}
+
+// ─── @indexUsing ─────────────────────────────────────────────────────────────
+
+export function $indexUsing(
+  context: DecoratorContext,
+  target: ModelProperty,
+  method: string,
+): void {
+  context.program.stateMap(IndexUsingKey).set(target, method);
+}
+
+// ─── @goType ─────────────────────────────────────────────────────────────────
+
+export interface GoTypeSpec {
+  importPath: string;
+  typeName: string;
+  raw: string;
+}
+
+export function $goType(
+  context: DecoratorContext,
+  target: ModelProperty,
+  importPathAndType: string,
+): void {
+  // Format: import/path.TypeName — split at the LAST dot before the symbol so
+  // dotted package paths (`github.com/foo/bar/v2.MyType`) still parse.
+  const lastDot = importPathAndType.lastIndexOf(".");
+  if (lastDot <= 0 || lastDot === importPathAndType.length - 1) {
+    context.program.stateMap(GoTypeKey).set(target, {
+      importPath: "",
+      typeName: "",
+      raw: importPathAndType,
+    });
+    return;
+  }
+  const importPath = importPathAndType.slice(0, lastDot);
+  const typeName = importPathAndType.slice(lastDot + 1);
+  context.program.stateMap(GoTypeKey).set(target, {
+    importPath,
+    typeName,
+    raw: importPathAndType,
+  });
+}
+
+// ─── @refine ─────────────────────────────────────────────────────────────────
+
+export interface RefineSpec {
+  name: string;
+  expression: string;
+}
+
+/**
+ * Model-level Zod refinement. Stored as an array so a single model can carry
+ * multiple cross-field rules.
+ */
+export function $refine(
+  context: DecoratorContext,
+  target: Model,
+  name: string,
+  expression: string,
+): void {
+  const map = context.program.stateMap(RefineKey);
+  const existing = (map.get(target) as RefineSpec[] | undefined) ?? [];
+  existing.push({ name, expression });
+  map.set(target, existing);
 }

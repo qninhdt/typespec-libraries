@@ -5,7 +5,6 @@ describe("Zod emitter end-to-end", () => {
   it("emits a complete form schema with validations, metadata, and inferred type", async () => {
     const output = await emitZodFile(
       `
-      @data("Registration Form")
       model RegisterForm {
         @title("Full Name") @minLength(1) name: string;
         @title("Email") contact: email;
@@ -33,7 +32,6 @@ describe("Zod emitter end-to-end", () => {
         inactive: "inactive",
       }
 
-      @data("Status form")
       model StatusForm {
         status: Status;
       }
@@ -49,7 +47,6 @@ describe("Zod emitter end-to-end", () => {
   it("emits decorator features as Zod validation chains and descriptions", async () => {
     const output = await emitZodFile(
       `
-      @data("User form")
       model UserForm {
         @minLength(1) @maxLength(255) name: string;
         contact: email;
@@ -72,7 +69,6 @@ describe("Zod emitter end-to-end", () => {
   it("emits arrays and tuples with element schemas", async () => {
     const output = await emitZodFile(
       `
-      @data("Tags form")
       model TagsForm {
         tags: string[];
         coordinates: [int32, int32];
@@ -89,7 +85,6 @@ describe("Zod emitter end-to-end", () => {
   it("emits union fields with each variant schema", async () => {
     const output = await emitZodFile(
       `
-      @data("Result form")
       model ResultForm {
         value: string | null;
       }
@@ -105,7 +100,6 @@ describe("Zod emitter end-to-end", () => {
   it("emits optional and default fields as Zod member modifiers", async () => {
     const output = await emitZodFile(
       `
-      @data("Config form")
       model ConfigForm {
         enabled: boolean = true;
         count?: int32;

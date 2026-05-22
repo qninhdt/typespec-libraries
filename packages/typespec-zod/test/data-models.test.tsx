@@ -19,7 +19,6 @@ describe("Zod @data model generation", () => {
   it("generates schema variable declaration with correct name", async () => {
     const output = await emitZodFile(
       `
-      @data("User form")
       model CreateUserForm {
         name: string;
         email: string;
@@ -35,7 +34,6 @@ describe("Zod @data model generation", () => {
   it("generates z.object() as the base schema", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
       }
@@ -49,7 +47,6 @@ describe("Zod @data model generation", () => {
   it("generates type alias using z.infer", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
       }
@@ -64,7 +61,6 @@ describe("Zod @data model generation", () => {
   it("generates optional fields with .optional()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
         bio?: string;
@@ -82,7 +78,6 @@ describe("Zod @data model generation", () => {
   it("generates default values with .default()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         enabled: boolean = true;
         count?: int32 = 0;
@@ -97,7 +92,6 @@ describe("Zod @data model generation", () => {
   it("generates field with constraints", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         @minLength(1) @maxLength(100) name: string;
       }
@@ -112,7 +106,6 @@ describe("Zod @data model generation", () => {
   it("generates field with email scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         contact: email;
       }
@@ -172,7 +165,6 @@ describe("Zod model file structure", () => {
   it("generates generated header comment", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
       }
@@ -186,7 +178,6 @@ describe("Zod model file structure", () => {
   it("exports schema and type", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
       }

@@ -77,7 +77,6 @@ describe("Ent emitter entrypoint", () => {
           email: string;
         }
 
-        @data("Register Form")
         model RegisterForm {
           email: string;
         }

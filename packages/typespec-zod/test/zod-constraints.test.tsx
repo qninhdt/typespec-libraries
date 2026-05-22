@@ -5,7 +5,6 @@ describe("Zod string constraints", () => {
   it("generates .min() for minLength", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         @minLength(3) name: string;
       }
@@ -19,7 +18,6 @@ describe("Zod string constraints", () => {
   it("generates .max() for maxLength", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         @maxLength(100) name: string;
       }
@@ -33,7 +31,6 @@ describe("Zod string constraints", () => {
   it("generates .regex() for pattern", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         @pattern("^[a-z]+$") slug: string;
       }
@@ -48,7 +45,6 @@ describe("Zod string constraints", () => {
   it("generates .email() for email semantic scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         contact: email;
       }
@@ -62,7 +58,6 @@ describe("Zod string constraints", () => {
   it("generates .url() for url semantic scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         website?: url;
       }
@@ -78,7 +73,6 @@ describe("Zod numeric constraints", () => {
   it("generates .gte() for inclusive min", async () => {
     const output = await emitZodFile(
       `
-      @data("Product")
       model Product {
         @minValue(1) rating: int32;
       }
@@ -92,7 +86,6 @@ describe("Zod numeric constraints", () => {
   it("generates .lte() for inclusive max", async () => {
     const output = await emitZodFile(
       `
-      @data("Product")
       model Product {
         @maxValue(100) rating: int32;
       }
@@ -106,7 +99,6 @@ describe("Zod numeric constraints", () => {
   it("generates .gt() for exclusive min", async () => {
     const output = await emitZodFile(
       `
-      @data("Product")
       model Product {
         @minValueExclusive(0) price: float64;
       }
@@ -120,7 +112,6 @@ describe("Zod numeric constraints", () => {
   it("generates .lt() for exclusive max", async () => {
     const output = await emitZodFile(
       `
-      @data("Product")
       model Product {
         @maxValueExclusive(1000) price: float64;
       }
@@ -134,7 +125,6 @@ describe("Zod numeric constraints", () => {
   it("combines min and max constraints", async () => {
     const output = await emitZodFile(
       `
-      @data("Product")
       model Product {
         @minValue(1) @maxValue(5) rating: int32;
       }
@@ -151,7 +141,6 @@ describe("Zod array constraints", () => {
   it("generates .min() for minItems on arrays", async () => {
     const output = await emitZodFile(
       `
-      @data("Config")
       model Config {
         @minItems(1) tags: string[];
       }
@@ -165,7 +154,6 @@ describe("Zod array constraints", () => {
   it("generates .max() for maxItems on arrays", async () => {
     const output = await emitZodFile(
       `
-      @data("Config")
       model Config {
         @maxItems(10) tags: string[];
       }
@@ -179,7 +167,6 @@ describe("Zod array constraints", () => {
   it("preserves zero maxItems constraints", async () => {
     const output = await emitZodFile(
       `
-      @data("Config")
       model Config {
         @maxItems(0) tags: string[];
       }
@@ -195,7 +182,6 @@ describe("Zod optional and nullable", () => {
   it("generates .optional() for optional fields", async () => {
     const output = await emitZodFile(
       `
-      @data("User")
       model User {
         bio?: string;
       }

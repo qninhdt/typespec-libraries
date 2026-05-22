@@ -93,7 +93,6 @@ export {
   isIgnored,
   // Data / form
   isData,
-  getDataLabel,
   getTitle,
   getPlaceholder,
   getInputType,
@@ -103,6 +102,12 @@ export {
   isEnum,
   getEnumMembers,
   getPropertyEnum,
+  // Polymorphic / index-using / goType / refine
+  getPolymorphicConfig,
+  isPolymorphicProperty,
+  getIndexUsing,
+  getGoType,
+  getRefines,
 } from "./state-accessors.js";
 
 export type {
@@ -111,6 +116,10 @@ export type {
   ForeignKeyConfig,
   PrecisionInfo,
   EnumMemberInfo,
+  PolymorphicConfig,
+  IndexMethod,
+  GoTypeSpec,
+  RefineSpec,
 } from "./state-accessors.js";
 
 export {
@@ -144,18 +153,13 @@ export type { ResolvedRelation, ManyToManyAssociation } from "./relations.js";
 
 import type { Model, Program, ModelProperty, Scalar } from "@typespec/compiler";
 import { getCustomScalarName } from "./scalar-resolution.js";
-import {
-  getInputType,
-  getTypeFullName,
-  isData,
-  getDataLabel,
-} from "./state-accessors.js";
+import { getInputType, getTypeFullName, isData } from "./state-accessors.js";
 import { collectOrmManagedModels } from "./collectors.js";
 
 export function collectDataModels(program: Program): { model: Model; label: string }[] {
   return collectOrmManagedModels(program)
     .filter((model) => isData(program, model))
-    .map((model) => ({ model, label: getDataLabel(program, model) ?? model.name }))
+    .map((model) => ({ model, label: model.name }))
     .sort((a, b) =>
       getTypeFullName(program, a.model).localeCompare(getTypeFullName(program, b.model)),
     );

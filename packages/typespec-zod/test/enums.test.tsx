@@ -10,7 +10,6 @@ describe("Zod enum generation", () => {
         inactive: "inactive",
       }
 
-      @data("Status form")
       model StatusForm {
         status: Status;
       }
@@ -32,7 +31,6 @@ describe("Zod enum generation", () => {
         inactive: "inactive",
       }
 
-      @data("Form")
       model StatusForm {
         status?: Status;
       }
@@ -54,7 +52,6 @@ describe("Zod enum generation", () => {
         inactive: 2,
       }
 
-      @data("Status form")
       model StatusForm {
         status: Status;
       }
@@ -70,7 +67,6 @@ describe("Zod literal generation", () => {
   it("generates z.literal() for string literals", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         mode: "read" | "write";
       }
@@ -84,7 +80,6 @@ describe("Zod literal generation", () => {
   it("generates z.literal() for number literals", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         value: 1 | 2 | 3;
       }
@@ -98,7 +93,6 @@ describe("Zod literal generation", () => {
   it("generates z.literal() for boolean literals", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         flag: true | false;
       }

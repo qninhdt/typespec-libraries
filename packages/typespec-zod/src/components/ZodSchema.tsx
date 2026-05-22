@@ -6,6 +6,7 @@ import { Children, refkey } from "@alloy-js/core";
 import { MemberExpression } from "@alloy-js/typescript";
 import { Type } from "@typespec/compiler";
 import { useTsp } from "@typespec/emitter-framework";
+import { getRefines } from "@qninhdt/typespec-orm";
 import { callPart, refkeySym, shouldReference } from "../utils.js";
 import { zodBaseSchemaParts } from "../zod-base-schema.js";
 import { zodConstraintsParts } from "../zod-constraints.js";
@@ -31,12 +32,23 @@ export function ZodSchema(props: ZodSchemaProps): Children {
       brandEnabled && props.type.kind === "Scalar"
         ? [callPart("brand", JSON.stringify(props.type.name))]
         : [];
+    const refineParts =
+      props.type.kind === "Model"
+        ? getRefines($.program, props.type).map((r) =>
+            callPart(
+              "refine",
+              `(data) => ${r.expression}`,
+              `{ message: ${JSON.stringify(r.name)} }`,
+            ),
+          )
+        : [];
     return (
       <MemberExpression>
         {zodBaseSchemaParts(props.type)}
         {zodConstraintsParts(props.type)}
         {zodDescriptionParts(props.type)}
         {brandParts}
+        {refineParts}
       </MemberExpression>
     );
   }

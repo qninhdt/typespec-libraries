@@ -2,7 +2,7 @@ module github.com/example/game-platform/backend
 
 go 1.24
 
-toolchain go1.24.1
+toolchain go1.24.0
 
 require (
 	entgo.io/ent v0.14.6

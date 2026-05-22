@@ -6,7 +6,6 @@ describe("P1 Group E — expanded *Meta shape", () => {
   it("emits min/max/description/regex when corresponding decorators are present", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         @doc("Age in years")
         @minValue(0)
@@ -35,7 +34,6 @@ describe("P1 Group E — expanded *Meta shape", () => {
   it('emits secret: true and multiline: true from @secret and @format("textarea")', async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         @secret
         token: string;
@@ -57,7 +55,6 @@ describe("P1 Group E — expanded *Meta shape", () => {
   it("marks optional fields as required: false", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         @title("Bio")
         bio?: string;
@@ -73,7 +70,6 @@ describe("P1 Group E — expanded *Meta shape", () => {
   it("omits keys whose decorators are absent", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         @title("Name") name: string;
       }
@@ -95,13 +91,11 @@ describe("P1 Group E — expanded *Meta shape", () => {
 describe("P1 Group F — typed FormFieldMeta contract", () => {
   it("emits the FormFieldMeta interface exactly once in _meta.ts", async () => {
     const output = await renderZodOutput(`
-      @data("Form")
       model A {
         @title("X")
         x: string;
       }
 
-      @data("Form")
       model B {
         @title("Y")
         y: string;
@@ -117,7 +111,6 @@ describe("P1 Group F — typed FormFieldMeta contract", () => {
   it("types the per-model Meta object as Record<string, FormFieldMeta>", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model A {
         @title("X")
         x: string;

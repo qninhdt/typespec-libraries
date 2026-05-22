@@ -14,6 +14,7 @@ import {
   getDefaultValue,
   getDoc,
   getForeignKeyConfig,
+  getIndexUsing,
   getOnDelete,
   getOnUpdate,
   getOwner,
@@ -139,7 +140,12 @@ export function buildConstraintArgs(args: {
   }
 
   const fk = getForeignKeyConfig(program, prop);
-  if (isIndex(program, prop) || fk || hasRelationFk) {
+  // When @indexUsing(<method>) is set on a column we emit a table-level
+  // `Index(..., postgresql_using=<method>)` from PyModel. Suppress the
+  // shortcut `index=True` here so SQLAlchemy does not also create a
+  // default-method index on the same column.
+  const usingMethod = getIndexUsing(program, prop);
+  if ((isIndex(program, prop) || fk || hasRelationFk) && !usingMethod) {
     flags.needsField.value = true;
     state.fieldArgs.push("index=True");
   }

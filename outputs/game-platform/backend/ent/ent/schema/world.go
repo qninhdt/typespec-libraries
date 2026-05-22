@@ -5,6 +5,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -44,10 +45,10 @@ func (World) Fields() []ent.Field {
 			Unique(),
 		field.Text("prompt").
 			Comment("System prompt used to guide AI generation within the world."),
-		field.Enum("visibility").Values("private", "unlisted", "public").
+		field.Enum("visibility").Values("private", "unlisted", "public").SchemaType(map[string]string{dialect.Postgres: "world_visibility"}).Annotations(entsql.Annotation{Type: "world_visibility"}).
 			Default("private").
 			Comment("Who can discover and join this world."),
-		field.Enum("safety_rating").Values("general", "teen", "mature").
+		field.Enum("safety_rating").Values("general", "teen", "mature").SchemaType(map[string]string{dialect.Postgres: "safety_rating"}).Annotations(entsql.Annotation{Type: "safety_rating"}).
 			Default("teen").
 			Comment("Content safety classification for moderation and parental controls."),
 		field.JSON("settings", map[string]any{}).

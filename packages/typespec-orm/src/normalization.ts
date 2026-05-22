@@ -5,14 +5,7 @@ import {
   type Program,
   type Type,
 } from "@typespec/compiler";
-import {
-  DataKey,
-  ORM_NAMESPACE,
-  TableKey,
-  TableMixinKey,
-  ScopesKey,
-  reportDiagnostic,
-} from "./lib.js";
+import { ORM_NAMESPACE, TableKey, TableMixinKey, ScopesKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
   collectOrmManagedModels,
@@ -20,7 +13,6 @@ import {
   findVersionProperty,
   getAuditRole,
   getColumnName,
-  getDataLabel,
   getEnumMembers,
   getManyToMany,
   getMappedBy,
@@ -230,7 +222,7 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
         MODEL_KIND_PRIORITY[kind] > MODEL_KIND_PRIORITY[existing.kind]
       ) {
         const tableName = kind === "table" ? getTableName(program, model) : undefined;
-        const label = kind === "data" ? (getDataLabel(program, model) ?? model.name) : undefined;
+        const label = kind === "data" ? model.name : undefined;
         entities.set(model, {
           ...existing,
           kind,
@@ -271,7 +263,7 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
       namespaceDir: namespacePath.join("/"),
       packageName,
       tableName: kind === "table" ? getTableName(program, model) : undefined,
-      label: kind === "data" ? (getDataLabel(program, model) ?? model.name) : undefined,
+      label: kind === "data" ? model.name : undefined,
       mixins: collectMixinSources(program, model, kind),
       dependencies: [],
       schema: metadata.schema,
@@ -285,11 +277,6 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
   for (const [node] of program.stateMap(TableKey)) {
     if ((node as { kind?: string }).kind === "Model") {
       register(node as Model, "table");
-    }
-  }
-  for (const [node] of program.stateMap(DataKey)) {
-    if ((node as { kind?: string }).kind === "Model") {
-      register(node as Model, "data");
     }
   }
   for (const [node] of program.stateMap(TableMixinKey)) {

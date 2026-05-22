@@ -359,11 +359,6 @@ extern dec classification(target: Model | ModelProperty, level: valueof string);
 // ─── Data / Form Decorators ───────────────────────────────────────────────────
 
 /**
- * Marks a model as a data transfer object (DTO) and optionally specifies a label for the model. This can be used to generate forms or API documentation with a human-readable name for the model.
- */
-extern dec data(target: Model, label?: valueof string);
-
-/**
  * Sets a human-readable title for a form field. This can be used to generate forms or API documentation with a human-readable name for the field. By default, the title is the same as the property name, but it can be overridden with `@map`.
  */
 extern dec title(target: ModelProperty, text: valueof string);
@@ -378,3 +373,75 @@ extern dec placeholder(target: ModelProperty, text: valueof string);
  * Must target a Scalar - use `@@inputType(Model.field::type, ...)` for lookup-typed properties.
  */
 extern dec inputType(target: Scalar, htmlType: valueof string);
+
+// ─── Polymorphic relations ───────────────────────────────────────────────────
+
+/**
+ * Marks a string column as the discriminator of a polymorphic relation. Emits
+ * a CHECK constraint enumerating `allowedTypes` and (when `idColumn` is given)
+ * adds a compound index over (typeColumn, idColumn).
+ *
+ * Polymorphic relations cannot have real foreign keys because the target
+ * table varies by row. This decorator only formalizes the constraint /
+ * indexing pattern — query-time integrity is the application's job.
+ *
+ * Example:
+ *   @table model Workspace {
+ *     @key id: uuid;
+ *     @polymorphic(#["user", "service_account"], "ownerPrincipalId")
+ *     ownerPrincipalType: string;
+ *     ownerPrincipalId: uuid;
+ *   }
+ */
+extern dec polymorphic(
+  target: ModelProperty,
+  allowedTypes: valueof string[],
+  idColumn?: valueof string
+);
+
+// ─── Index storage type ──────────────────────────────────────────────────────
+
+/**
+ * Specifies the PostgreSQL index method for a column-level index. The most
+ * common use is `@gin` on a `tsvector` column for full-text search. Must be
+ * combined with `@index` (or applied to a `@key`/`@unique` column).
+ *
+ * Supported methods: `btree` (default — implicit), `gin`, `gist`, `brin`,
+ * `hash`, `spgist`. Emitters that cannot model the index method drop it with
+ * a warning.
+ */
+extern dec indexUsing(
+  target: ModelProperty,
+  method: valueof "btree" | "gin" | "gist" | "brin" | "hash" | "spgist"
+);
+
+// ─── Custom Go type for JSONB / opaque columns (Ent-only) ────────────────────
+
+/**
+ * Specifies a custom Go type for a column. Primarily used with `jsonb`
+ * columns to escape weak `map[string]any{}` typing. The argument must be a
+ * fully-qualified import path + symbol name, separated by a dot and using
+ * the form `import/path.TypeName`. The Ent emitter generates
+ * `field.JSON("col", &MyType{})` and adds the import. Other emitters
+ * ignore this decorator.
+ */
+extern dec goType(target: ModelProperty, importPathAndType: valueof string);
+
+// ─── Custom JS predicate refinement (Zod-only) ───────────────────────────────
+
+/**
+ * Adds a JavaScript predicate refinement to the Zod schema for the
+ * containing model. The expression is a JS source fragment evaluated against
+ * a `data` parameter (the parsed object). The Zod emitter emits
+ * `.refine((data) => <expression>, { message: "<name>" })`. Other emitters
+ * ignore this decorator. Use it for cross-field rules that cannot be
+ * expressed as per-property constraints.
+ *
+ * Example:
+ *   `@@refine(MyForm, "passwordMatch", "data.password === data.confirmPassword")`
+ */
+extern dec refine(
+  target: Model,
+  name: valueof string,
+  expression: valueof string
+);

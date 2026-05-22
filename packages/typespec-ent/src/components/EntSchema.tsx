@@ -73,7 +73,7 @@ export function EntModelFile(props: EntModelFileProps): Children {
   const edgeLines = relations.map(({ prop, resolved }) =>
     buildEntEdge(program, prop, resolved, ctx, props.modelLookup, { onUpdateEmitRawSql }),
   );
-  const indexLines = buildEntIndexes(program, model, compositeTypeFields, indexedFields);
+  const indexLines = buildEntIndexes(program, model, compositeTypeFields, indexedFields, ctx);
   const annotationLines = buildEntAnnotations(program, model, normalizedModel, ctx);
   const mixinLines = normalizedModel.mixins.map((source) => `${source.name}{}`);
 

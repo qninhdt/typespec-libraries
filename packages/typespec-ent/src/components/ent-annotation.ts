@@ -4,8 +4,10 @@ import {
   findVersionProperty,
   getCheck,
   getColumnName,
+  getPolymorphicConfig,
   getSchemaName,
   getTableName,
+  getTypeFullName,
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
 import { goStringLiteral } from "./EntConstants.js";
@@ -29,8 +31,24 @@ export function buildEntAnnotations(
   const checks: string[] = [];
   for (const prop of model.properties.values()) {
     const check = getCheck(program, prop);
-    if (!check) continue;
-    checks.push(`${goStringLiteral(check.name)}: ${goStringLiteral(check.expression)}`);
+    if (check) {
+      checks.push(`${goStringLiteral(check.name)}: ${goStringLiteral(check.expression)}`);
+    }
+
+    // Polymorphic discriminator → synthesize a check enumerating allowed types.
+    const polymorphic = getPolymorphicConfig(program, prop);
+    if (polymorphic && polymorphic.allowedTypes.length > 0) {
+      const columnName = getColumnName(program, prop);
+      const tableName = getTableName(program, model);
+      const checkName = `${tableName}_${columnName}_polymorphic`;
+      const valuesList = polymorphic.allowedTypes
+        .map((value) => `'${escapeSqlLiteral(value)}'`)
+        .join(", ");
+      const expression = `${columnName} IN (${valuesList})`;
+      checks.push(`${goStringLiteral(checkName)}: ${goStringLiteral(expression)}`);
+      // Reference fully-qualified name for future codegraph hooks.
+      void getTypeFullName;
+    }
   }
 
   const annotationParts = [`Table: ${goStringLiteral(getTableName(program, model))}`];
@@ -61,4 +79,8 @@ export function buildEntAnnotations(
   ctx.usesEntSql = true;
   ctx.usesEntSchema = true;
   return [`entsql.Annotation{${annotationParts.join(", ")}}`, "entsql.WithComments(true)"];
+}
+
+function escapeSqlLiteral(value: string): string {
+  return value.replaceAll("'", "''");
 }

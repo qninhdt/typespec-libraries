@@ -28,7 +28,6 @@ describe("SQLModel user-defined scalar constraint deduplication", () => {
       @minLength(8) @maxLength(128)
       scalar StrongPassword extends string;
 
-      @data("Login form")
       model LoginForm {
         password: StrongPassword;
       }
@@ -65,7 +64,6 @@ describe("SQLModel user-defined scalar constraint deduplication", () => {
       @minValue(0) @maxValue(100)
       scalar Percentage extends float64;
 
-      @data("Stats form")
       model StatsForm {
         @maxValue(50) halfPercentage: Percentage;
       }
@@ -82,7 +80,6 @@ describe("SQLModel user-defined scalar constraint deduplication", () => {
       @pattern("^[A-Z]+$")
       scalar UpperCase extends string;
 
-      @data("Form")
       model Input {
         @pattern("^[A-Z]{3}$") code: UpperCase;
       }

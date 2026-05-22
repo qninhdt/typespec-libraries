@@ -41,10 +41,13 @@ export {
   VersionKey,
   AuditKey,
   TenantIdKey,
-  DataKey,
   TitleKey,
   PlaceholderKey,
   InputTypeKey,
+  PolymorphicKey,
+  IndexUsingKey,
+  GoTypeKey,
+  RefineKey,
   reportDiagnostic,
 } from "./lib.js";
 
@@ -86,10 +89,13 @@ import {
   $scope,
   $owner,
   $classification,
-  $data,
   $title,
   $placeholder,
   $inputType,
+  $polymorphic,
+  $indexUsing,
+  $goType,
+  $refine,
 } from "./decorators.js";
 
 export const $decorators = {
@@ -121,10 +127,13 @@ export const $decorators = {
     scope: $scope,
     owner: $owner,
     classification: $classification,
-    data: $data,
     title: $title,
     placeholder: $placeholder,
     inputType: $inputType,
+    polymorphic: $polymorphic,
+    indexUsing: $indexUsing,
+    goType: $goType,
+    refine: $refine,
   },
 };
 
@@ -204,12 +213,17 @@ export {
   resolveRelation,
   // Data / form helpers
   isData,
-  getDataLabel,
   getTitle,
   collectDataModels,
   getPlaceholder,
   getInputType,
   getInputTypeForProperty,
+  // Polymorphic / index-using / goType / refine
+  getPolymorphicConfig,
+  isPolymorphicProperty,
+  getIndexUsing,
+  getGoType,
+  getRefines,
   // Extended validation helpers
   isKey,
   isArrayType,

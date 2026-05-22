@@ -17,7 +17,6 @@ describe("SQLModel __init__.py generation", () => {
         title: string;
       }
 
-      @data("Form")
       model CreateUserForm {
         name: string;
       }

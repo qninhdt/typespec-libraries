@@ -291,10 +291,8 @@ describe("P2 polish — #scope filtering across @table and data models", () => {
         model Internal { @key id: uuid; secret: string; }
 
         @scope("frontend")
-        @data("Public Form")
         model PublicForm { name: string; }
 
-        @data("Internal Form")
         model InternalForm { secret: string; }
       }
     `);

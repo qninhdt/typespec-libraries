@@ -43,6 +43,9 @@ import {
   getCompositeFields,
   getDefaultExpression,
   getTypeFullName,
+  getPolymorphicConfig,
+  getGoType,
+  getIndexUsing,
   resolveDbType,
   camelToSnake,
   collectTableModels,
@@ -104,6 +107,10 @@ export function $onValidate(program: Program): void {
 
   // 5b. PG reserved-word identifier check
   validatePgReservedIdentifiers(program, tableModels);
+
+  // 5c. New decorators: @polymorphic, @goType, @indexUsing
+  validatePolymorphicProperties(program, tableModels);
+  validateGoTypeAndIndexUsing(program, tableModels);
 
   // 6. Namespace, mixin, and dependency-shape validations shared with emitters
   normalizeOrmGraph(program);
@@ -1058,4 +1065,68 @@ function reportOneToOneMissingUnique(
       localField,
     },
   });
+}
+
+// ─── @polymorphic / @goType / @indexUsing validation ────────────────────────
+
+function validatePolymorphicProperties(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  for (const { model } of tableModels) {
+    const columnNames = new Set<string>();
+    for (const prop of walkPropertiesInherited(model)) {
+      if (!isIgnored(program, prop)) {
+        columnNames.add(getColumnName(program, prop));
+      }
+    }
+
+    for (const prop of walkPropertiesInherited(model)) {
+      const config = getPolymorphicConfig(program, prop);
+      if (!config) continue;
+
+      if (config.allowedTypes.length === 0) {
+        reportDiagnostic(program, {
+          code: "polymorphic-empty-allowed-types",
+          target: prop,
+          format: { propName: prop.name },
+        });
+      }
+
+      if (config.idColumn && !columnNames.has(config.idColumn)) {
+        reportDiagnostic(program, {
+          code: "polymorphic-column-conflict",
+          target: prop,
+          format: { propName: prop.name, columnName: config.idColumn },
+        });
+      }
+    }
+  }
+}
+
+function validateGoTypeAndIndexUsing(
+  program: Program,
+  tableModels: { model: Model; tableName: string }[],
+): void {
+  for (const { model } of tableModels) {
+    for (const prop of walkPropertiesInherited(model)) {
+      const goType = getGoType(program, prop);
+      if (goType && (!goType.importPath || !goType.typeName)) {
+        reportDiagnostic(program, {
+          code: "go-type-malformed",
+          target: prop,
+          format: { propName: prop.name, value: goType.raw },
+        });
+      }
+
+      const method = getIndexUsing(program, prop);
+      if (method && !isIndex(program, prop) && !isUnique(program, prop) && !isKey(program, prop)) {
+        reportDiagnostic(program, {
+          code: "index-using-on-non-index",
+          target: prop,
+          format: { propName: prop.name, method },
+        });
+      }
+    }
+  }
 }

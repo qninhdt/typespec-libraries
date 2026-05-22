@@ -37,14 +37,16 @@ func (Subscription) Mixin() []ent.Mixin {
 
 func (Subscription) Fields() []ent.Field {
 	return []ent.Field{
-		field.Enum("plan").Values("free", "basic", "premium", "enterprise").
+		field.Enum("plan").Values("free", "basic", "premium", "enterprise").SchemaType(map[string]string{dialect.Postgres: "subscription_plan"}).Annotations(entsql.Annotation{Type: "subscription_plan"}).
 			Comment("Selected plan tier."),
 		field.Other("monthly_price", decimal.Decimal{}).
 			SchemaType(map[string]string{dialect.Postgres: "numeric(10,2)"}).
 			Comment("Monthly price stored as NUMERIC(10,2) to avoid floating-point drift."),
 		field.Time("start_date").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("Start date of the billing period."),
 		field.Time("end_date").
+			SchemaType(map[string]string{dialect.Postgres: "timestamptz"}).
 			Comment("Optional end date - null means the subscription is open-ended.").
 			Optional().
 			Nillable(),

@@ -5,7 +5,6 @@ describe("P1 Group C — nullable vs optional handling", () => {
   it("emits .optional().nullable() for `field?: string | null`", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         field?: string | null;
       }
@@ -21,7 +20,6 @@ describe("P1 Group C — nullable vs optional handling", () => {
   it("emits .nullable() but NOT .optional() for `field: string | null`", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         field: string | null;
       }
@@ -37,7 +35,6 @@ describe("P1 Group C — nullable vs optional handling", () => {
   it("emits no .nullable() for plain non-null field", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model F {
         field: string;
       }
@@ -57,7 +54,6 @@ describe("P1 Group D — branded-scalars opt-in", () => {
       @minLength(4)
       scalar Code extends string;
 
-      @data("Form")
       model F { code: Code; }
     `,
       "_scalars.ts",
@@ -72,7 +68,6 @@ describe("P1 Group D — branded-scalars opt-in", () => {
       @minLength(4)
       scalar Code extends string;
 
-      @data("Form")
       model F { code: Code; }
     `,
       "_scalars.ts",

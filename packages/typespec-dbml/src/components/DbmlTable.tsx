@@ -7,6 +7,7 @@ import {
   classifyProperties,
   collectCompositeTypeFields,
   getCompositeFields,
+  getPolymorphicConfig,
   isKey,
   isUnique,
   isIndex,
@@ -76,6 +77,16 @@ export function DbmlTable(props: DbmlTableProps): string {
         indexes.push(`    ${colName} [unique]`);
       }
     }
+  }
+
+  // Polymorphic discriminator → compound (type, id) index, mirroring Ent / SQLModel.
+  for (const { prop } of regularProps) {
+    const polymorphic = getPolymorphicConfig(program, prop);
+    if (!polymorphic?.idColumn) continue;
+    const typeColumn = getColumnName(program, prop);
+    indexes.push(
+      `    (${quoteDbmlIdentifier(typeColumn)}, ${quoteDbmlIdentifier(polymorphic.idColumn)}) [name: '${tableName}_${typeColumn}_${polymorphic.idColumn}_idx']`,
+    );
   }
 
   const schemaName = getSchemaName(program, model);

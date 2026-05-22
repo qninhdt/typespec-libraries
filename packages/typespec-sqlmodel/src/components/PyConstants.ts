@@ -14,6 +14,13 @@ export const NEEDS_SA_COLUMN = new Set([
   "bytes",
   "decimal",
   "uuid",
+  "tsvector",
+  "tsquery",
+  "citext",
+  "ipv4",
+  "ipv6",
+  "cidr",
+  "inet",
 ]);
 
 export interface PythonTypeMapping {
@@ -144,6 +151,48 @@ export const PYTHON_TYPE_MAP: Record<string, PythonTypeMapping> = {
     saColumnType: "JSONB",
     imports: ["typing.Any"],
     saImports: ["sqlalchemy.dialects.postgresql.JSONB"],
+  },
+  tsvector: {
+    pyType: "str",
+    saColumnType: "TSVECTOR",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.TSVECTOR"],
+  },
+  tsquery: {
+    pyType: "str",
+    saColumnType: "TSVECTOR",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.TSVECTOR"],
+  },
+  citext: {
+    pyType: "str",
+    saColumnType: "CITEXT",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.CITEXT"],
+  },
+  ipv4: {
+    pyType: "str",
+    saColumnType: "INET",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.INET"],
+  },
+  ipv6: {
+    pyType: "str",
+    saColumnType: "INET",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.INET"],
+  },
+  inet: {
+    pyType: "str",
+    saColumnType: "INET",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.INET"],
+  },
+  cidr: {
+    pyType: "str",
+    saColumnType: "CIDR",
+    imports: [],
+    saImports: ["sqlalchemy.dialects.postgresql.CIDR"],
   },
 };
 
