@@ -6,30 +6,16 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import {
-  walkPropertiesInherited,
-  type Model,
-  type ModelProperty,
-  type Program,
-  type Scalar,
-} from "@typespec/compiler";
+import { type Model, type ModelProperty, type Program, type Scalar } from "@typespec/compiler";
 import {
   getColumnName,
-  getCheck,
   getCompositeFields,
   getDoc,
-  getIndexUsing,
   classifyProperties,
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
   camelToSnake,
   getColumnName as getOrmColumnName,
-  getPolymorphicConfig,
-  getSchemaName,
-  getTableName,
-  isIndex,
-  isKey,
-  isUnique,
   findVersionProperty,
   type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
@@ -40,13 +26,19 @@ import {
   buildPythonImportBlock,
   pythonStringLiteral,
   pythonTripleQuotedString,
-  toPythonRelativeImport,
 } from "./PyConstants.js";
 import { generateField, generateIgnoredField } from "./PyField.jsx";
 import type { ResolvedForeignKeyFieldInfo } from "./PyField.jsx";
 import { generateRelationField, type MappedByIndex } from "./PyRelationField.jsx";
 import { collectAliasableCustomScalars } from "./py-field-utils.js";
 import { PyModelBuilder } from "./py-model-builder.js";
+import {
+  buildRuntimeImportBlock,
+  buildSourceModelImportBlock,
+  buildTypeCheckingBlock,
+  dedupeImportNames,
+} from "./py-model-imports.js";
+import { addEnumImports, buildTableArgEntries } from "./py-model-table-args.js";
 import type { SqlModelEmitterOptions } from "../lib.js";
 
 export interface PyModelFileProps {
@@ -213,131 +205,6 @@ function addRegularFields(context: RegularFieldContext): void {
   }
 }
 
-function buildTableArgEntries(
-  program: Program,
-  model: Model,
-  compositeTypeFields: ReturnType<typeof collectCompositeTypeFields>,
-  saImports: Set<string>,
-): string[] {
-  const tableArgEntries = buildCompositeTableArgEntries(compositeTypeFields, saImports);
-  addCheckConstraints(program, model, saImports, tableArgEntries);
-  addIndexUsingEntries(program, model, saImports, tableArgEntries);
-  const schemaName = getSchemaName(program, model);
-  if (schemaName) {
-    tableArgEntries.push(
-      `${FOUR_SPACES}${FOUR_SPACES}{"schema": ${pythonStringLiteral(schemaName)}}`,
-    );
-  }
-  return tableArgEntries;
-}
-
-function buildCompositeTableArgEntries(
-  compositeTypeFields: ReturnType<typeof collectCompositeTypeFields>,
-  saImports: Set<string>,
-): string[] {
-  const tableArgEntries: string[] = [];
-  let hasIndex = false;
-  let hasUniqueConstraint = false;
-
-  for (const ct of compositeTypeFields) {
-    const cols = ct.columns.map((column) => pythonStringLiteral(column)).join(", ");
-    if (ct.isPrimary || ct.isUnique) {
-      hasUniqueConstraint = true;
-      tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name=${pythonStringLiteral(ct.name)})`,
-      );
-      continue;
-    }
-
-    hasIndex = true;
-    tableArgEntries.push(
-      `${FOUR_SPACES}${FOUR_SPACES}Index(${pythonStringLiteral(ct.name)}, ${cols})`,
-    );
-  }
-
-  if (hasIndex) saImports.add("sqlalchemy.Index");
-  if (hasUniqueConstraint) saImports.add("sqlalchemy.UniqueConstraint");
-  return tableArgEntries;
-}
-
-function addIndexUsingEntries(
-  program: Program,
-  model: Model,
-  saImports: Set<string>,
-  tableArgEntries: string[],
-): void {
-  const tableName = getTableName(program, model);
-  for (const prop of walkPropertiesInherited(model)) {
-    const method = getIndexUsing(program, prop);
-    if (!method) continue;
-    if (!isIndex(program, prop) && !isUnique(program, prop) && !isKey(program, prop)) continue;
-    const columnName = getColumnName(program, prop);
-    const idxName = `${tableName}_${columnName}_${method}_idx`;
-    saImports.add("sqlalchemy.Index");
-    const args = [
-      JSON.stringify(idxName),
-      JSON.stringify(columnName),
-      `postgresql_using=${JSON.stringify(method)}`,
-    ];
-    if (isUnique(program, prop)) {
-      args.push("unique=True");
-    }
-    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index(${args.join(", ")})`);
-  }
-}
-
-function addCheckConstraints(
-  program: Program,
-  model: Model,
-  saImports: Set<string>,
-  tableArgEntries: string[],
-): void {
-  for (const prop of walkPropertiesInherited(model)) {
-    const check = getCheck(program, prop);
-    if (check) {
-      saImports.add("sqlalchemy.CheckConstraint");
-      tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(check.expression)}, name=${JSON.stringify(check.name)})`,
-      );
-    }
-
-    const polymorphic = getPolymorphicConfig(program, prop);
-    if (polymorphic && polymorphic.allowedTypes.length > 0) {
-      const columnName = getColumnName(program, prop);
-      const tableName = getTableName(program, model);
-      const checkName = `${tableName}_${columnName}_polymorphic`;
-      const valuesList = polymorphic.allowedTypes
-        .map((value) => `'${value.replaceAll("'", "''")}'`)
-        .join(", ");
-      const expression = `${columnName} IN (${valuesList})`;
-      saImports.add("sqlalchemy.CheckConstraint");
-      tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(expression)}, name=${JSON.stringify(checkName)})`,
-      );
-      if (polymorphic.idColumn) {
-        saImports.add("sqlalchemy.Index");
-        const idxName = `${tableName}_${columnName}_${polymorphic.idColumn}_idx`;
-        tableArgEntries.push(
-          `${FOUR_SPACES}${FOUR_SPACES}Index(${JSON.stringify(idxName)}, ${JSON.stringify(columnName)}, ${JSON.stringify(polymorphic.idColumn)})`,
-        );
-      }
-    }
-  }
-}
-
-function addEnumImports(
-  enumTypes: ReturnType<typeof classifyProperties>["enumTypes"],
-  stdImports: Set<string>,
-  saImports: Set<string>,
-): void {
-  if (enumTypes.size === 0) {
-    return;
-  }
-
-  stdImports.add("enum.Enum");
-  saImports.add("sqlalchemy.Enum as SAEnum");
-}
-
 function buildPyModelCode(context: PyModelRenderContext): string {
   const {
     program,
@@ -390,10 +257,6 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     stdImports,
   );
   return code;
-}
-
-function dedupeImportNames(names: readonly string[]): string[] {
-  return [...new Set(names)].sort((left, right) => left.localeCompare(right));
 }
 
 function buildEnumClasses(enumTypes: ReturnType<typeof classifyProperties>["enumTypes"]): string {
@@ -503,56 +366,4 @@ function buildForeignKeyInfoMap(
   }
 
   return fkInfoMap;
-}
-
-function buildRuntimeImportBlock(runtimeImports?: Map<string, Set<string>>): string {
-  if (!runtimeImports || runtimeImports.size === 0) {
-    return "";
-  }
-
-  let code = "\n";
-  for (const [moduleName, names] of [...runtimeImports.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  )) {
-    code += `from ${moduleName} import ${[...names].sort((a, b) => a.localeCompare(b)).join(", ")}\n`;
-  }
-  return code;
-}
-
-function buildSourceModelImportBlock(
-  sourceModels: Model[],
-  modelLookup: Map<Model, NormalizedOrmModel>,
-  namespacePath: string[],
-): string {
-  if (sourceModels.length === 0) {
-    return "";
-  }
-
-  let code = "";
-  for (const sourceModel of sourceModels) {
-    const sourceInfo = modelLookup.get(sourceModel);
-    if (!sourceInfo) continue;
-    code += `from ${toPythonRelativeImport(namespacePath, sourceInfo.namespacePath, camelToSnake(sourceModel.name))} import ${sourceModel.name}\n`;
-  }
-  return code ? `${code}\n` : "";
-}
-
-function buildTypeCheckingBlock(
-  relationTargetModels: Set<Model>,
-  modelLookup: Map<Model, NormalizedOrmModel>,
-  namespacePath: string[],
-): string {
-  if (relationTargetModels.size === 0) {
-    return "";
-  }
-
-  let code = "\nif TYPE_CHECKING:\n";
-  for (const targetModel of [...relationTargetModels].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  )) {
-    const targetInfo = modelLookup.get(targetModel);
-    if (!targetInfo) continue;
-    code += `    from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
-  }
-  return code;
 }
