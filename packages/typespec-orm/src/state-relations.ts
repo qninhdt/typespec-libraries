@@ -115,6 +115,8 @@ export function findVersionProperty(program: Program, model: Model): ModelProper
 export interface PolymorphicConfig {
   allowedTypes: string[];
   idColumn?: string;
+  /** Default true. When false, emitters MUST NOT emit a CHECK constraint. */
+  check: boolean;
 }
 
 export function getPolymorphicConfig(
@@ -126,6 +128,7 @@ export function getPolymorphicConfig(
   return {
     allowedTypes: [...value.allowedTypes],
     idColumn: value.idColumn,
+    check: value.check ?? true,
   };
 }
 

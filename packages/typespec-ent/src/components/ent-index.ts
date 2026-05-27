@@ -1,5 +1,6 @@
 import type { Model, Program } from "@typespec/compiler";
 import {
+  camelToSnake,
   getColumnName,
   getIndexUsing,
   getPartialIndex,
@@ -28,12 +29,14 @@ export function buildEntIndexes(
     const columnName = getColumnName(program, prop);
 
     // Polymorphic discriminator: emit a compound (type, id) index when an
-    // idColumn is configured. The simple per-column index is also emitted
-    // below if @index is applied.
+    // idColumn is configured. The idColumn is provided as a TypeSpec property
+    // identifier (camelCase); snake_case it so it lines up with the actual
+    // database column.
     const polymorphic = getPolymorphicConfig(program, prop);
     if (polymorphic?.idColumn) {
+      const idColumnName = camelToSnake(polymorphic.idColumn);
       indexes.push(
-        `index.Fields(${goStringLiteral(columnName)}, ${goStringLiteral(polymorphic.idColumn)})`,
+        `index.Fields(${goStringLiteral(columnName)}, ${goStringLiteral(idColumnName)})`,
       );
     }
 

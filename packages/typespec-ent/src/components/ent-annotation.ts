@@ -39,7 +39,7 @@ export function buildEntAnnotations(
     }
 
     const polymorphic = getPolymorphicConfig(program, prop);
-    if (polymorphic && polymorphic.allowedTypes.length > 0) {
+    if (polymorphic && polymorphic.check && polymorphic.allowedTypes.length > 0) {
       const columnName = getColumnName(program, prop);
       const tableName = getTableName(program, model);
       const checkName = `${tableName}_${columnName}_polymorphic`;

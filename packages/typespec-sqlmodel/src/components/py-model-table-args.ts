@@ -1,5 +1,6 @@
 import { walkPropertiesInherited, type Model, type Program } from "@typespec/compiler";
 import {
+  camelToSnake,
   classifyProperties,
   collectCompositeTypeFields,
   getCheck,
@@ -150,20 +151,23 @@ function addCheckConstraints(
     if (polymorphic && polymorphic.allowedTypes.length > 0) {
       const columnName = getColumnName(program, prop);
       const tableName = getTableName(program, model);
-      const checkName = `${tableName}_${columnName}_polymorphic`;
-      const valuesList = polymorphic.allowedTypes
-        .map((value) => `'${value.replaceAll("'", "''")}'`)
-        .join(", ");
-      const expression = `${columnName} IN (${valuesList})`;
-      saImports.add("sqlalchemy.CheckConstraint");
-      tableArgEntries.push(
-        `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(expression)}, name=${JSON.stringify(checkName)})`,
-      );
+      if (polymorphic.check) {
+        const checkName = `${tableName}_${columnName}_polymorphic`;
+        const valuesList = polymorphic.allowedTypes
+          .map((value) => `'${value.replaceAll("'", "''")}'`)
+          .join(", ");
+        const expression = `${columnName} IN (${valuesList})`;
+        saImports.add("sqlalchemy.CheckConstraint");
+        tableArgEntries.push(
+          `${FOUR_SPACES}${FOUR_SPACES}CheckConstraint(${JSON.stringify(expression)}, name=${JSON.stringify(checkName)})`,
+        );
+      }
       if (polymorphic.idColumn) {
         saImports.add("sqlalchemy.Index");
-        const idxName = `${tableName}_${columnName}_${polymorphic.idColumn}_idx`;
+        const idColumnName = camelToSnake(polymorphic.idColumn);
+        const idxName = `${tableName}_${columnName}_${idColumnName}_idx`;
         tableArgEntries.push(
-          `${FOUR_SPACES}${FOUR_SPACES}Index(${JSON.stringify(idxName)}, ${JSON.stringify(columnName)}, ${JSON.stringify(polymorphic.idColumn)})`,
+          `${FOUR_SPACES}${FOUR_SPACES}Index(${JSON.stringify(idxName)}, ${JSON.stringify(columnName)}, ${JSON.stringify(idColumnName)})`,
         );
       }
     }

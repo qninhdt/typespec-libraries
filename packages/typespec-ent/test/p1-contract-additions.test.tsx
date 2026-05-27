@@ -155,6 +155,66 @@ describe("P1 contract additions (Ent)", () => {
     });
   });
 
+  // ─── Group F: @polymorphic check opt-out + idColumn snake_case ───────────
+  describe("@polymorphic", () => {
+    it("emits CHECK constraint by default", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model RefreshToken {
+          @key id: uuid;
+          @polymorphic(#["user", "service_account"], "principalId")
+          principalType: string;
+          principalId: uuid;
+        }
+      `,
+        "refresh_token.go",
+      );
+
+      expect(output).toContain(
+        "Checks: map[string]string{\"refresh_tokens_principal_type_polymorphic\": \"principal_type IN ('user', 'service_account')\"}",
+      );
+    });
+
+    it("suppresses CHECK constraint when check: false", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model RefreshToken {
+          @key id: uuid;
+          @polymorphic(#["user", "service_account"], "principalId", false)
+          principalType: string;
+          principalId: uuid;
+        }
+      `,
+        "refresh_token.go",
+      );
+
+      expect(output).not.toContain("Checks:");
+      expect(output).not.toContain("polymorphic");
+      // Compound index still emitted.
+      expect(output).toContain('index.Fields("principal_type", "principal_id")');
+    });
+
+    it("snake_cases idColumn before emitting compound index", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model RefreshToken {
+          @key id: uuid;
+          @polymorphic(#["user", "service_account"], "principalId")
+          principalType: string;
+          principalId: uuid;
+        }
+      `,
+        "refresh_token.go",
+      );
+
+      expect(output).toContain('index.Fields("principal_type", "principal_id")');
+      expect(output).not.toContain("principalId");
+    });
+  });
+
   // ─── Group E: @schema flows into atlas.hcl ────────────────────────────────
   describe("@schema flows into atlas.hcl", () => {
     async function runEmitToDir(code: string) {

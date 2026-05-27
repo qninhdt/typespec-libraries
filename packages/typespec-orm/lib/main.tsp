@@ -379,6 +379,14 @@ extern dec inputType(target: Scalar, htmlType: valueof string);
  * table varies by row. This decorator only formalizes the constraint /
  * indexing pattern — query-time integrity is the application's job.
  *
+ * `idColumn` may be passed as a TypeSpec property identifier (camelCase); it
+ * is snake_cased at emit time to match the column-naming convention.
+ *
+ * `check` defaults to `true`. Pass `false` to suppress CHECK emission while
+ * keeping the compound index — useful when the discriminator's allowed-values
+ * set is open-ended (e.g. future principal types) and a hard CHECK would
+ * block roll-forward.
+ *
  * Example:
  *   @table model Workspace {
  *     @key id: uuid;
@@ -386,11 +394,16 @@ extern dec inputType(target: Scalar, htmlType: valueof string);
  *     ownerPrincipalType: string;
  *     ownerPrincipalId: uuid;
  *   }
+ *
+ *   // Same shape, no CHECK constraint:
+ *   @polymorphic(#["user", "service_account"], "principalId", false)
+ *   principalType: string;
  */
 extern dec polymorphic(
   target: ModelProperty,
   allowedTypes: valueof string[],
-  idColumn?: valueof string
+  idColumn?: valueof string,
+  check?: valueof boolean
 );
 
 // ─── Index storage type ──────────────────────────────────────────────────────

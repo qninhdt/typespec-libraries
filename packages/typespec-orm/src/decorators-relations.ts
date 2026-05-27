@@ -48,22 +48,27 @@ export function $onUpdate(context: DecoratorContext, target: ModelProperty, acti
 export interface PolymorphicConfig {
   allowedTypes: string[];
   idColumn?: string;
+  /** Default true. When false, emitters MUST NOT emit a CHECK constraint. */
+  check: boolean;
 }
 
 /**
  * Marks a string column as the discriminator of a polymorphic relation. The
  * column itself is preserved verbatim; emitters add a CHECK constraint over
  * the allowed type values and (when `idColumn` is supplied) an index over
- * the (type, id) pair.
+ * the (type, id) pair. Pass `check: false` to suppress the CHECK constraint
+ * (e.g. when the allowed-values set is roll-forward extensible).
  */
 export function $polymorphic(
   context: DecoratorContext,
   target: ModelProperty,
   allowedTypes: string[],
   idColumn?: string,
+  check?: boolean,
 ): void {
   context.program.stateMap(PolymorphicKey).set(target, {
     allowedTypes: [...allowedTypes],
     idColumn: idColumn === "" ? undefined : idColumn,
+    check: check ?? true,
   });
 }
