@@ -452,6 +452,30 @@ extern dec partialIndex(target: ModelProperty, predicate: valueof string);
  */
 extern dec goType(target: ModelProperty, importPathAndType: valueof string);
 
+// ─── Caller-assigned values (suppress emitter-injected defaults) ─────────────
+
+/**
+ * Marks a property as caller-assigned: emitters MUST NOT inject a default for
+ * it. The canonical case is `@key uuid` columns whose value comes from the
+ * application (e.g. user_id from a JWT subject claim). Without `@noDefault`,
+ * the Ent emitter would auto-attach `Default(uuid.New)`, overwriting the
+ * caller-supplied value during inserts.
+ *
+ * Combines with `@key`, `@unique`, or any plain column. Has no effect when
+ * the property carries an explicit TypeSpec literal default or
+ * `@defaultExpression` — those win, and there is no auto-default to suppress.
+ *
+ * Example:
+ *   @table model UserProfile {
+ *     // Caller assigns this from the JWT subject; emitter must not auto-default.
+ *     @key
+ *     @noDefault
+ *     userId: uuid;
+ *     displayName?: string;
+ *   }
+ */
+extern dec noDefault(target: ModelProperty);
+
 // ─── Custom JS predicate refinement (Zod-only) ───────────────────────────────
 
 /**

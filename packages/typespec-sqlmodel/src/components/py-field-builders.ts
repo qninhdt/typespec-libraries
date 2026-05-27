@@ -24,6 +24,7 @@ import {
   isAutoUpdateTime,
   isIndex,
   isKey,
+  isNoDefault,
   isSoftDelete,
   isUnique,
   NUMERIC_TYPES,
@@ -81,7 +82,7 @@ export function buildPkArgs(
   const isPk = isKey(program, prop);
   if (!isPk) return false;
   flags.needsField.value = true;
-  if (dbType === "uuid") {
+  if (dbType === "uuid" && !isNoDefault(program, prop)) {
     imports.std.add("uuid.uuid4");
     state.fieldArgs.push("default_factory=uuid4");
   }

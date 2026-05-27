@@ -47,6 +47,7 @@ export {
   PolymorphicKey,
   IndexUsingKey,
   GoTypeKey,
+  NoDefaultKey,
   RefineKey,
   ORM_NAMESPACE,
   reportDiagnostic,
@@ -93,6 +94,7 @@ import {
   $indexUsing,
   $partialIndex,
   $goType,
+  $noDefault,
   $refine,
 } from "./decorators.js";
 
@@ -128,6 +130,7 @@ export const $decorators = {
     indexUsing: $indexUsing,
     partialIndex: $partialIndex,
     goType: $goType,
+    noDefault: $noDefault,
     refine: $refine,
   },
 };
@@ -176,6 +179,7 @@ export {
   getScopes,
   hasScope,
   isIgnored,
+  isNoDefault,
   isEnum,
   getEnumMembers,
   getPropertyEnum,

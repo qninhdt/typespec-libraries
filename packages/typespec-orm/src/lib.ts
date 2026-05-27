@@ -71,6 +71,10 @@ export const $lib = createTypeSpecLibrary({
       description: "Maps ModelProperty → SQL predicate string for partial-index WHERE clause",
     },
     goType: { description: "Maps ModelProperty → Go custom type spec for Ent (import/path.Type)" },
+    noDefault: {
+      description:
+        "Marks a ModelProperty as caller-assigned. Suppresses emitter-injected defaults (e.g. uuid.New on @key uuid columns) so callers must always supply the value.",
+    },
     refine: {
       description: "Maps Model → array of { name, expression } for Zod .refine() emission",
     },
@@ -112,4 +116,5 @@ export const PolymorphicKey = $lib.stateKeys.polymorphic;
 export const IndexUsingKey = $lib.stateKeys.indexUsing;
 export const PartialIndexKey = $lib.stateKeys.partialIndex;
 export const GoTypeKey = $lib.stateKeys.goType;
+export const NoDefaultKey = $lib.stateKeys.noDefault;
 export const RefineKey = $lib.stateKeys.refine;

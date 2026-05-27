@@ -15,6 +15,7 @@ import {
   isAutoUpdateTime,
   isIndex,
   isKey,
+  isNoDefault,
   isSoftDelete,
   isUnique,
   resolveDbType,
@@ -144,7 +145,7 @@ function buildCommonFieldChains(
   if (isKey(program, prop) && dbType === "uuid") {
     const hasUserDefault =
       !!getDefaultExpression(program, prop) || getDefaultValue(program, prop) !== undefined;
-    if (!hasUserDefault) {
+    if (!hasUserDefault && !isNoDefault(program, prop)) {
       chains.push("Default(uuid.New)");
     }
   }

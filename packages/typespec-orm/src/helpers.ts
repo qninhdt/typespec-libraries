@@ -87,6 +87,7 @@ export {
   hasScope,
   // Ignore
   isIgnored,
+  isNoDefault,
   // Data / form
   isData,
   getTitle,

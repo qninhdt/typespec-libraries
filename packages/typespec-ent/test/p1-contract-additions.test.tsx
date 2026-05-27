@@ -155,6 +155,46 @@ describe("P1 contract additions (Ent)", () => {
     });
   });
 
+  // ─── Group G: @noDefault ──────────────────────────────────────────────────
+  describe("@noDefault", () => {
+    it("suppresses Default(uuid.New) on @key uuid columns", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model UserProfile {
+          @key
+          @noDefault
+          userId: uuid;
+          displayName?: string;
+        }
+      `,
+        "user_profile.go",
+      );
+
+      expect(output).toContain('field.UUID("user_id", uuid.UUID{})');
+      expect(output).toContain("Immutable()");
+      expect(output).not.toContain("Default(uuid.New)");
+    });
+
+    it("does not interfere when there is no auto-default to suppress", async () => {
+      const output = await emitGoFile(
+        `
+        @table
+        model Account {
+          @key id: uuid;
+          @noDefault
+          tier: string;
+        }
+      `,
+        "account.go",
+      );
+
+      // Default(uuid.New) on PK still injected (no @noDefault on @key id).
+      expect(output).toContain("Default(uuid.New)");
+      expect(output).toContain('field.String("tier")');
+    });
+  });
+
   // ─── Group F: @polymorphic check opt-out + idColumn snake_case ───────────
   describe("@polymorphic", () => {
     it("emits CHECK constraint by default", async () => {

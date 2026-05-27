@@ -14,6 +14,7 @@ import {
   IndexUsingKey,
   PartialIndexKey,
   GoTypeKey,
+  NoDefaultKey,
 } from "./lib.js";
 
 export function $map(context: DecoratorContext, target: ModelProperty, columnName: string): void {
@@ -140,4 +141,13 @@ export function $goType(
     typeName,
     raw: importPathAndType,
   });
+}
+
+/**
+ * Marks a property as caller-assigned. Emitters MUST suppress any auto-default
+ * (e.g. `Default(uuid.New)` for `@key uuid` columns). Has no effect when the
+ * property carries an explicit default — those win on their own.
+ */
+export function $noDefault(context: DecoratorContext, target: ModelProperty): void {
+  context.program.stateMap(NoDefaultKey).set(target, true);
 }

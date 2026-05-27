@@ -25,6 +25,7 @@ export {
   $indexUsing,
   $partialIndex,
   $goType,
+  $noDefault,
 } from "./decorators-column.js";
 
 export type { GoTypeSpec } from "./decorators-column.js";

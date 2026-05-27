@@ -9,6 +9,7 @@ import {
   CheckKey,
   AutoIncrementKey,
   IgnoreKey,
+  NoDefaultKey,
 } from "./lib.js";
 import { truncatePgIdentifier } from "./identifier-policy.js";
 import { camelToSnake, deriveTableName } from "./naming.js";
@@ -119,4 +120,13 @@ export function isSoftDelete(program: Program, prop: ModelProperty): boolean {
 
 export function isIgnored(program: Program, prop: ModelProperty): boolean {
   return program.stateMap(IgnoreKey).has(prop);
+}
+
+/**
+ * Returns true when the property carries `@noDefault`. Emitters MUST suppress
+ * any auto-default they would otherwise inject (e.g. `Default(uuid.New)` on
+ * `@key uuid` columns) when this is set.
+ */
+export function isNoDefault(program: Program, prop: ModelProperty): boolean {
+  return program.stateMap(NoDefaultKey).has(prop);
 }
