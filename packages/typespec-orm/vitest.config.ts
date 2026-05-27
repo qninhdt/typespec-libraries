@@ -11,7 +11,5 @@ export default defineConfig({
       reporter: ["text", "json", "html", "lcov"],
     },
     pool: "forks",
-    isolate: false,
-    maxWorkers: 1,
   },
 });

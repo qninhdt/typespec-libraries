@@ -62,7 +62,17 @@ export async function renderPyOutput(
   const runner = await createTestRunner();
   await runner.compile(code);
 
-  const diags = runner.program.diagnostics.filter((d) => d.severity === "error");
+  const diags = runner.program.diagnostics.filter(
+    (d) =>
+      d.severity === "error" &&
+      // Many existing fixtures use bare `string` (without @maxLength) because
+      // the emitter previously fell back to a silent max_length=255. The
+      // production behavior is now `error` (see lib.ts), but those fixtures
+      // are testing unrelated concerns. Dedicated tests assert the diagnostic
+      // fires; here we let the wrapper ignore it so unrelated tests can keep
+      // compiling small fragments.
+      d.code !== "@qninhdt/typespec-sqlmodel/string-without-max-length",
+  );
   expect(
     diags,
     `TypeSpec compilation errors: ${diags.map((d) => d.message).join("; ")}`,

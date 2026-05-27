@@ -42,10 +42,6 @@ model VaultSpace {
 
   quotaBytes: int64;
   usedBytes: int64 = 0;
-
-  @foreignKey("ownerId")
-  @onDelete("CASCADE")
-  owner: FileVault.Identity.UserAccount;
 }
 
 /** Folder/file node in a vault tree. File-specific metadata lives separately. */
@@ -86,9 +82,6 @@ model VaultNode {
   @foreignKey("vaultId")
   @onDelete("CASCADE")
   vault: VaultSpace;
-
-  @foreignKey("createdBy")
-  creator: FileVault.Identity.UserAccount;
 }
 
 /** Metadata attached to file nodes. */
@@ -145,9 +138,6 @@ model FileVersion {
   @foreignKey("fileId")
   @onDelete("CASCADE")
   file: FileMetadata;
-
-  @foreignKey("createdBy")
-  creator: FileVault.Identity.UserAccount;
 }
 
 /** User-defined label scoped to a vault. */

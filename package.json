@@ -22,15 +22,10 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "clean:examples": "rm -rf outputs/file-vault outputs/game-platform",
+    "clean:examples": "rm -rf outputs/file-vault outputs/game-platform outputs-validation",
     "compile-example:file-vault": "sh -c 'for svc in identity-svc metadata-svc storage-svc sharing-svc notifications-svc audit-svc processing-svc search-svc assistant-svc frontend docs; do tsp compile examples/file-vault/services/$svc || exit $?; done'",
     "compile-example:game-platform": "sh -c 'for svc in backend frontend docs; do tsp compile examples/game-platform/services/$svc || exit $?; done'",
     "compile-examples": "pnpm run clean:examples && pnpm run compile-example:file-vault && pnpm run compile-example:game-platform && pnpm run format-examples",
-    "compile-examples:ent": "rm -rf outputs/file-vault/ent outputs/game-platform/ent && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-ent & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-ent & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:ent",
-    "compile-examples:sqlmodel": "rm -rf outputs/file-vault/sqlmodel outputs/game-platform/sqlmodel && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-sqlmodel & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-sqlmodel & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:sqlmodel",
-    "compile-examples:zod": "rm -rf outputs/file-vault/zod outputs/game-platform/zod && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-zod & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-zod & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))' && pnpm run format-examples:zod",
-    "compile-examples:dbml": "rm -rf outputs/file-vault/dbml outputs/game-platform/dbml && sh -c 'tsp compile examples/file-vault --emit @qninhdt/typespec-dbml & p1=$!; tsp compile examples/game-platform --emit @qninhdt/typespec-dbml & p2=$!; wait $p1; s1=$?; wait $p2; s2=$?; exit $((s1 || s2))'",
-    "compile-examples:protobuf": "rm -rf outputs/file-vault/protobuf outputs/game-platform/protobuf && tsp compile examples/file-vault --emit @typespec/protobuf",
     "format-examples": "pnpm run format-examples:ent && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
     "format-examples:ent": "find outputs -path '*/ent/*' -name '*.go' -type f -exec gofmt -w {} +",
     "format-examples:sqlmodel": "find outputs -path '*/sqlmodel' -type d -exec ruff format {} +",
@@ -40,7 +35,7 @@
     "validate-examples:zod": "sh -c 'set -e; for d in outputs/file-vault/frontend/zod outputs/game-platform/frontend/zod; do test -d \"$d\" || continue; pnpm --dir \"$d\" exec tsc -p tsconfig.json; done'",
     "validate-examples:dbml": "test -s outputs/file-vault/docs/dbml/schema.dbml && test -s outputs/game-platform/docs/dbml/schema.dbml",
     "validate-examples:protobuf": "sh -c 'set -e; for d in outputs/file-vault/*/protobuf outputs/game-platform/*/protobuf; do test -d \"$d\" || continue; protos=\"$(find \"$d\" -name \"*.proto\" | sort)\"; test -n \"$protos\" || continue; protoc -I \"$d\" --descriptor_set_out=/tmp/$(basename $(dirname \"$d\")).pb $protos; done'",
-    "validate-examples": "pnpm run validate-examples:ent && pnpm run validate-examples:sqlmodel && pnpm run validate-examples:zod && pnpm run validate-examples:protobuf"
+    "validate-examples": "pnpm run validate-examples:ent && pnpm run validate-examples:sqlmodel && pnpm run validate-examples:zod && pnpm run validate-examples:dbml && pnpm run validate-examples:protobuf"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -67,7 +62,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.0.5",
     "prettier": "^3.8.3",
-    "typescript": "~6.0.3",
+    "typescript": "~5.7.0",
     "typescript-eslint": "^8.59.4",
     "zod": "^4.4.3"
   }

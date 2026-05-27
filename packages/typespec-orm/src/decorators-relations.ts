@@ -3,6 +3,7 @@ import {
   ForeignKeyKey,
   MappedByKey,
   ManyToManyKey,
+  ManyToManyOwnerKey,
   OnDeleteKey,
   OnUpdateKey,
   PolymorphicKey,
@@ -30,6 +31,10 @@ export function $manyToMany(
   tableName: string,
 ): void {
   context.program.stateMap(ManyToManyKey).set(target, tableName);
+}
+
+export function $manyToManyOwner(context: DecoratorContext, target: ModelProperty): void {
+  context.program.stateMap(ManyToManyOwnerKey).set(target, true);
 }
 
 export function $onDelete(context: DecoratorContext, target: ModelProperty, action: string): void {

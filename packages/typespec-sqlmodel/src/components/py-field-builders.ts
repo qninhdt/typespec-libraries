@@ -8,8 +8,6 @@
 
 import type { Model, ModelProperty, Program, Type } from "@typespec/compiler";
 import {
-  getAuditRole,
-  getClassification,
   getDefaultExpression,
   getDefaultValue,
   getDoc,
@@ -17,7 +15,6 @@ import {
   getIndexUsing,
   getOnDelete,
   getOnUpdate,
-  getOwner,
   getPlaceholder,
   getScopes,
   getTableName,
@@ -41,6 +38,7 @@ import {
 } from "./PyConstants.js";
 import { renderServerDefault } from "./py-field-utils.js";
 import type { EffectivePropertyConstraints } from "./py-property-constraints.js";
+import { reportDiagnostic } from "../lib.js";
 
 export interface ResolvedForeignKeyFieldInfo {
   targetTable: string;
@@ -165,8 +163,15 @@ export function buildConstraintArgs(args: {
       flags.needsField.value = true;
       state.fieldArgs.push(`max_length=${constraints.maxLen}`);
     } else if (!usesScalarAlias && !usesNativeScalar && dbType === "string") {
-      flags.needsField.value = true;
-      state.fieldArgs.push("max_length=255");
+      // Bare `string` without @maxLength is ambiguous: silently defaulting to
+      // 255 hides intent and produces surprise truncation. Require the author
+      // to either bound it with @maxLength(N) or opt in to unlimited via the
+      // "text" scalar.
+      reportDiagnostic(program, {
+        code: "string-without-max-length",
+        format: { propName: prop.name },
+        target: prop,
+      });
     }
   }
 
@@ -350,14 +355,8 @@ export function buildSoftDeleteIndex(
 
 /**
  * Surface form-metadata (`@title`, `@placeholder`) as a Pydantic
- * `json_schema_extra={...}` Field arg, and catalog metadata (`@audit`,
- * `@owner`, `@classification`, `@scope`) as SQLAlchemy `info={...}` on the
- * column.
- *
- * Form metadata stays in `Field(json_schema_extra=...)` so Pydantic
- * JSON-Schema surfaces it (matches the PyDataModel side). Catalog metadata is
- * more useful next to the SQL column, so it lands in `info=` (mapped through
- * `sa_column_kwargs` when no explicit `Column(...)` is generated).
+ * `json_schema_extra={...}` Field arg, and `@scope` as SQLAlchemy
+ * `info={...}` on the column.
  */
 export function buildMetadataArgs(
   program: Program,
@@ -381,15 +380,6 @@ export function buildMetadataArgs(
 
   // ─── Catalog metadata → SQLAlchemy Column.info ──────────────────────────
   const info: Record<string, string> = {};
-  const auditRole = getAuditRole(program, prop);
-  if (auditRole) info["audit"] = pythonStringLiteral(auditRole);
-  // `@owner` only attaches to models/namespaces. Inherit it from the property's
-  // parent model so per-column info still carries the catalog owner.
-  const ownerTarget = prop.model;
-  const owner = ownerTarget ? getOwner(program, ownerTarget) : undefined;
-  if (owner) info["owner"] = pythonStringLiteral(owner);
-  const classification = getClassification(program, prop);
-  if (classification) info["classification"] = pythonStringLiteral(classification);
   const scopes = getScopes(program, prop);
   if (scopes.length > 0) {
     info["scope"] = `[${scopes.map((s) => pythonStringLiteral(s)).join(", ")}]`;

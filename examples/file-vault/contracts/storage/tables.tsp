@@ -44,6 +44,7 @@ model StorageObject {
   bucketId: uuid;
 
   @unique
+  @maxLength(512)
   objectKey: string;
 
   sizeBytes: int64;
@@ -55,6 +56,8 @@ model StorageObject {
   mediaType: string;
 
   state: StorageObjectState = StorageObjectState.pending;
+
+  @maxLength(255)
   encryptionKeyRef?: string;
 
   @foreignKey("bucketId")
@@ -82,10 +85,6 @@ model UploadSession {
   state: UploadState = UploadState.initiated;
   expiresAt: utcDateTime;
   completedAt?: utcDateTime;
-
-  @foreignKey("accountId")
-  @onDelete("CASCADE")
-  account: FileVault.Identity.UserAccount;
 
   @foreignKey("bucketId")
   bucket: StorageBucket;

@@ -4,6 +4,7 @@ import {
   getOnDelete,
   getOnUpdate,
   isKey,
+  isManyToManyOwner,
   type NormalizedOrmModel,
   type ResolvedRelation,
 } from "@qninhdt/typespec-orm";
@@ -86,14 +87,25 @@ export function buildEntEdge(
     // Ent requires exactly one side of a M2M relation to own the join table
     // (emits `edge.To(...).StorageKey(...)`); the other side must be the
     // inverse (emits `edge.From(...).Ref(...)`). Otherwise `ent generate`
-    // produces duplicate join tables. The normalized ORM graph does not
-    // expose an explicit owning flag for shorthand `@manyToMany`, so we
-    // pick the owning side deterministically: the model whose name compares
-    // alphabetically <= the target model's name owns the relation.
+    // produces duplicate join tables.
+    //
+    // Owner selection precedence:
+    //   1. @manyToManyOwner on this side wins.
+    //   2. @manyToManyOwner on the other side loses (we are inverse).
+    //   3. Both sides marked → error.
+    //   4. Neither side marked → fall back to alphabetic with a warning so
+    //      a future model rename does not silently rotate join-table column
+    //      order.
     const ownerName = prop.model?.name ?? "";
     const targetName = rel.targetModel.name;
+    const thisOwnerMark = isManyToManyOwner(program, prop);
+    const inverseProp = rel.inverseProperty;
+    const inverseOwnerMark =
+      inverseProp !== undefined ? isManyToManyOwner(program, inverseProp) : false;
+
     let isOwner: boolean;
     if (ownerName === targetName) {
+      // Self-M2M: keep existing back-reference logic.
       if (!rel.backPopulates) {
         reportDiagnostic(program, {
           code: "missing-back-reference",
@@ -107,8 +119,29 @@ export function buildEntEdge(
       } else {
         isOwner = edgeName < rel.backPopulates;
       }
-    } else {
+    } else if (thisOwnerMark && inverseOwnerMark) {
+      reportDiagnostic(program, {
+        code: "m2m-owner-conflict",
+        target: prop,
+        format: { propName: prop.name, modelName: ownerName, targetModel: targetName },
+      });
       isOwner = ownerName < targetName;
+    } else if (thisOwnerMark) {
+      isOwner = true;
+    } else if (inverseOwnerMark) {
+      isOwner = false;
+    } else {
+      // Fall back to alphabetic ordering, but only warn from the would-be
+      // owner side so the diagnostic fires once per relation.
+      const wouldBeOwner = ownerName < targetName;
+      if (wouldBeOwner) {
+        reportDiagnostic(program, {
+          code: "m2m-owner-ambiguous",
+          target: prop,
+          format: { propName: prop.name, modelName: ownerName, targetModel: targetName },
+        });
+      }
+      isOwner = wouldBeOwner;
     }
 
     if (isOwner) {

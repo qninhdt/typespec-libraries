@@ -209,11 +209,6 @@ extern dec check(target: ModelProperty, name: valueof string, expression: valueo
  */
 extern dec autoIncrement(target: ModelProperty);
 
-/**
- * Marks a property as a soft delete timestamp. The column type must be a datetime type (`utcDateTime` or `offsetDateTime`). When set, the record is considered deleted (soft-deleted) without actually removing it from the database.
- */
-extern dec softDelete(target: ModelProperty);
-
 // ─── Relation Decorators ─────────────────────────────────────────────────────
 
 /**
@@ -238,6 +233,16 @@ extern dec mappedBy(target: ModelProperty, field: valueof string);
  * the join table from both sides when the inverse declaration matches.
  */
 extern dec manyToMany(target: ModelProperty, tableName: valueof string);
+
+/**
+ * Marks the owning side of a `@manyToMany` relation. Exactly one side of a
+ * shorthand m2m must own the join table (Ent emits `edge.To(...).StorageKey`);
+ * the other side is the inverse (`edge.From(...).Ref`). When neither side is
+ * marked, emitters fall back to alphabetic owner-pick with a warning so
+ * renames cannot silently rotate join-table column order. Marking both sides
+ * is an error.
+ */
+extern dec manyToManyOwner(target: ModelProperty);
 
 // ─── Timestamp auto-fill ─────────────────────────────────────────────────────
 
@@ -297,7 +302,7 @@ extern dec schema(target: Model | Namespace, name: valueof string);
  */
 extern dec defaultExpression(target: ModelProperty, expression: valueof string);
 
-// ─── Optimistic locking & audit / multi-tenant decorators ────────────────────
+// ─── Optimistic locking ─────────────────────────────────────────────────────
 
 /**
  * Marks a property as the optimistic-locking version column. Emitters scaffold a
@@ -306,55 +311,44 @@ extern dec defaultExpression(target: ModelProperty, expression: valueof string);
  */
 extern dec version(target: ModelProperty);
 
-/**
- * Marks a property as an audit field. The role selects which lifecycle the
- * column tracks: `"createdBy"` is set on insert; `"updatedBy"` is refreshed on
- * every update. Emitters wire this through their event/hook surface.
- */
-extern dec audit(target: ModelProperty, role: valueof "createdBy" | "updatedBy");
-
-/**
- * Marks a property as the tenant-scope foreign key. Downstream emitters use
- * this to scaffold multi-tenant policy / row-level security helpers. Only one
- * column per model may carry this decorator.
- */
-extern dec tenantId(target: ModelProperty);
-
 // ─── @@tableIndex / @@tableUnique (model-level augments) ─────────────────────
 
 /**
  * Multi-column index on a model. Use the augment form on a table:
  * `@@tableIndex(MyTable, ["a", "b"])`.
+ *
+ * The optional `where` argument is rendered verbatim as a partial-index
+ * predicate (e.g. `"deleted_at IS NULL"`). The library does not parse it.
  */
-extern dec tableIndex(target: Model, columns: valueof string[], name?: valueof string);
+extern dec tableIndex(
+  target: Model,
+  columns: valueof string[],
+  name?: valueof string,
+  where?: valueof string
+);
 
 /**
  * Multi-column unique constraint on a model. Use the augment form:
  * `@@tableUnique(MyTable, ["a", "b"])`.
+ *
+ * The optional `where` argument is rendered verbatim as a partial-unique
+ * predicate (e.g. `"deleted_at IS NULL"`).
  */
-extern dec tableUnique(target: Model, columns: valueof string[], name?: valueof string);
+extern dec tableUnique(
+  target: Model,
+  columns: valueof string[],
+  name?: valueof string,
+  where?: valueof string
+);
 
-// ─── Catalog metadata ────────────────────────────────────────────────────────
+// ─── Selector scope ──────────────────────────────────────────────────────────
 
 /**
  * Scope a model or property for selector matching. Multiple `@scope`
  * decorators accumulate. Scopes drive emitter `include` / `exclude`
- * selectors of the form `#scopeName` and surface to catalog tooling.
+ * selectors of the form `#scopeName`.
  */
 extern dec scope(target: Model | ModelProperty, name: valueof string);
-
-/**
- * Records the owning team for a model or namespace. Catalog tools read this
- * to attach SLA + on-call metadata to the generated schema.
- */
-extern dec owner(target: Model | Namespace, team: valueof string);
-
-/**
- * Records the data-classification level for a model or column (e.g. `"pii"`,
- * `"internal"`). Treated as opaque metadata by emitters; consumed by catalog
- * tooling and downstream policy.
- */
-extern dec classification(target: Model | ModelProperty, level: valueof string);
 
 // ─── Data / Form Decorators ───────────────────────────────────────────────────
 
@@ -414,6 +408,24 @@ extern dec indexUsing(
   target: ModelProperty,
   method: valueof "btree" | "gin" | "gist" | "brin" | "hash" | "spgist"
 );
+
+// ─── Partial-index predicate ─────────────────────────────────────────────────
+
+/**
+ * Adds a partial-index predicate to a column-level index. Combines with
+ * `@index`, `@unique`, or `@key` and is rendered verbatim as the index's
+ * `WHERE` clause (e.g. `"deleted_at IS NULL"`). The library does not parse
+ * the predicate; emitters that cannot model partial indexes drop it with a
+ * warning.
+ *
+ * Example:
+ *   ```
+ *   @index
+ *   @partialIndex("deleted_at IS NULL")
+ *   slug: string;
+ *   ```
+ */
+extern dec partialIndex(target: ModelProperty, predicate: valueof string);
 
 // ─── Custom Go type for JSONB / opaque columns (Ent-only) ────────────────────
 

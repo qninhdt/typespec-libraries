@@ -68,6 +68,7 @@ export {
   getForeignKeyTarget,
   getMappedBy,
   getManyToMany,
+  isManyToManyOwner,
   // Composite
   getCompositeFields,
   // Timestamps / precision / cascading
@@ -76,19 +77,14 @@ export {
   getPrecision,
   getOnDelete,
   getOnUpdate,
-  // Schema / version / audit / tenant
+  // Schema / version
   getSchemaName,
   getDefaultExpression,
   isVersionColumn,
-  getAuditRole,
-  isTenantIdColumn,
   findVersionProperty,
-  findTenantIdProperty,
   // Catalog metadata
   getScopes,
   hasScope,
-  getOwner,
-  getClassification,
   // Ignore
   isIgnored,
   // Data / form
@@ -106,6 +102,7 @@ export {
   getPolymorphicConfig,
   isPolymorphicProperty,
   getIndexUsing,
+  getPartialIndex,
   getGoType,
   getRefines,
 } from "./state-accessors.js";

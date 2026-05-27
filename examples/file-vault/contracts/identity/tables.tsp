@@ -55,6 +55,7 @@ model PasswordCredential {
   @unique
   accountId: uuid;
 
+  @maxLength(255)
   passwordHash: string;
 
   @maxLength(64)
@@ -101,6 +102,7 @@ model AuthSession {
   accountId: uuid;
 
   @unique
+  @maxLength(255)
   refreshTokenHash: string;
 
   @maxLength(80)
@@ -132,6 +134,7 @@ model MfaFactor {
   @maxLength(120)
   label?: string;
 
+  @maxLength(255)
   secretRef: string;
   verifiedAt?: utcDateTime;
   disabledAt?: utcDateTime;

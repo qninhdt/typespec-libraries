@@ -46,6 +46,8 @@ export interface ResolvedRelation {
   onUpdate?: string;
   /** For one-to-many/many-to-one: snake_case inverse relation name (for SQLModel back_populates) */
   backPopulates?: string;
+  /** Inverse-side property (set for many-to-many; lets emitters inspect inverse decorators). */
+  inverseProperty?: ModelProperty;
   /** Join table name for many-to-many shorthand */
   joinTable?: string;
 }
@@ -363,6 +365,7 @@ function resolveManyToManyRelation(
     fkTargetColumn: getColumnName(program, targetPk),
     fkDbType: resolveDbType(targetPk.type),
     backPopulates: camelToSnake(inverse.prop.name),
+    inverseProperty: inverse.prop,
     joinTable: explicitManyToMany,
   };
 }

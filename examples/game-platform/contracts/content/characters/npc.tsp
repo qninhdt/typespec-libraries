@@ -21,10 +21,4 @@ model Npc {
 
   // ─── Composite Indexes ─────────────────
   worldIdName: composite<"worldId", "name">;
-
-  // ─── Relationships ─────────────────
-  @foreignKey("worldId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  world: GamePlatform.Worlds.World;
 }

@@ -195,6 +195,8 @@ users?: User[];
 - composite constraint support
 - foreign-key handling with delete/update actions
 
+Bare `string` properties must declare `@maxLength(N)` (or use the `text` scalar) — the emitter no longer falls back to a silent `max_length=255` and reports `string-without-max-length` instead.
+
 ### Data models
 
 default form models become non-table Python models that preserve:

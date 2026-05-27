@@ -107,9 +107,7 @@ export function generateArrayField(
   const defaultVal = getDefaultValue(program, prop);
   if (defaultVal !== undefined && !isPk) {
     needsColumn.value = true;
-    columnArgs.push(
-      `server_default=${renderServerDefault(program, prop, defaultVal, saImports)}`,
-    );
+    columnArgs.push(`server_default=${renderServerDefault(program, prop, defaultVal, saImports)}`);
   }
 
   if (doc) {

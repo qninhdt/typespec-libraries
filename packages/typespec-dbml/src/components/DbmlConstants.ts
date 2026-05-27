@@ -2,8 +2,9 @@
  * DBML type mappings and constants.
  */
 
-import type { Model, Program, Type } from "@typespec/compiler";
+import type { Model, ModelProperty, Program, Type } from "@typespec/compiler";
 import { getSchemaName, getTableName, resolveDbType } from "@qninhdt/typespec-orm";
+import { reportDiagnostic } from "../lib.js";
 
 /**
  * DBML reserved tokens that MUST be quoted whenever used as identifiers,
@@ -22,12 +23,72 @@ export const DBML_RESERVED_WORDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * SQL reserved words that must be quoted when used as identifiers so the
+ * downstream `dbml2sql --postgres` output is syntactically valid SQL. DBML's
+ * parser does not require these to be quoted, but Postgres does — and DBML is
+ * the source of truth for our SQL emission.
+ */
+export const POSTGRES_RESERVED_WORDS: ReadonlySet<string> = new Set([
+  "user",
+  "order",
+  "select",
+  "from",
+  "where",
+  "group",
+  "table",
+  "column",
+  "index",
+  "unique",
+  "primary",
+  "foreign",
+  "references",
+  "check",
+  "default",
+  "constraint",
+  "key",
+  "on",
+  "to",
+  "as",
+  "case",
+  "when",
+  "then",
+  "else",
+  "end",
+  "null",
+  "true",
+  "false",
+  "and",
+  "or",
+  "not",
+  "in",
+  "is",
+  "between",
+  "like",
+  "having",
+  "distinct",
+  "by",
+  "asc",
+  "desc",
+  "limit",
+  "offset",
+  "join",
+  "inner",
+  "outer",
+  "left",
+  "right",
+  "cross",
+  "using",
+]);
+
+/**
  * Quote a DBML identifier when it is not a bare ASCII identifier or when it
- * collides with a DBML reserved token. Use this for every emitted identifier
- * (schema, table, column) so refs and table headings stay parseable.
+ * collides with a DBML or Postgres reserved token. Use this for every emitted
+ * identifier (schema, table, column) so refs and table headings stay parseable
+ * AND so `dbml2sql --postgres` produces valid SQL.
  */
 export function quoteDbmlIdentifier(name: string): string {
-  if (DBML_RESERVED_WORDS.has(name.toLowerCase())) {
+  const lowered = name.toLowerCase();
+  if (DBML_RESERVED_WORDS.has(lowered) || POSTGRES_RESERVED_WORDS.has(lowered)) {
     return `"${name.replaceAll('"', '\\"')}"`;
   }
   return /^[A-Za-z_][\w]*$/.test(name) ? name : `"${name.replaceAll('"', '\\"')}"`;
@@ -87,10 +148,19 @@ export const DBML_TYPE_MAP: Record<string, string> = {
 
 /**
  * Get DBML type for a TypeSpec type.
+ *
+ * `propContext`, when supplied, is the property the resolution started from.
+ * It is used as the diagnostic target when an array element type cannot be
+ * mapped, so the warning points at the user-visible property rather than at
+ * an anonymous indexer node.
  */
-export function getDbmlType(program: Program, type: Type): string | undefined {
+export function getDbmlType(
+  program: Program,
+  type: Type,
+  propContext?: ModelProperty,
+): string | undefined {
   if (type.kind === "ModelProperty") {
-    return getDbmlType(program, type.type);
+    return getDbmlType(program, type.type, type);
   }
 
   if (type.kind === "Model" && type.indexer) {
@@ -101,8 +171,21 @@ export function getDbmlType(program: Program, type: Type): string | undefined {
     if (inner.kind === "Enum") {
       return `${inner.name}[]`;
     }
-    const itemType = getDbmlType(program, inner);
-    return itemType ? `${itemType}[]` : "jsonb";
+    const itemType = getDbmlType(program, inner, propContext);
+    if (itemType) {
+      return `${itemType}[]`;
+    }
+    // Element type unmapped — DBML is documentation, so a `jsonb` fallback is
+    // acceptable, but it must be loud. Surface a warning so users know the
+    // emitted type does not faithfully represent the source schema.
+    if (propContext) {
+      reportDiagnostic(program, {
+        code: "unsupported-array-element",
+        target: propContext,
+        format: { propName: propContext.name },
+      });
+    }
+    return "jsonb";
   }
 
   // Handle scalar types

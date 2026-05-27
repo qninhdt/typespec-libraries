@@ -28,7 +28,6 @@ import {
   isAutoUpdateTime,
   isIndex,
   isPolymorphicProperty,
-  isSoftDelete,
   isUnique,
 } from "@qninhdt/typespec-orm";
 import { createTestRunner } from "./utils.js";
@@ -166,21 +165,6 @@ describe("@autoIncrement decorator", () => {
     `)) as Record<string, ModelProperty>;
 
     expect(isAutoIncrement(runner.program, id)).toBe(true);
-  });
-});
-
-describe("@softDelete decorator", () => {
-  it("marks a property as soft delete", async () => {
-    const runner = await createTestRunner();
-    const { deletedAt } = (await runner.compile(`
-      @table
-      model User {
-        @test @key id: uuid;
-        @test @softDelete deletedAt?: utcDateTime;
-      }
-    `)) as Record<string, ModelProperty>;
-
-    expect(isSoftDelete(runner.program, deletedAt)).toBe(true);
   });
 });
 

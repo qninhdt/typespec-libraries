@@ -272,6 +272,51 @@ describe("Ent schema generation", () => {
     expect(b).not.toContain("StorageKey(edge.Table(");
   });
 
+  it("@manyToManyOwner overrides alphabetic ownership", async () => {
+    const a = await emitGoFile(
+      `
+      @table
+      model AModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        bs: BModel[];
+      }
+      @table
+      model BModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        @manyToManyOwner
+        as: AModel[];
+      }
+    `,
+      "a_model.go",
+    );
+    const b = await emitGoFile(
+      `
+      @table
+      model AModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        bs: BModel[];
+      }
+      @table
+      model BModel {
+        @key id: uuid;
+        @manyToMany("a_b_join")
+        @manyToManyOwner
+        as: AModel[];
+      }
+    `,
+      "b_model.go",
+    );
+
+    // BModel carries @manyToManyOwner so it owns regardless of alphabetic order
+    expect(b).toContain('edge.To("as", AModel.Type)');
+    expect(b).toContain('StorageKey(edge.Table("a_b_join")');
+    expect(a).toContain('edge.From("bs", BModel.Type)');
+    expect(a).toContain('Ref("as")');
+  });
+
   it("forces timestamptz schema type for utcDateTime fields", async () => {
     const output = await emitGoFile(
       `
@@ -286,6 +331,56 @@ describe("Ent schema generation", () => {
 
     expect(output).toContain('field.Time("occurred_at")');
     expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "timestamptz"})');
+  });
+
+  it("forces timestamptz for offsetDateTime fields (offset preserved by connection TZ)", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Event {
+        @key id: uuid;
+        occurredAt: offsetDateTime;
+      }
+    `,
+      "event.go",
+    );
+
+    expect(output).toContain('field.Time("occurred_at")');
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "timestamptz"})');
+  });
+
+  it("emits date and time SchemaType overrides for plainDate / plainTime", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Reservation {
+        @key id: uuid;
+        day: plainDate;
+        slot: plainTime;
+      }
+    `,
+      "reservation.go",
+    );
+
+    expect(output).toContain('field.Time("day")');
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "date"})');
+    expect(output).toContain('field.Time("slot")');
+    expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "time"})');
+  });
+
+  it("surfaces @version as a SchemaType-free annotation", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Article {
+        @key id: uuid;
+        @version version: int32 = 0;
+      }
+    `,
+      "article.go",
+    );
+
+    expect(output).toContain('entsql.Annotation{Table: "articles"}');
   });
 
   it("emits a generic numeric SchemaType for decimal fields without @precision", async () => {
@@ -450,5 +545,95 @@ describe("Ent diagnostics", () => {
           d.severity === "error",
       ),
     ).toBe(true);
+  });
+});
+
+describe("Ent partial indexes", () => {
+  it("emits entsql.IndexWhere for a field-level @index + @partialIndex", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Outbox {
+        @key id: bigserial;
+        @index
+        @partialIndex("published_at IS NULL")
+        @autoCreateTime
+        createdAt: utcDateTime;
+      }
+    `,
+      "outbox.go",
+    );
+
+    expect(output).toContain('index.Fields("created_at")');
+    expect(output).toContain('Annotations(entsql.IndexWhere("published_at IS NULL"))');
+  });
+
+  it("combines @indexUsing(gin) and @partialIndex into a single Annotations(...) call", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model File {
+        @key id: uuid;
+        @index
+        @indexUsing("gin")
+        @partialIndex("deleted_at IS NULL AND status = 'ready'")
+        searchVector: jsonb;
+      }
+    `,
+      "file.go",
+    );
+
+    expect(output).toContain('index.Fields("search_vector")');
+    expect(output).toContain('entsql.IndexType("GIN")');
+    expect(output).toContain("entsql.IndexWhere(\"deleted_at IS NULL AND status = 'ready'\")");
+  });
+
+  it("emits entsql.IndexWhere on a composite @@tableIndex with `where`", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model Folder {
+        @key id: uuid;
+        workspaceId: uuid;
+        parentId?: uuid;
+        name: string;
+      }
+      @@tableIndex(
+        Folder,
+        #["workspaceId", "parentId", "name"],
+        "folders_unique_name_per_parent",
+        "deleted_at IS NULL AND parent_id IS NOT NULL"
+      );
+    `,
+      "folder.go",
+    );
+
+    expect(output).toContain('index.Fields("workspace_id", "parent_id", "name")');
+    expect(output).toContain(
+      'Annotations(entsql.IndexWhere("deleted_at IS NULL AND parent_id IS NOT NULL"))',
+    );
+  });
+
+  it("emits Unique() and IndexWhere on a partial @@tableUnique", async () => {
+    const output = await emitGoFile(
+      `
+      @table
+      model SigningKey {
+        @key id: uuid;
+        status: string;
+      }
+      @@tableUnique(
+        SigningKey,
+        #["status"],
+        "signing_keys_one_active",
+        "status = 'active'"
+      );
+    `,
+      "signing_key.go",
+    );
+
+    expect(output).toContain('index.Fields("status")');
+    expect(output).toContain("Unique()");
+    expect(output).toContain("entsql.IndexWhere(\"status = 'active'\")");
   });
 });

@@ -1,7 +1,5 @@
 import type { Model, Program } from "@typespec/compiler";
 import {
-  findTenantIdProperty,
-  findVersionProperty,
   getCheck,
   getColumnName,
   getPolymorphicConfig,
@@ -13,9 +11,14 @@ import {
 import { goStringLiteral } from "./EntConstants.js";
 import type { EntFileContext } from "./ent-context.js";
 
+export interface EntAnnotationsResult {
+  /** Lines that go inside the `Annotations()` returned slice. */
+  readonly annotations: string[];
+}
+
 /**
  * Builds the body of the `Annotations()` method for a table-kind schema.
- * Returns an empty list for non-table kinds (mixins). Mutates `ctx` to
+ * Returns empty results for non-table kinds (mixins). Mutates `ctx` to
  * record that entsql/entschema imports are required when annotations exist.
  */
 export function buildEntAnnotations(
@@ -23,9 +26,9 @@ export function buildEntAnnotations(
   model: Model,
   normalizedModel: NormalizedOrmModel,
   ctx: EntFileContext,
-): string[] {
+): EntAnnotationsResult {
   if (normalizedModel.kind !== "table") {
-    return [];
+    return { annotations: [] };
   }
 
   const checks: string[] = [];
@@ -35,7 +38,6 @@ export function buildEntAnnotations(
       checks.push(`${goStringLiteral(check.name)}: ${goStringLiteral(check.expression)}`);
     }
 
-    // Polymorphic discriminator → synthesize a check enumerating allowed types.
     const polymorphic = getPolymorphicConfig(program, prop);
     if (polymorphic && polymorphic.allowedTypes.length > 0) {
       const columnName = getColumnName(program, prop);
@@ -46,7 +48,6 @@ export function buildEntAnnotations(
         .join(", ");
       const expression = `${columnName} IN (${valuesList})`;
       checks.push(`${goStringLiteral(checkName)}: ${goStringLiteral(expression)}`);
-      // Reference fully-qualified name for future codegraph hooks.
       void getTypeFullName;
     }
   }
@@ -60,25 +61,11 @@ export function buildEntAnnotations(
     annotationParts.push(`Checks: map[string]string{${checks.join(", ")}}`);
   }
 
-  // Surface ORM-core decorators (@version / @tenantId) as a Comment marker
-  // on the table-level entsql.Annotation. Downstream policy/hook code can
-  // grep for these markers without us inventing automatic indexes.
-  const markers: string[] = [];
-  const versionProp = findVersionProperty(program, model);
-  if (versionProp) {
-    markers.push(`version:${getColumnName(program, versionProp)}`);
-  }
-  const tenantProp = findTenantIdProperty(program, model);
-  if (tenantProp) {
-    markers.push(`tenant_id:${getColumnName(program, tenantProp)}`);
-  }
-  if (markers.length > 0) {
-    annotationParts.push(`Comment: ${goStringLiteral(markers.join(";"))}`);
-  }
-
   ctx.usesEntSql = true;
   ctx.usesEntSchema = true;
-  return [`entsql.Annotation{${annotationParts.join(", ")}}`, "entsql.WithComments(true)"];
+  return {
+    annotations: [`entsql.Annotation{${annotationParts.join(", ")}}`, "entsql.WithComments(true)"],
+  };
 }
 
 function escapeSqlLiteral(value: string): string {

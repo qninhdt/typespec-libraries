@@ -15,7 +15,7 @@ Use this emitter when you want:
 
 ## Installation
 
-`sh
+```sh
 pnpm add -D \
   @typespec/compiler \
   @typespec/emitter-framework \
@@ -24,7 +24,7 @@ pnpm add -D \
   @qninhdt/typespec-orm \
   @qninhdt/typespec-zod \
   zod
-`
+```
 
 ## Runtime Expectations
 
@@ -37,7 +37,7 @@ Generated Zod output is intended to drop into TypeScript projects cleanly.
 
 ## Configuration Reference
 
-`yaml
+```yaml
 emit:
 
 - "@qninhdt/typespec-zod"
@@ -48,7 +48,7 @@ output-dir: "./outputs/zod"
 standalone: true
 library-name: "@acme/forms"
 include: - "Demo.Platform.Forms"
-`
+```
 
 Supported options:
 
@@ -72,13 +72,13 @@ Zod uses the same selector behavior as the ORM-backed emitters.
 
 Examples:
 
-`yaml
+```yaml
 include:
 
 - "Demo.GamePlatform.Forms"
   exclude:
 - "Demo.GamePlatform.Forms.Internal"
-  `
+```
 
 Behavior:
 

@@ -27,7 +27,9 @@ model StoryNode {
   childIds: jsonb;
 
   /** Searchable labels attached to the node for branch discovery. */
-  tags: string[];
+  @index
+  @indexUsing("gin")
+  tags: jsonb;
 
   // ─── Composite Indexes ─────────────────
   worldIdDepth: composite<"worldId", "depth">;
@@ -36,12 +38,6 @@ model StoryNode {
   parentId?: uuid;
 
   // ─── Relationships ─────────────────
-  /** Owning world. */
-  @foreignKey("worldId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  world: GamePlatform.Worlds.World;
-
   /** Parent story node. */
   @foreignKey("parentId")
   @onDelete("CASCADE")

@@ -60,10 +60,28 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Type "${"typeName"}" on property "${"propName"}" could not be mapped to a Go type.`,
       },
     },
+    "unsupported-default": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Unsupported default for property "${"propName"}" of kind "${"kind"}".`,
+      },
+    },
     "missing-back-reference": {
       severity: "error",
       messages: {
         default: paramMessage`Self many-to-many relation "${"propName"}" on "${"modelName"}" requires an explicit @backPopulates so Ent can pick an owning side deterministically.`,
+      },
+    },
+    "m2m-owner-ambiguous": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Many-to-many relation "${"propName"}" on "${"modelName"}" ↔ "${"targetModel"}" has no @manyToManyOwner on either side; falling back to alphabetic owner pick. Renaming a model can rotate join-table column order — add @manyToManyOwner to one side to lock ownership.`,
+      },
+    },
+    "m2m-owner-conflict": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Both sides of many-to-many "${"propName"}" on "${"modelName"}" ↔ "${"targetModel"}" carry @manyToManyOwner. Exactly one side must own the join table.`,
       },
     },
     "on-update-not-supported-by-ent": {

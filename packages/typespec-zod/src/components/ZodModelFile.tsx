@@ -21,6 +21,7 @@ export interface ZodModelFileProps {
   readonly model: Model;
   readonly label: string;
   readonly path?: string;
+  readonly namespaceDir?: string;
 }
 
 /**
@@ -48,10 +49,14 @@ export function ZodModelFile(props: ZodModelFileProps): Children {
       return `  ${renderPropertyName(prop.name)}: ${entry},`;
     })
     .filter((item): item is string => !!item);
+  const metaImportPath = buildMetaImportPath(props.namespaceDir);
 
   return (
     <SourceFile path={filePath}>
       {`// ${generatedHeader}\n`}
+      {metadataEntries.length > 0
+        ? `import type { ${FORM_FIELD_META_INTERFACE_NAME} } from "${metaImportPath}";\n`
+        : ""}
       {referencedDeclarations.map((declaration) => (
         <>
           <ZodSchemaDeclaration type={declaration.type} name={declaration.schemaName} />
@@ -77,4 +82,10 @@ void getInputTypeForProperty;
 
 function renderPropertyName(name: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+function buildMetaImportPath(namespaceDir: string | undefined): string {
+  if (!namespaceDir) return "./_meta.js";
+  const depth = namespaceDir.split("/").filter((segment) => segment.length > 0).length;
+  return `${"../".repeat(depth)}_meta.js`;
 }

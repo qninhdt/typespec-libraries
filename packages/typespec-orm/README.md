@@ -20,17 +20,17 @@ It does not emit code by itself.
 
 ## Installation
 
-`sh
+```sh
 pnpm add -D @typespec/compiler @qninhdt/typespec-orm
-`
+```
 
 ## Importing The Library
 
-`typescript
+```typespec
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
-`
+```
 
 ## Core Concepts
 
@@ -93,9 +93,9 @@ Namespace handling is intentionally deterministic:
 
 Example:
 
-`typescript
+```typespec
 namespace Demo.GamePlatform.Content.Stories;
-`
+```
 
 normalizes to:
 
@@ -137,9 +137,6 @@ normalizes to:
 - `@autoIncrement`
   Marks an integer field as auto-incrementing.
 
-- `@softDelete`
-  Marks a datetime field as the soft-delete column.
-
 - `@autoCreateTime`
   Marks a datetime field as create timestamp metadata.
 
@@ -176,10 +173,10 @@ normalizes to:
 
 `@@inputType` targets a scalar. When applied to a field, use `Field::type` or the source scalar for lookup-typed fields:
 
-`typescript
+```typespec
 @@inputType(CreateWorldForm.summary::type, "textarea");
 @@inputType(Demo.Worlds.World.prompt::type, "textarea");
-`
+```
 
 ### Schema and defaults
 
@@ -189,27 +186,15 @@ normalizes to:
 - `@defaultExpression(expression)`
   Raw SQL default evaluated by the database (e.g. `gen_random_uuid()`); mutually exclusive with literal defaults.
 
-### Optimistic locking, audit, multi-tenant
+### Optimistic locking
 
 - `@version`
   Marks a column as the optimistic-locking version. One per model.
 
-- `@audit("createdBy" | "updatedBy")`
-  Marks a column as a lifecycle audit field.
-
-- `@tenantId`
-  Marks the tenant-scope foreign key. One per model.
-
-### Catalog metadata
+### Selectors
 
 - `@scope(name)`
   Tags a model or property for selector matching (`#name`); accumulates across decorators.
-
-- `@owner(team)`
-  Records the owning team on a model or namespace.
-
-- `@classification(level)`
-  Records the data-classification level on a model or column (e.g. `"pii"`, `"internal"`).
 
 ### Model-level augments
 
@@ -241,7 +226,7 @@ This library exposes a small set of custom scalars on top of the TypeSpec built-
 
 ## Basic Example
 
-`typescript
+```typespec
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -299,7 +284,7 @@ model CreateInvitationForm {
 @placeholder("friend@example.com")
 inviteeEmail: Demo.Accounts.User.email;
 }
-`
+```
 
 ## Relation Semantics
 
@@ -307,32 +292,32 @@ inviteeEmail: Demo.Accounts.User.email;
 
 Owned relations are declared on the navigation property:
 
-`typescript
+```typespec
 authorId: uuid;
 
 @foreignKey("authorId")
 author: User;
-`
+```
 
 The optional second argument targets a non-`id` field:
 
-`typescript
+```typespec
 organizationCode: string;
 
 @foreignKey("organizationCode", "code")
 organization: Organization;
-`
+```
 
 ### Inverse relations
 
-`typescript
+```typespec
 @mappedBy("author")
 posts: Post[];
-`
+```
 
 ### Many-to-many shorthand
 
-`typescript
+```typespec
 @table
 model User {
 @key id: uuid;
@@ -348,7 +333,7 @@ model Badge {
 @manyToMany("user_badges")
 users?: User[];
 }
-`
+```
 
 Rules:
 
@@ -362,11 +347,11 @@ Rules:
 
 This package supports source-property reuse patterns such as:
 
-`typescript
+```typespec
 model PublicUser {
   email: Demo.GamePlatform.Accounts.User.email;
 }
-`
+```
 
 That lets default form models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
 
@@ -382,14 +367,14 @@ Avoid lookup types when the derived model needs materially different semantics; 
 
 Emitters using this core support:
 
-`yaml
+```yaml
 include:
 
 - "Demo.Worlds"
 - "Demo.Forms"
   exclude:
 - "Demo.Audit"
-  `
+```
 
 Selectors can match:
 
@@ -446,8 +431,6 @@ Important diagnostics surfaced by the core include:
 - `many-to-many-conflicting-explicit-table`
 - `duplicate-constraint-name`
 - `multiple-version-columns` — more than one `@version` column on a model.
-- `multiple-tenant-id-columns` — more than one `@tenantId` column on a model.
-- `multiple-soft-deletes` — more than one `@softDelete` column on a model.
 - `multiple-auto-increment-columns` — more than one `@autoIncrement` column on a model.
 - `auto-increment-requires-key` — `@autoIncrement` must sit on a non-optional `@key`.
 - `auto-create-and-update-conflict` — `@autoCreateTime` and `@autoUpdateTime` cannot share a property.
@@ -455,7 +438,6 @@ Important diagnostics surfaced by the core include:
 - `foreign-key-without-index` — `@foreignKey` without an index/unique/key (PG hot-spot).
 - `pg-reserved-identifier` — table or column name collides with a PostgreSQL reserved word.
 - `auto-increment-on-non-integer` — `@autoIncrement` requires an integer scalar.
-- `soft-delete-on-non-datetime` — `@softDelete` requires a datetime scalar.
 - `auto-time-on-non-datetime` — `@autoCreateTime`/`@autoUpdateTime` require a datetime scalar.
 
 ## Troubleshooting Common Diagnostics

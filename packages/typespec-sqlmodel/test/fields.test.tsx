@@ -8,7 +8,7 @@ describe("SQLModel field generation", () => {
       @table
       model User {
         @key id: uuid;
-        @softDelete deletedAt?: utcDateTime;
+        deletedAt?: utcDateTime;
       }
     `,
       "user.py",

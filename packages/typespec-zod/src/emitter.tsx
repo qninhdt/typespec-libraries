@@ -98,6 +98,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                   model={model.model}
                   label={model.label ?? model.name}
                   path={`${model.model.name}.ts`}
+                  namespaceDir={model.namespaceDir}
                 />
               ))}
             </SourceDirectory>

@@ -2,6 +2,7 @@ import type { Model, Program } from "@typespec/compiler";
 import {
   getColumnName,
   getIndexUsing,
+  getPartialIndex,
   getPolymorphicConfig,
   isIndex,
   isKey,
@@ -39,19 +40,30 @@ export function buildEntIndexes(
     if (!indexedFields.has(columnName)) continue;
 
     const method = getIndexUsing(program, prop);
-    const chains: string[] = [];
+    const predicate = getPartialIndex(program, prop);
+    const annotationArgs: string[] = [];
     if (method && method !== "btree") {
-      // Ent does not natively expose a "USING <method>" knob, so surface it as
-      // an entsql Annotation that downstream Atlas tooling can pick up.
+      annotationArgs.push(`entsql.IndexType(${goStringLiteral(method.toUpperCase())})`);
+    }
+    if (predicate) {
+      annotationArgs.push(`entsql.IndexWhere(${goStringLiteral(predicate)})`);
+    }
+    const chains: string[] = [];
+    if (annotationArgs.length > 0) {
       ctx.usesEntSql = true;
-      chains.push(`Annotations(entsql.IndexType(${goStringLiteral(method.toUpperCase())}))`);
+      chains.push(`Annotations(${annotationArgs.join(", ")})`);
     }
     indexes.push(buildChain(`index.Fields(${goStringLiteral(columnName)})`, chains));
   }
 
   for (const composite of compositeTypeFields) {
     const fields = composite.columns.map((column) => goStringLiteral(column)).join(", ");
-    const chains = composite.isUnique || composite.isPrimary ? ["Unique()"] : [];
+    const chains: string[] = [];
+    if (composite.isUnique || composite.isPrimary) chains.push("Unique()");
+    if (composite.where) {
+      ctx.usesEntSql = true;
+      chains.push(`Annotations(entsql.IndexWhere(${goStringLiteral(composite.where)}))`);
+    }
     indexes.push(buildChain(`index.Fields(${fields})`, chains));
   }
 

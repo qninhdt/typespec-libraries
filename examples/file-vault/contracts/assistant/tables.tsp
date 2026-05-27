@@ -39,10 +39,6 @@ model AssistantConversation {
 
   state: ConversationState = ConversationState.active;
   lastMessageAt?: utcDateTime;
-
-  @foreignKey("ownerId")
-  @onDelete("CASCADE")
-  owner: FileVault.Identity.UserAccount;
 }
 
 /** Persisted conversation message for product history and context rebuild. */
@@ -88,9 +84,6 @@ model AssistantTask {
   @foreignKey("conversationId")
   @onDelete("CASCADE")
   conversation: AssistantConversation;
-
-  @foreignKey("requestedBy")
-  requester: FileVault.Identity.UserAccount;
 }
 
 /** Approval gate before an assistant mutates or shares vault content. */

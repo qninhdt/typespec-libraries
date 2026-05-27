@@ -1,6 +1,7 @@
 import { type Model, type Program } from "@typespec/compiler";
 import { reportDiagnostic } from "./lib.js";
 import { getTypeFullName, isOrmManagedModel, isTable, isTableMixin } from "./helpers.js";
+import { getModelOwnProperties } from "./state-types.js";
 
 export function validateMixinChain(program: Program, model: Model): void {
   if (!isTableMixin(program, model)) return;
@@ -58,7 +59,11 @@ function registerOwnPropertyOwnership(
   reported: Set<string>,
 ): void {
   const incomingSource = getTypeFullName(program, model);
-  for (const [fieldName] of model.properties) {
+  // Only own properties — `model.properties` includes spread-inherited fields,
+  // which are already registered under their originating mixin and would
+  // double-count as conflicts otherwise.
+  for (const prop of getModelOwnProperties(model)) {
+    const fieldName = prop.name;
     const existingSource = ownership.get(fieldName);
     if (existingSource && existingSource !== incomingSource) {
       reportMixinConflict(program, model, fieldName, incomingSource, existingSource, reported);

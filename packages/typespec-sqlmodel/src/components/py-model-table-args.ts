@@ -5,6 +5,7 @@ import {
   getCheck,
   getColumnName,
   getIndexUsing,
+  getPartialIndex,
   getPolymorphicConfig,
   getSchemaName,
   getTableName,
@@ -23,6 +24,7 @@ export function buildTableArgEntries(
   const tableArgEntries = buildCompositeTableArgEntries(compositeTypeFields, saImports);
   addCheckConstraints(program, model, saImports, tableArgEntries);
   addIndexUsingEntries(program, model, saImports, tableArgEntries);
+  addPartialIndexEntries(program, model, saImports, tableArgEntries);
   const schemaName = getSchemaName(program, model);
   if (schemaName) {
     tableArgEntries.push(
@@ -42,7 +44,9 @@ function buildCompositeTableArgEntries(
 
   for (const ct of compositeTypeFields) {
     const cols = ct.columns.map((column) => pythonStringLiteral(column)).join(", ");
-    if (ct.isPrimary || ct.isUnique) {
+    // SQLAlchemy's UniqueConstraint has no partial-predicate option, so a
+    // partial UNIQUE has to be expressed as `Index(..., unique=True, postgresql_where=...)`.
+    if ((ct.isPrimary || ct.isUnique) && !ct.where) {
       hasUniqueConstraint = true;
       tableArgEntries.push(
         `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name=${pythonStringLiteral(ct.name)})`,
@@ -51,9 +55,13 @@ function buildCompositeTableArgEntries(
     }
 
     hasIndex = true;
-    tableArgEntries.push(
-      `${FOUR_SPACES}${FOUR_SPACES}Index(${pythonStringLiteral(ct.name)}, ${cols})`,
-    );
+    const args = [pythonStringLiteral(ct.name), cols];
+    if (ct.isUnique || ct.isPrimary) args.push("unique=True");
+    if (ct.where) {
+      saImports.add("sqlalchemy.text");
+      args.push(`postgresql_where=text(${pythonStringLiteral(ct.where)})`);
+    }
+    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index(${args.join(", ")})`);
   }
 
   if (hasIndex) saImports.add("sqlalchemy.Index");
@@ -83,6 +91,42 @@ function addIndexUsingEntries(
     if (isUnique(program, prop)) {
       args.push("unique=True");
     }
+    const predicate = getPartialIndex(program, prop);
+    if (predicate) {
+      saImports.add("sqlalchemy.text");
+      args.push(`postgresql_where=text(${pythonStringLiteral(predicate)})`);
+    }
+    tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index(${args.join(", ")})`);
+  }
+}
+
+/**
+ * Emit field-level partial indexes for properties that carry `@partialIndex`
+ * but no `@indexUsing` (the `@indexUsing` path already inlines the predicate).
+ */
+function addPartialIndexEntries(
+  program: Program,
+  model: Model,
+  saImports: Set<string>,
+  tableArgEntries: string[],
+): void {
+  const tableName = getTableName(program, model);
+  for (const prop of walkPropertiesInherited(model)) {
+    const predicate = getPartialIndex(program, prop);
+    if (!predicate) continue;
+    if (getIndexUsing(program, prop)) continue;
+    const indexed = isIndex(program, prop);
+    const unique = isUnique(program, prop);
+    const isPrimaryKey = isKey(program, prop);
+    if (!indexed && !unique && !isPrimaryKey) continue;
+    const columnName = getColumnName(program, prop);
+    const suffix = unique ? "unique" : "idx";
+    const idxName = `${tableName}_${columnName}_${suffix}`;
+    saImports.add("sqlalchemy.Index");
+    saImports.add("sqlalchemy.text");
+    const args = [JSON.stringify(idxName), JSON.stringify(columnName)];
+    if (unique) args.push("unique=True");
+    args.push(`postgresql_where=text(${pythonStringLiteral(predicate)})`);
     tableArgEntries.push(`${FOUR_SPACES}${FOUR_SPACES}Index(${args.join(", ")})`);
   }
 }

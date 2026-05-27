@@ -59,6 +59,9 @@ export function buildEntField(
   }
 
   const builder = buildEntFieldBuilder(program, prop, columnName, ctx, collectionStrategy);
+  if (builder === undefined) {
+    return undefined;
+  }
   const chains = buildCommonFieldChains(program, prop, ctx, compositeUniqueColumns, columnName);
   const docParts: string[] = [];
   const doc = getDoc(program, prop);
@@ -109,13 +112,19 @@ function buildCommonFieldChains(
   }
 
   // Ent's `field.Time` defaults to `timestamp without time zone` on Postgres,
-  // which silently strips offsets. `utcDateTime` is timezone-aware in TypeSpec,
-  // so force `timestamptz`. `date`/`time` keep Ent's defaults.
+  // which silently strips offsets (`utcDateTime`) and conflates dates/times
+  // with timestamps. Force the right Postgres type per TypeSpec scalar.
   if (dbType === "utcDateTime") {
     ctx.imports.add("entgo.io/ent/dialect");
     chains.push(
       `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("timestamptz")}})`,
     );
+  } else if (dbType === "date") {
+    ctx.imports.add("entgo.io/ent/dialect");
+    chains.push(`SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("date")}})`);
+  } else if (dbType === "time") {
+    ctx.imports.add("entgo.io/ent/dialect");
+    chains.push(`SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral("time")}})`);
   }
 
   const defaultExpr = getDefaultExpression(program, prop);
@@ -125,15 +134,9 @@ function buildCommonFieldChains(
   } else {
     const defaultValue = getDefaultValue(program, prop);
     if (defaultValue !== undefined && !isKey(program, prop)) {
-      const formatted = formatEntDefault(defaultValue, prop.type);
+      const formatted = formatEntDefault(program, prop, defaultValue, prop.type);
       if (formatted) {
         chains.push(`Default(${formatted})`);
-      } else {
-        reportDiagnostic(program, {
-          code: "unsupported-type",
-          target: prop,
-          format: { typeName: `default(${prop.type.kind})`, propName: prop.name },
-        });
       }
     }
   }
@@ -160,16 +163,27 @@ function buildCommonFieldChains(
   return deduplicateParts(chains);
 }
 
-function formatEntDefault(value: string, type: Type): string | undefined {
+function formatEntDefault(
+  program: Program,
+  prop: ModelProperty,
+  value: string,
+  type: Type,
+): string | undefined {
   if (type.kind === "ModelProperty") {
-    return formatEntDefault(value, type.type);
+    return formatEntDefault(program, prop, value, type.type);
   }
   const dbType = resolveDbType(type);
   if (dbType === "string" || dbType === "text" || type.kind === "Enum") {
     return goStringLiteral(value);
   }
   if (dbType === "boolean") {
-    return value === "true" || value === "false" ? value : undefined;
+    if (value === "true" || value === "false") return value;
+    reportDiagnostic(program, {
+      code: "unsupported-default",
+      target: prop,
+      format: { propName: prop.name, kind: `boolean(${value})` },
+    });
+    return undefined;
   }
   if (
     dbType === "int8" ||
@@ -185,5 +199,10 @@ function formatEntDefault(value: string, type: Type): string | undefined {
   ) {
     return value;
   }
+  reportDiagnostic(program, {
+    code: "unsupported-default",
+    target: prop,
+    format: { propName: prop.name, kind: dbType ?? type.kind },
+  });
   return undefined;
 }

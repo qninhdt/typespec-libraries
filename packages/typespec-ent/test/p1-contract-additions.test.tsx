@@ -131,44 +131,6 @@ describe("P1 contract additions (Ent)", () => {
     });
   });
 
-  // ─── Group C: @version and @tenantId surfaced as annotations ─────────────
-  describe("@version and @tenantId annotations", () => {
-    it("emits a Comment marker for @version on the table-level entsql.Annotation", async () => {
-      const output = await emitGoFile(
-        `
-        @table
-        model Document {
-          @key id: uuid;
-          title: string;
-          @version revision: int32 = 1;
-        }
-      `,
-        "document.go",
-      );
-
-      expect(output).toContain('entsql.Annotation{Table: "documents"');
-      expect(output).toContain("Comment:");
-      expect(output).toContain("version:revision");
-    });
-
-    it("emits a Comment marker for @tenantId on the table-level entsql.Annotation", async () => {
-      const output = await emitGoFile(
-        `
-        @table
-        model Project {
-          @key id: uuid;
-          @tenantId tenantId: uuid;
-          name: string;
-        }
-      `,
-        "project.go",
-      );
-
-      expect(output).toContain('entsql.Annotation{Table: "projects"');
-      expect(output).toContain("tenant_id:tenant_id");
-    });
-  });
-
   // ─── Group D: native PG enum types ────────────────────────────────────────
   describe("native Postgres ENUM types", () => {
     it("emits SchemaType + Annotations(Type:) for enum-typed fields", async () => {
@@ -187,7 +149,9 @@ describe("P1 contract additions (Ent)", () => {
 
       expect(output).toContain('field.Enum("status")');
       expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "account_status"})');
-      expect(output).toContain('Annotations(entsql.Annotation{Type: "account_status"})');
+      // entsql.Annotation has no `Type` field; SchemaType alone carries the
+      // Postgres ENUM mapping that Atlas picks up.
+      expect(output).not.toContain("entsql.Annotation{Type:");
     });
   });
 

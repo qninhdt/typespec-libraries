@@ -15,12 +15,10 @@ import {
   isUnique,
   isIndex,
   isAutoIncrement,
-  isSoftDelete,
   isAutoCreateTime,
   isAutoUpdateTime,
   isIgnored,
   isVersionColumn,
-  isTenantIdColumn,
   getPrecision,
   getForeignKey,
   getDefaultExpression,
@@ -47,7 +45,7 @@ export const INTEGER_TYPES = new Set([
   "bigserial",
 ]);
 
-/** Types that accept @softDelete / @autoCreateTime / @autoUpdateTime */
+/** Types that accept @autoCreateTime / @autoUpdateTime */
 export const DATETIME_TYPES = new Set(["utcDateTime", "offsetDateTime"]);
 
 // ─── Duplicate table name check ──────────────────────────────────────────────
@@ -75,9 +73,7 @@ export function validateDuplicateTableNames(
 
 export function validateModel(program: Program, model: Model): void {
   let idCount = 0;
-  let softDeleteCount = 0;
   let versionCount = 0;
-  let tenantIdCount = 0;
   let autoIncrementCount = 0;
   const columnNames = new Map<string, string>(); // columnName → propName
   const constraintNames = new Map<string, string>(); // constraintName -> decorator
@@ -94,8 +90,6 @@ export function validateModel(program: Program, model: Model): void {
       idCount++;
     }
 
-    if (isSoftDelete(program, prop)) softDeleteCount++;
-
     if (isAutoIncrement(program, prop)) {
       autoIncrementCount++;
       if (!isKey(program, prop) || prop.optional) {
@@ -108,7 +102,6 @@ export function validateModel(program: Program, model: Model): void {
     }
 
     if (isVersionColumn(program, prop)) versionCount++;
-    if (isTenantIdColumn(program, prop)) tenantIdCount++;
 
     if (!isIgnored(program, prop)) {
       const colName = getColumnName(program, prop);
@@ -149,16 +142,8 @@ export function validateModel(program: Program, model: Model): void {
     reportDiagnostic(program, { code: "missing-key", target: model });
   }
 
-  if (softDeleteCount > 1) {
-    reportDiagnostic(program, { code: "multiple-soft-deletes", target: model });
-  }
-
   if (versionCount > 1) {
     reportDiagnostic(program, { code: "multiple-version-columns", target: model });
-  }
-
-  if (tenantIdCount > 1) {
-    reportDiagnostic(program, { code: "multiple-tenant-id-columns", target: model });
   }
 
   if (autoIncrementCount > 1) {
@@ -235,7 +220,6 @@ function reportIgnoreConflicts(program: Program, prop: ModelProperty): void {
     ["index", isIndex(program, prop)],
     ["unique", isUnique(program, prop)],
     ["autoIncrement", isAutoIncrement(program, prop)],
-    ["softDelete", isSoftDelete(program, prop)],
     ["autoCreateTime", isAutoCreateTime(program, prop)],
     ["autoUpdateTime", isAutoUpdateTime(program, prop)],
     ["foreignKey", !!getForeignKey(program, prop)],
@@ -274,15 +258,6 @@ function validateTypedDecorators(
     report: () =>
       reportDiagnostic(program, {
         code: "auto-increment-on-non-integer",
-        target: prop,
-        format: { propName: prop.name, actualType: typeName },
-      }),
-  });
-  reportInvalidDecoratorType(dbType, isSoftDelete(program, prop), {
-    allowedTypes: DATETIME_TYPES,
-    report: () =>
-      reportDiagnostic(program, {
-        code: "soft-delete-on-non-datetime",
         target: prop,
         format: { propName: prop.name, actualType: typeName },
       }),

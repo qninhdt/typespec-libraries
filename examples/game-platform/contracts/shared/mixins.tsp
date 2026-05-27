@@ -22,7 +22,7 @@ model Timestamped {
   updatedAt?: utcDateTime;
 
   /** Soft delete marker for archival workflows. */
-  @softDelete
+  @index
   deletedAt?: utcDateTime;
 }
 

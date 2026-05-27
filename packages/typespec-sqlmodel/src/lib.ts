@@ -65,9 +65,15 @@ export const $lib = createTypeSpecLibrary({
       },
     },
     "missing-back-reference": {
-      severity: "warning",
+      severity: "error",
       messages: {
         default: paramMessage`One-to-many "${"propName"}" on "${"modelName"}" has no inverse many-to-one on "${"targetModel"}". SQLAlchemy may not resolve the foreign key automatically.`,
+      },
+    },
+    "string-without-max-length": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Property "${"propName"}" is a bare string. Add @maxLength(N) or use the "text" scalar for unlimited text.`,
       },
     },
     "emit-write-failed": {

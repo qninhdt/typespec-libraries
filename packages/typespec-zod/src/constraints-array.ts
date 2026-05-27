@@ -14,11 +14,7 @@ interface ArrayConstraints {
   maxItems?: number;
 }
 
-export function arrayConstraintsParts(
-  $: Typekit,
-  type: Type,
-  member?: ModelProperty,
-): Children[] {
+export function arrayConstraintsParts($: Typekit, type: Type, member?: ModelProperty): Children[] {
   const { effectiveType, effectiveMember } = unwrapLookupType($, type, member);
 
   const constraints: ArrayConstraints = {

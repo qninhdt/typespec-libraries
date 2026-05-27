@@ -33,10 +33,6 @@ export interface NormalizedOrmModel {
   scopes: string[];
   /** Column name (after @map) of the @version property, or undefined when none. */
   versionColumn?: string;
-  /** Column name (after @map) of the @tenantId property, or undefined when none. */
-  tenantIdColumn?: string;
-  /** Column names (after @map) carrying @audit, sorted ascending. */
-  auditColumns: string[];
 }
 
 export interface NormalizedOrmGraph {

@@ -24,20 +24,16 @@ model SearchDocument {
   @maxLength(240)
   title: string;
 
+  @maxLength(160)
   mediaType: string;
+
+  @maxLength(16)
   language?: string;
+
   state: IndexState = IndexState.pending;
   indexedAt?: utcDateTime;
   contentVersion: int32 = 1;
   tagsJson?: jsonb;
-
-  @foreignKey("fileId")
-  @onDelete("CASCADE")
-  file: FileVault.Metadata.FileMetadata;
-
-  @foreignKey("ownerId")
-  @onDelete("CASCADE")
-  owner: FileVault.Identity.UserAccount;
 }
 
 /** Checkpoint for async index workers. */
@@ -45,8 +41,10 @@ model SearchDocument {
 model SearchIndexCheckpoint {
   ...FileVault.Shared.Entity;
   @unique
+  @maxLength(120)
   shardKey: string;
 
+  @maxLength(160)
   lastProcessedEventId?: string;
   lastProcessedAt?: utcDateTime;
 }

@@ -114,7 +114,21 @@ export function generateField(
       pyType = nativeType;
       usesNativeScalar = true;
     } else {
-      pyType = scalarAliasNames?.get(prop.type) ?? prop.type.name;
+      const aliasName = scalarAliasNames?.get(prop.type);
+      if (aliasName === undefined) {
+        // No alias was registered for this scalar — silently using the bare
+        // TypeSpec name produces an unresolved Python identifier at runtime.
+        // Diagnose and emit a clearly-broken sentinel so the failure surfaces
+        // immediately rather than as an opaque NameError.
+        reportDiagnostic(program, {
+          code: "unsupported-type",
+          format: { typeName: prop.type.name, propName: prop.name },
+          target: prop,
+        });
+        pyType = "object";
+      } else {
+        pyType = aliasName;
+      }
       usesScalarAlias = true;
     }
   }

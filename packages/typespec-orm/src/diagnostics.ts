@@ -9,22 +9,10 @@ export const diagnostics = {
       default: `Model has multiple @key properties. Only one primary key is allowed per table.`,
     },
   },
-  "multiple-soft-deletes": {
-    severity: "error",
-    messages: {
-      default: `Model has multiple @softDelete properties. Only one soft-delete timestamp is allowed per table.`,
-    },
-  },
   "multiple-version-columns": {
     severity: "error",
     messages: {
       default: `Model has multiple @version properties. Only one optimistic-locking column is allowed per table.`,
-    },
-  },
-  "multiple-tenant-id-columns": {
-    severity: "error",
-    messages: {
-      default: `Model has multiple @tenantId properties. Only one tenant scope column is allowed per table.`,
     },
   },
   "duplicate-table-name": {
@@ -189,12 +177,6 @@ export const diagnostics = {
       default: paramMessage`@autoIncrement can only be applied to integer types (int32, int64, serial, bigserial), but "${"propName"}" has type "${"actualType"}".`,
     },
   },
-  "soft-delete-on-non-datetime": {
-    severity: "error",
-    messages: {
-      default: paramMessage`@softDelete requires a datetime type (utcDateTime, offsetDateTime), but "${"propName"}" has type "${"actualType"}".`,
-    },
-  },
   "auto-time-on-non-datetime": {
     severity: "error",
     messages: {
@@ -243,15 +225,45 @@ export const diagnostics = {
       default: paramMessage`Column "${"columnName"}" is listed multiple times in @${"decorator"}("${"constraintName"}").`,
     },
   },
-
-  // ─── Warnings ──────────────────────────────────────────────────────────────
-
   "missing-key": {
-    severity: "warning",
+    severity: "error",
     messages: {
       default: `Model marked as @table has no @key property. Consider adding a primary key.`,
     },
   },
+  "foreign-key-without-index": {
+    severity: "error",
+    messages: {
+      default: paramMessage`@foreignKey on "${"propName"}" has no @index/@unique/@key. PostgreSQL will not auto-create an index, which usually causes lookup hot-spots.`,
+    },
+  },
+  "pg-reserved-identifier": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Identifier "${"name"}" is a PostgreSQL reserved word and will require quoting in DDL. Consider renaming.`,
+    },
+  },
+  "polymorphic-empty-allowed-types": {
+    severity: "error",
+    messages: {
+      default: paramMessage`@polymorphic on "${"propName"}" requires a non-empty list of allowed type tags.`,
+    },
+  },
+  "polymorphic-column-conflict": {
+    severity: "error",
+    messages: {
+      default: paramMessage`@polymorphic on "${"propName"}" cannot reuse existing column "${"columnName"}". Pick distinct typeColumn / idColumn names.`,
+    },
+  },
+  "go-type-malformed": {
+    severity: "error",
+    messages: {
+      default: paramMessage`@goType("${"value"}") on "${"propName"}" must be of the form "import/path.TypeName".`,
+    },
+  },
+
+  // ─── Warnings ──────────────────────────────────────────────────────────────
+
   "redundant-unique-on-key": {
     severity: "warning",
     messages: {
@@ -276,12 +288,6 @@ export const diagnostics = {
       default: paramMessage`@${"decorator"} on "${"propName"}" has no effect - the property is not a relation or foreign key.`,
     },
   },
-  "foreign-key-without-index": {
-    severity: "warning",
-    messages: {
-      default: paramMessage`@foreignKey on "${"propName"}" has no @index/@unique/@key. PostgreSQL will not auto-create an index, which usually causes lookup hot-spots.`,
-    },
-  },
   "filter-selector-conflict": {
     severity: "warning",
     messages: {
@@ -304,30 +310,6 @@ export const diagnostics = {
     severity: "warning",
     messages: {
       default: paramMessage`Scope "${"scope"}" is declared via @scope but no selector references it (#${"scope"}).`,
-    },
-  },
-  "pg-reserved-identifier": {
-    severity: "warning",
-    messages: {
-      default: paramMessage`Identifier "${"name"}" is a PostgreSQL reserved word and will require quoting in DDL. Consider renaming.`,
-    },
-  },
-  "polymorphic-empty-allowed-types": {
-    severity: "error",
-    messages: {
-      default: paramMessage`@polymorphic on "${"propName"}" requires a non-empty list of allowed type tags.`,
-    },
-  },
-  "polymorphic-column-conflict": {
-    severity: "error",
-    messages: {
-      default: paramMessage`@polymorphic on "${"propName"}" cannot reuse existing column "${"columnName"}". Pick distinct typeColumn / idColumn names.`,
-    },
-  },
-  "go-type-malformed": {
-    severity: "error",
-    messages: {
-      default: paramMessage`@goType("${"value"}") on "${"propName"}" must be of the form "import/path.TypeName".`,
     },
   },
   "index-using-on-non-index": {

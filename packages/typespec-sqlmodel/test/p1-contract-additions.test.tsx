@@ -121,7 +121,7 @@ describe("P1 contract additions", () => {
         "user.py",
       );
 
-      expect(output).toContain('Index(');
+      expect(output).toContain("Index(");
       expect(output).toContain('"first_name", "last_name"');
     });
 
@@ -141,6 +141,77 @@ describe("P1 contract additions", () => {
 
       expect(output).toContain("UniqueConstraint(");
       expect(output).toContain('"tenant_id", "fingerprint"');
+    });
+  });
+
+  describe("@partialIndex / partial @@tableIndex", () => {
+    it("emits postgresql_where on @@tableIndex partial composite index", async () => {
+      const output = await emitPyFile(
+        `
+        @table
+        model Folder {
+          @key id: uuid;
+          workspaceId: uuid;
+          parentId?: uuid;
+          name: string;
+        }
+        @@tableIndex(
+          Folder,
+          #["workspaceId", "parentId", "name"],
+          "folders_unique_name_per_parent",
+          "deleted_at IS NULL AND parent_id IS NOT NULL"
+        );
+      `,
+        "folder.py",
+      );
+
+      expect(output).toContain('Index("folders_unique_name_per_parent"');
+      expect(output).toContain(
+        'postgresql_where=text("deleted_at IS NULL AND parent_id IS NOT NULL")',
+      );
+    });
+
+    it("renders @@tableUnique with `where` as a partial Index (not UniqueConstraint)", async () => {
+      const output = await emitPyFile(
+        `
+        @table
+        model SigningKey {
+          @key id: uuid;
+          status: string;
+        }
+        @@tableUnique(
+          SigningKey,
+          #["status"],
+          "signing_keys_one_active",
+          "status = 'active'"
+        );
+      `,
+        "signing_key.py",
+      );
+
+      expect(output).toContain('Index("signing_keys_one_active"');
+      expect(output).toContain("unique=True");
+      expect(output).toContain("postgresql_where=text(\"status = 'active'\")");
+      expect(output).not.toContain("UniqueConstraint");
+    });
+
+    it("emits a partial Index for a field-level @index + @partialIndex", async () => {
+      const output = await emitPyFile(
+        `
+        @table
+        model Outbox {
+          @key id: bigserial;
+          @autoCreateTime createdAt: utcDateTime;
+          @index
+          @partialIndex("published_at IS NULL")
+          createdAt2: utcDateTime;
+        }
+      `,
+        "outbox.py",
+      );
+
+      expect(output).toContain("Index(");
+      expect(output).toContain('postgresql_where=text("published_at IS NULL")');
     });
   });
 });

@@ -63,6 +63,24 @@ export const $lib = createTypeSpecLibrary({
         default: paramMessage`Many-to-many join table '${"table"}' has an endpoint key whose type cannot be mapped to DBML; refusing to fall back to a generic type.`,
       },
     },
+    "unsupported-array-element": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Array element type for "${"propName"}" is unmapped; falling back to jsonb in DBML output.`,
+      },
+    },
+    "missing-table-name": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Internal: model "${"modelName"}" passed kind:["table"] filter but has no resolved tableName.`,
+      },
+    },
+    "cross-schema-many-to-many": {
+      severity: "warning",
+      messages: {
+        default: paramMessage`Many-to-many between "${"left"}" and "${"right"}" spans schemas; DBML join table will live in "${"chosen"}".`,
+      },
+    },
   },
   emitter: {
     options: EmitterOptionsSchema,

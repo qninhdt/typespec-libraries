@@ -6,6 +6,11 @@ dist/
 packages/*/dist/
 __pycache__/
 
+# Generated examples (rebuilt by `pnpm compile-examples` in CI; never the
+# source of truth — `.tsp` contracts are). Validation outputs are also local-only.
+outputs/
+outputs-validation/
+
 # Dependency directories
 node_modules/
 

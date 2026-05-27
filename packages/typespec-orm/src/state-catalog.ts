@@ -1,12 +1,5 @@
-import type { Model, ModelProperty, Namespace, Program, Scalar } from "@typespec/compiler";
-import {
-  ScopesKey,
-  OwnerKey,
-  ClassificationKey,
-  TitleKey,
-  PlaceholderKey,
-  InputTypeKey,
-} from "./lib.js";
+import type { Model, ModelProperty, Program, Scalar } from "@typespec/compiler";
+import { ScopesKey, TitleKey, PlaceholderKey, InputTypeKey } from "./lib.js";
 import { isOrmManagedModel, isTable, isTableMixin } from "./state-columns.js";
 
 /** Returns the scopes applied to a model or property via `@scope`. Empty array if none. */
@@ -17,28 +10,6 @@ export function getScopes(program: Program, target: Model | ModelProperty): read
 /** True when the model or property carries the given scope. */
 export function hasScope(program: Program, target: Model | ModelProperty, scope: string): boolean {
   return getScopes(program, target).includes(scope);
-}
-
-/** Returns the owning team set via `@owner`, walking up the namespace chain for models. */
-export function getOwner(program: Program, target: Model | Namespace): string | undefined {
-  const direct = program.stateMap(OwnerKey).get(target) as string | undefined;
-  if (direct !== undefined) return direct;
-  let ns: Namespace | undefined =
-    "namespace" in target ? (target.namespace as Namespace | undefined) : undefined;
-  while (ns) {
-    const found = program.stateMap(OwnerKey).get(ns) as string | undefined;
-    if (found !== undefined) return found;
-    ns = ns.namespace;
-  }
-  return undefined;
-}
-
-/** Returns the classification level set via `@classification`. */
-export function getClassification(
-  program: Program,
-  target: Model | ModelProperty,
-): string | undefined {
-  return program.stateMap(ClassificationKey).get(target) as string | undefined;
 }
 
 export function isData(program: Program, model: Model): boolean {

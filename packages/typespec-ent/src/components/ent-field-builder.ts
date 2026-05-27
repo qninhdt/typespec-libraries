@@ -16,7 +16,9 @@ import { reportDiagnostic, type EntEmitterOptions } from "../lib.js";
 /**
  * Pick the appropriate `field.X(...)` builder for a property's TypeSpec type.
  * Side-effects: registers required Go imports and entsql usage flags on
- * `ctx`. May report a diagnostic for unsupported scalar kinds.
+ * `ctx`. Returns `undefined` when the property's type cannot be mapped, after
+ * reporting an `unsupported-type` diagnostic. Callers must skip the field
+ * (emit no Go) when this returns `undefined`.
  */
 export function buildEntFieldBuilder(
   program: Program,
@@ -24,21 +26,19 @@ export function buildEntFieldBuilder(
   columnName: string,
   ctx: EntFileContext,
   collectionStrategy: EntEmitterOptions["collection-strategy"] | undefined,
-): string {
+): string | undefined {
   const enumInfo = getPropertyEnum(prop);
   if (enumInfo) {
     const values = enumInfo.members.map((member) => goStringLiteral(member.value)).join(", ");
-    // Map TypeSpec enum -> native Postgres ENUM type. Atlas reads
-    // entsql.Annotation{Type: ...} and creates `CREATE TYPE foo AS ENUM (...)`
-    // automatically; SchemaType ensures Ent uses the same type name in DDL.
+    // Map TypeSpec enum -> native Postgres ENUM type. SchemaType locks the
+    // SQL column to the named ENUM; Atlas picks this up to emit
+    // `CREATE TYPE foo AS ENUM (...)` automatically.
     const pgEnumName = camelToSnake(enumInfo.enumType.name);
     ctx.imports.add("entgo.io/ent/dialect");
-    ctx.usesEntSql = true;
     return (
       `field.Enum(${goStringLiteral(columnName)}).` +
       `Values(${values}).` +
-      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(pgEnumName)}}).` +
-      `Annotations(entsql.Annotation{Type: ${goStringLiteral(pgEnumName)}})`
+      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(pgEnumName)}})`
     );
   }
 
@@ -137,7 +137,7 @@ export function buildEntFieldBuilder(
         target: prop,
         format: { typeName: dbType ?? "unknown", propName: prop.name },
       });
-      return `field.String(${goStringLiteral(columnName)})`;
+      return undefined;
   }
 }
 
@@ -147,27 +147,36 @@ function buildArrayFieldBuilder(
   columnName: string,
   ctx: EntFileContext,
   collectionStrategy: EntEmitterOptions["collection-strategy"] | undefined,
-): string {
+): string | undefined {
   const elementType = getArrayElementType(prop.type);
   const elementDbType = elementType ? resolveDbType(elementType) : undefined;
   if (collectionStrategy === "postgres") {
     if (elementDbType) {
       const postgresType = resolvePostgresArrayElementType(elementDbType);
       if (postgresType) {
+        const goElement = resolveGoArrayElementType(program, prop, elementType);
+        if (goElement === undefined) return undefined;
         ctx.imports.add("entgo.io/ent/dialect");
-        return `field.JSON(${goStringLiteral(columnName)}, []${resolveGoArrayElementType(elementType)}{}).SchemaType(map[string]string{dialect.Postgres: "${postgresType}[]"})`;
+        return `field.JSON(${goStringLiteral(columnName)}, []${goElement}{}).SchemaType(map[string]string{dialect.Postgres: "${postgresType}[]"})`;
       }
       reportDiagnostic(program, {
         code: "unsupported-type",
         target: prop,
         format: { typeName: `${elementDbType}[]`, propName: prop.name },
       });
+      return undefined;
     }
   }
-  return `field.JSON(${goStringLiteral(columnName)}, []${resolveGoArrayElementType(elementType)}{})`;
+  const goElement = resolveGoArrayElementType(program, prop, elementType);
+  if (goElement === undefined) return undefined;
+  return `field.JSON(${goStringLiteral(columnName)}, []${goElement}{})`;
 }
 
-function resolveGoArrayElementType(type: Type | undefined): string {
+function resolveGoArrayElementType(
+  program: Program,
+  prop: ModelProperty,
+  type: Type | undefined,
+): string | undefined {
   if (!type) return "any";
   if (type.kind === "Enum") return "string";
   const dbType = resolveDbType(type);
@@ -201,8 +210,14 @@ function resolveGoArrayElementType(type: Type | undefined): string {
       return "float64";
     case "string":
     case "text":
-    default:
       return "string";
+    default:
+      reportDiagnostic(program, {
+        code: "unsupported-type",
+        target: prop,
+        format: { typeName: `${dbType ?? "unknown"}[]`, propName: prop.name },
+      });
+      return undefined;
   }
 }
 

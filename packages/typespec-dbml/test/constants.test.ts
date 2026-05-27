@@ -41,9 +41,7 @@ describe("DBML constants helpers", () => {
         default: "pending",
         note: `line "one"\nline 'two'`,
       }),
-    ).toBe(
-      ` [pk, not null, unique, default: 'pending', note: '''line "one"\nline 'two\\'''']`,
-    );
+    ).toBe(` [pk, not null, unique, default: 'pending', note: '''line "one"\nline 'two\\'''']`);
     expect(formatColumnSettings({})).toBe("");
   });
 
@@ -99,7 +97,7 @@ describe("formatColumnSettings individual options", () => {
 
   it("preserves apostrophes inside long-form notes without losing them", () => {
     // Apostrophes embedded mid-string don't need escaping inside `'''...'''`.
-    expect(formatColumnSettings({ note: "can't \"do this\"" })).toBe(
+    expect(formatColumnSettings({ note: 'can\'t "do this"' })).toBe(
       " [note: '''can't \"do this\"''']",
     );
   });
@@ -111,21 +109,15 @@ describe("formatColumnSettings individual options", () => {
   });
 
   it("escapes triple-apostrophe runs inside long-form notes", () => {
-    expect(formatColumnSettings({ note: "a'''b\n" })).toBe(
-      " [note: '''a\\'\\'\\'b\n''']",
-    );
+    expect(formatColumnSettings({ note: "a'''b\n" })).toBe(" [note: '''a\\'\\'\\'b\n''']");
   });
 
   it("preserves newlines in long-form notes", () => {
-    expect(formatColumnSettings({ note: "line1\nline2" })).toBe(
-      " [note: '''line1\nline2''']",
-    );
+    expect(formatColumnSettings({ note: "line1\nline2" })).toBe(" [note: '''line1\nline2''']");
   });
 
   it("normalizes Windows-style newlines to LF in long-form notes", () => {
-    expect(formatColumnSettings({ note: "line1\r\nline2" })).toBe(
-      " [note: '''line1\nline2''']",
-    );
+    expect(formatColumnSettings({ note: "line1\r\nline2" })).toBe(" [note: '''line1\nline2''']");
   });
 });
 

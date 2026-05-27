@@ -39,37 +39,6 @@ describe("P1 cut — form metadata round-trip on @table", () => {
 });
 
 describe("P1 cut — catalog metadata as Column.info", () => {
-  it("renders @audit role into Column info", async () => {
-    const output = await emitPyFile(
-      `
-      @table
-      model Post {
-        @key id: uuid;
-        @audit("createdBy") createdBy: uuid;
-      }
-    `,
-      "post.py",
-    );
-
-    expect(output).toContain('"audit": "createdBy"');
-    expect(output).toContain("info=");
-  });
-
-  it("renders @classification into Column info", async () => {
-    const output = await emitPyFile(
-      `
-      @table
-      model Post {
-        @key id: uuid;
-        @classification("pii") email: string;
-      }
-    `,
-      "post.py",
-    );
-
-    expect(output).toContain('"classification": "pii"');
-  });
-
   it("renders @scope as a list in Column info", async () => {
     const output = await emitPyFile(
       `
@@ -83,22 +52,6 @@ describe("P1 cut — catalog metadata as Column.info", () => {
     );
 
     expect(output).toContain('"scope": ["frontend"]');
-  });
-
-  it("inherits @owner from the parent model into Column info", async () => {
-    const output = await emitPyFile(
-      `
-      @owner("data-platform")
-      @table
-      model Post {
-        @key id: uuid;
-        @scope("frontend") title: string;
-      }
-    `,
-      "post.py",
-    );
-
-    expect(output).toContain('"owner": "data-platform"');
   });
 });
 

@@ -25,9 +25,16 @@ model AuditEvent {
 
   resourceId?: uuid;
   severity: AuditSeverity = AuditSeverity.info;
+
+  @maxLength(64)
   requestId?: string;
+
+  @maxLength(128)
   ipAddressHash?: string;
+
+  @maxLength(128)
   userAgentHash?: string;
+
   metadataJson?: jsonb;
 }
 
@@ -36,6 +43,7 @@ model AuditEvent {
 model AuditExportCheckpoint {
   ...FileVault.Shared.Entity;
   @unique
+  @maxLength(120)
   sinkName: string;
 
   lastEventId?: uuid;

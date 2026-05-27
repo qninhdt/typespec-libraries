@@ -30,6 +30,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
     "prepublishOnly": "alloy build"
   },
   "keywords": [
@@ -62,6 +63,7 @@
   "peerDependencies": {
     "@alloy-js/core": ">=0.22.0",
     "@alloy-js/typescript": ">=0.22.0",
+    "@qninhdt/typespec-orm": "workspace:*",
     "@typespec/compiler": ">=1.0.0",
     "@typespec/emitter-framework": ">=0.15.0",
     "zod": "^4.0.0"
@@ -74,6 +76,9 @@
       "optional": false
     },
     "@alloy-js/typescript": {
+      "optional": false
+    },
+    "@qninhdt/typespec-orm": {
       "optional": false
     },
     "@typespec/emitter-framework": {
@@ -93,7 +98,7 @@
     "@typespec/emitter-framework": "^0.17.0",
     "@vitest/coverage-v8": "^4.1.6",
     "prettier": "^3.8.3",
-    "typescript": "^5.0.0",
+    "typescript": "~5.7.0",
     "vitest": "^4.1.6",
     "zod": "^4.4.3"
   }

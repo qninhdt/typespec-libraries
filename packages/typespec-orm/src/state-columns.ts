@@ -8,7 +8,6 @@ import {
   UniqueKey,
   CheckKey,
   AutoIncrementKey,
-  SoftDeleteKey,
   IgnoreKey,
 } from "./lib.js";
 import { truncatePgIdentifier } from "./identifier-policy.js";
@@ -115,7 +114,7 @@ export function isAutoIncrement(program: Program, prop: ModelProperty): boolean 
 }
 
 export function isSoftDelete(program: Program, prop: ModelProperty): boolean {
-  return program.stateMap(SoftDeleteKey).has(prop);
+  return getColumnName(program, prop) === "deleted_at";
 }
 
 export function isIgnored(program: Program, prop: ModelProperty): boolean {

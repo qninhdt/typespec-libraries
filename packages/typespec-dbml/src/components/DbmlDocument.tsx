@@ -9,6 +9,7 @@
 import type { Model, Program } from "@typespec/compiler";
 import {
   classifyProperties,
+  generatedHeader,
   getSchemaName,
   type EnumMemberInfo,
   type ManyToManyAssociation,
@@ -40,6 +41,7 @@ export function buildSingleDocument(
   projectName: string,
 ): string {
   const codeParts: string[] = [
+    `// ${generatedHeader}`,
     "// Database Schema",
     "",
     `Project ${quoteDbmlIdentifier(projectName)} {`,
@@ -126,6 +128,7 @@ export function buildNamespaceDocuments(
       // single-file mode. The project name is derived from the namespace so
       // multiple split files do not collide on the same `Project` identifier.
       const codeParts = [
+        `// ${generatedHeader}`,
         "// Database Schema",
         "",
         `Project ${quoteDbmlIdentifier(namespace)} {`,

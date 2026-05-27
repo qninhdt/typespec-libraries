@@ -489,7 +489,7 @@ describe("normalizeOrmGraph", () => {
     expect(codes).not.toContain("@qninhdt/typespec-orm/filtered-dependency");
   });
 
-  it("populates schema, scopes, version, tenant and audit metadata", async () => {
+  it("populates schema, scopes, and version metadata", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       @Qninhdt.Orm.schema("audit")
@@ -499,10 +499,7 @@ describe("normalizeOrmGraph", () => {
         @Qninhdt.Orm.scope("audit")
         model EventLog {
           @key id: uuid;
-          @Qninhdt.Orm.tenantId tenantId: uuid;
           @version revision: int32 = 0;
-          @audit("createdBy") createdBy: uuid;
-          @audit("updatedBy") updatedBy: uuid;
           message: string;
         }
       }
@@ -514,8 +511,6 @@ describe("normalizeOrmGraph", () => {
     expect(log!.schema).toBe("audit");
     expect(log!.scopes.sort()).toEqual(["audit", "frontend"]);
     expect(log!.versionColumn).toBe("revision");
-    expect(log!.tenantIdColumn).toBe("tenant_id");
-    expect(log!.auditColumns).toEqual(["created_by", "updated_by"]);
   });
 
   it("warns when an include list repeats a tag selector", async () => {

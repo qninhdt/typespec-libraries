@@ -65,6 +65,39 @@ describe("Ent emitter entrypoint", () => {
           diag.code === "@qninhdt/typespec-ent/unsupported-type" && diag.severity === "error",
       ),
     ).toBe(true);
+
+    // The unsupported `payload` field must not produce broken Go output —
+    // no `field.X("payload")` builder of any kind should be emitted.
+    const broken = await readFile(join(outDir, "ent/schema/broken.go"), "utf8");
+    expect(broken).not.toMatch(/field\.[A-Za-z]+\("payload"/);
+  });
+
+  it("reports unsupported defaults and skips the Default() chain", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model BadDefault {
+        @key id: uuid;
+        amount: decimal = 1.5;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "ent-emitter-bad-default-"));
+
+    await emit({
+      program: runner.program,
+      options: {},
+      emitterOutputDir: outDir,
+    } as never);
+
+    expect(
+      runner.program.diagnostics.some(
+        (diag) =>
+          diag.code === "@qninhdt/typespec-ent/unsupported-default" && diag.severity === "error",
+      ),
+    ).toBe(true);
+
+    const file = await readFile(join(outDir, "ent/schema/bad_default.go"), "utf8");
+    expect(file).not.toContain("Default(1.5)");
   });
 
   it("emits standalone files for tables and data models", async () => {

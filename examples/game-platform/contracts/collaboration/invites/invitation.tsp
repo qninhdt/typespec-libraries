@@ -47,17 +47,4 @@ model Invitation {
 
   // ─── Composite Indexes ─────────────────
   inviterIdStatus: composite<"inviterId", "status">;
-
-  // ─── Relationships Across Namespaces ─────────────────
-  /** User who created the invitation. */
-  @foreignKey("inviterId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  inviter: GamePlatform.Accounts.User;
-
-  /** World the invite grants access to. */
-  @foreignKey("worldId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  world: GamePlatform.Worlds.World;
 }

@@ -332,4 +332,63 @@ describe("P1 contract additions (DBML)", () => {
       expect(file).toContain("Table items");
     });
   });
+
+  describe("@partialIndex / partial @@tableIndex", () => {
+    it("surfaces a partial composite @@tableIndex predicate via a `note:` setting", async () => {
+      const schema = await emitSchemaDbml(`
+        @table
+        model Folder {
+          @key id: uuid;
+          workspaceId: uuid;
+          parentId?: uuid;
+          name: string;
+        }
+        @@tableIndex(
+          Folder,
+          #["workspaceId", "parentId", "name"],
+          "folders_unique_name_per_parent",
+          "deleted_at IS NULL AND parent_id IS NOT NULL"
+        );
+      `);
+
+      expect(schema).toContain("(workspace_id, parent_id, name)");
+      expect(schema).toContain("name: 'folders_unique_name_per_parent'");
+      expect(schema).toContain("note: 'partial: deleted_at IS NULL AND parent_id IS NOT NULL'");
+    });
+
+    it("surfaces a partial @@tableUnique predicate via `unique` + `note:`", async () => {
+      const schema = await emitSchemaDbml(`
+        @table
+        model SigningKey {
+          @key id: uuid;
+          status: string;
+        }
+        @@tableUnique(
+          SigningKey,
+          #["status"],
+          "signing_keys_one_active",
+          "status = 'active'"
+        );
+      `);
+
+      expect(schema).toContain("(status)");
+      expect(schema).toContain("name: 'signing_keys_one_active'");
+      expect(schema).toContain("unique");
+      expect(schema).toContain("note: 'partial: status = \\'active\\''");
+    });
+
+    it("surfaces a field-level @partialIndex predicate via `note:` on the index entry", async () => {
+      const schema = await emitSchemaDbml(`
+        @table
+        model Outbox {
+          @key id: bigserial;
+          @index
+          @partialIndex("published_at IS NULL")
+          createdAt: utcDateTime;
+        }
+      `);
+
+      expect(schema).toContain("created_at [note: 'partial: published_at IS NULL']");
+    });
+  });
 });

@@ -43,11 +43,4 @@ model World {
   // ─── Explicit FK Fields ─────────────────
   @index
   ownerId: uuid;
-
-  // ─── Cross-Namespace Ownership ─────────────────
-  /** User who owns and manages this world. */
-  @foreignKey("ownerId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  owner: GamePlatform.Accounts.User;
 }

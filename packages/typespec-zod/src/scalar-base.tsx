@@ -13,6 +13,8 @@ import { Typekit } from "@typespec/compiler/typekit";
 import { callPart, idPart, refkeySym, shouldReference, zodMemberExpr } from "./utils.js";
 import { reportDiagnostic } from "./lib.js";
 import { getZodOptions } from "./context/zod-options.js";
+import { getPattern } from "@typespec/compiler";
+import { isBuiltIn } from "@qninhdt/typespec-orm";
 
 export function scalarBaseType($: Typekit, type: Scalar): Children {
   if (type.baseScalar && shouldReference($.program, type.baseScalar)) {
@@ -67,7 +69,16 @@ function numericScalarBaseType($: Typekit, type: Scalar): Children {
   }
 
   if (!$.scalar.extendsInteger(type)) {
-    return zodMemberExpr(callPart("number"));
+    if ($.scalar.extendsFloat(type)) {
+      return zodMemberExpr(callPart("number"));
+    }
+    // Numeric scalar that's neither integer, float, nor decimal — fail loud
+    // rather than silently returning z.number() and surprising callers.
+    reportDiagnostic($.program, {
+      code: "unsupported-type",
+      target: type,
+    });
+    return zodMemberExpr(callPart("never"));
   }
 
   const usesNumberSchema =
@@ -90,6 +101,9 @@ function numericScalarBaseType($: Typekit, type: Scalar): Children {
 }
 
 function stringScalarBaseType($: Typekit, type: Scalar): Children {
+  // Plain `string` is the base case: always emits z.string(), constraints
+  // (min/max length, pattern) attach later.
+  if (type.name === "string") return zodMemberExpr(callPart("string"));
   // Check scalar name directly for DB scalars that have Zod native methods
   if (type.name === "uuid") return zodMemberExpr(callPart("uuid"));
 
@@ -142,8 +156,42 @@ function stringScalarBaseType($: Typekit, type: Scalar): Children {
   // Note: `extendsUrl` is unreachable here — `case "url"` above matches first
   // for the built-in scalar. User-defined scalars extending `url` would also
   // hit `case "url"` after stdBase resolution, so the explicit branch was
-  // dead. Plain string is the safe fallback.
+  // dead. If we got here it's `mac`/`hostname` or an unknown built-in string
+  // scalar with no native Zod method. User-defined scalars extending `string`
+  // (e.g. `scalar StrongPassword extends string`) reach this branch too;
+  // their constraints will be applied later by `zodConstraintsParts`, so we
+  // emit `z.string()` as the fallback. Fail loud only for built-in scalars
+  // we don't know how to map and that don't carry validation.
+  if (isBuiltIn($.program, type) && !hasPatternConstraint($, type)) {
+    reportDiagnostic($.program, {
+      code: "unsupported-format",
+      target: type,
+      format: { name: type.name },
+    });
+    return zodMemberExpr(callPart("never"));
+  }
   return zodMemberExpr(callPart("string"));
+}
+
+/**
+ * Returns true if the scalar (or any of its base scalars) carries a `@pattern`
+ * decorator. We accept either the typed accessor or the raw decorator list so
+ * we degrade safely if the decorator name shape ever changes.
+ */
+function hasPatternConstraint($: Typekit, type: Scalar): boolean {
+  let current: Scalar | undefined = type;
+  while (current) {
+    const pattern = getPattern($.program, current);
+    if (typeof pattern === "string" && pattern.length > 0) return true;
+    if ("decorators" in current && Array.isArray(current.decorators)) {
+      for (const dec of current.decorators) {
+        const name = dec.definition?.name ?? dec.decorator?.name ?? "";
+        if (name === "@pattern" || name === "$pattern") return true;
+      }
+    }
+    current = current.baseScalar;
+  }
+  return false;
 }
 
 function datetimeScalarBaseType($: Typekit, type: Scalar): Children {
@@ -198,6 +246,12 @@ export function intrinsicBaseType(type: Type): Children {
     case "void":
       return zodMemberExpr(callPart("void"));
     default:
+      // Unknown intrinsic — fail loud rather than silently returning
+      // z.never() and producing a schema that rejects everything without
+      // explanation.
+      // We don't have access to a Program here, so emission of the diagnostic
+      // happens via the caller (`zodBaseSchemaParts` already routes unknown
+      // type kinds through `unsupported-type`).
       return zodMemberExpr(callPart("never"));
   }
 }

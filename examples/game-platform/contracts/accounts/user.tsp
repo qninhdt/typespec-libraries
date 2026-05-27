@@ -63,6 +63,10 @@ model User {
   /** Whether the account is currently active. */
   isActive: boolean = true;
 
+  /** Optimistic-locking version, incremented on every update. */
+  @version
+  rowVersion: int32 = 0;
+
   /** Example of a computed UI field excluded from persistence. */
   @ignore
   fullTitle?: string;

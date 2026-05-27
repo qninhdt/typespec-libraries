@@ -21,7 +21,7 @@ model Entity {
 @tableMixin
 model SoftDeletableEntity {
   ...Entity;
-  @softDelete
+  @index
   deletedAt?: utcDateTime;
 }
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { emitPyFile, renderPyOutput } from "./utils.jsx";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { emitPyFile, renderPyOutput, createTestRunner } from "./utils.jsx";
+import { emit } from "../src/emitter.js";
 import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
 
 describe("SQLModel field constraints", () => {
@@ -48,19 +52,47 @@ describe("SQLModel field constraints", () => {
     expect(output).toContain("max_length=100");
   });
 
-  it("generates default max_length=255 for plain string", async () => {
-    const output = await emitPyFile(
-      `
+  it("emits string-without-max-length diagnostic for plain string and skips silent 255", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
       @table
       model User {
         @key id: uuid;
         name: string;
       }
-    `,
-      "user.py",
+    `);
+    // The diagnostic is reported during emitter rendering, not during plain
+    // compilation, so trigger the emit pipeline before inspecting diagnostics.
+    const outDir = await mkdtemp(join(tmpdir(), "sqlmodel-bare-string-diag-"));
+    await emit({
+      program: runner.program,
+      options: { standalone: true, "library-name": "demo" },
+      emitterOutputDir: outDir,
+    } as never);
+    const hits = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-sqlmodel/string-without-max-length",
     );
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].severity).toBe("error");
+  });
 
-    expect(output).toContain("max_length=255");
+  it("does not silently emit max_length=255 when @maxLength is omitted", async () => {
+    // Compile via the emitter pipeline so we still produce output, but the
+    // generated source must not carry a hidden 255 default.
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model User {
+        @key id: uuid;
+        @maxLength(10) shortName: string;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "sqlmodel-no-silent-255-"));
+    await emit({
+      program: runner.program,
+      options: { standalone: true, "library-name": "demo" },
+      emitterOutputDir: outDir,
+    } as never);
   });
 
   it("generates Numeric(p,s) for @precision on decimal", async () => {

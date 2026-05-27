@@ -282,7 +282,9 @@ What you should expect from non-standalone output:
 - `standalone-requires-library-name`
   Standalone mode cannot write a usable Go module without `library-name`.
 - `unsupported-type`
-  The source TypeSpec field could not be mapped to a Go type or Ent field representation and emission fails.
+  The source TypeSpec field could not be mapped to a Go type or Ent field representation and emission fails. The emitter does not produce a placeholder `field.String(...)` for the offending column — no Go is emitted for that field.
+- `unsupported-default`
+  A `=` literal default could not be lowered to an Ent `Default(...)` value (for example, an `utcDateTime` literal). Use `@defaultExpression("...")` for SQL-side defaults instead.
 - `missing-back-reference`
   A one-to-many relation has no inverse many-to-one. Ent may still compile, but automatic FK behavior can be incomplete.
 - `unknown-format`

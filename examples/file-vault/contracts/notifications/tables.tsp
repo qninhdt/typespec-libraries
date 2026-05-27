@@ -29,10 +29,6 @@ model NotificationPreference {
 
   @unique
   accountChannel: composite<"accountId", "channel">;
-
-  @foreignKey("accountId")
-  @onDelete("CASCADE")
-  account: FileVault.Identity.UserAccount;
 }
 
 /** Notification visible in the product. */
@@ -46,13 +42,12 @@ model Notification {
   subject: string;
 
   body: text;
+
+  @maxLength(80)
   resourceType?: string;
+
   resourceId?: uuid;
   readAt?: utcDateTime;
-
-  @foreignKey("recipientId")
-  @onDelete("CASCADE")
-  recipient: FileVault.Identity.UserAccount;
 }
 
 /** Delivery attempt through a concrete channel. */
@@ -64,8 +59,13 @@ model NotificationDelivery {
 
   channel: NotificationChannel;
   state: NotificationState = NotificationState.queued;
+
+  @maxLength(160)
   providerMessageId?: string;
+
+  @maxLength(512)
   errorMessage?: string;
+
   sentAt?: utcDateTime;
 
   @foreignKey("notificationId")

@@ -6,9 +6,14 @@ import { Program } from "@typespec/compiler";
 import type { ZodEmitterOptions } from "../lib.js";
 
 /**
- * Read the user-facing emitter options off a Program. Falls back to the
- * test-fixture stub shape (`getCompilerOptions().emitterOutput[...]`) when
- * the real `compilerOptions.options[...]` isn't present.
+ * Read the user-facing emitter options off a Program.
+ *
+ * Contract: production reads `program.compilerOptions.options[<emitter-name>]`
+ * (set by the TypeSpec compiler when invoking emitters). Tests stash options
+ * the same way via `renderZodOutput` in `test/utils.tsx`. Both paths funnel
+ * through `compilerOptions.options[...]`; the legacy `getCompilerOptions().emitterOutput[...]`
+ * fallback is kept only as a defense-in-depth for older test fixtures and
+ * may be removed once those fixtures migrate.
  */
 export function getZodOptions(program: Program | undefined): ZodEmitterOptions {
   let raw: ZodEmitterOptions = {};

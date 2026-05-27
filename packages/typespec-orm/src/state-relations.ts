@@ -3,15 +3,15 @@ import {
   ForeignKeyKey,
   MappedByKey,
   ManyToManyKey,
+  ManyToManyOwnerKey,
   OnDeleteKey,
   OnUpdateKey,
   SchemaKey,
   DefaultExpressionKey,
   VersionKey,
-  AuditKey,
-  TenantIdKey,
   PolymorphicKey,
   IndexUsingKey,
+  PartialIndexKey,
   GoTypeKey,
   RefineKey,
 } from "./lib.js";
@@ -64,6 +64,11 @@ export function getManyToMany(program: Program, prop: ModelProperty): string | u
   return program.stateMap(ManyToManyKey).get(prop) as string | undefined;
 }
 
+/** Returns true when `@manyToManyOwner` was applied to this property. */
+export function isManyToManyOwner(program: Program, prop: ModelProperty): boolean {
+  return program.stateMap(ManyToManyOwnerKey).has(prop);
+}
+
 export function getOnDelete(program: Program, prop: ModelProperty): string | undefined {
   return program.stateMap(OnDeleteKey).get(prop) as string | undefined;
 }
@@ -99,31 +104,10 @@ export function isVersionColumn(program: Program, prop: ModelProperty): boolean 
   return program.stateMap(VersionKey).has(prop);
 }
 
-/** Returns the audit role (`"createdBy"` / `"updatedBy"`) set via `@audit`, if any. */
-export function getAuditRole(
-  program: Program,
-  prop: ModelProperty,
-): "createdBy" | "updatedBy" | undefined {
-  return program.stateMap(AuditKey).get(prop) as "createdBy" | "updatedBy" | undefined;
-}
-
-/** Returns true when the property carries `@tenantId`. */
-export function isTenantIdColumn(program: Program, prop: ModelProperty): boolean {
-  return program.stateMap(TenantIdKey).has(prop);
-}
-
 /** Finds the `@version` column on a model, or undefined. */
 export function findVersionProperty(program: Program, model: Model): ModelProperty | undefined {
   for (const prop of model.properties.values()) {
     if (isVersionColumn(program, prop)) return prop;
-  }
-  return undefined;
-}
-
-/** Finds the `@tenantId` column on a model, or undefined. */
-export function findTenantIdProperty(program: Program, model: Model): ModelProperty | undefined {
-  for (const prop of model.properties.values()) {
-    if (isTenantIdColumn(program, prop)) return prop;
   }
   return undefined;
 }
@@ -153,6 +137,15 @@ export type IndexMethod = "btree" | "gin" | "gist" | "brin" | "hash" | "spgist";
 
 export function getIndexUsing(program: Program, prop: ModelProperty): IndexMethod | undefined {
   return program.stateMap(IndexUsingKey).get(prop) as IndexMethod | undefined;
+}
+
+/**
+ * Returns the partial-index predicate set via `@partialIndex(...)`. Combines
+ * with `@index`, `@unique`, or `@key` on the same property; emitters drop the
+ * predicate (with a warning) when the property carries no index decorator.
+ */
+export function getPartialIndex(program: Program, prop: ModelProperty): string | undefined {
+  return program.stateMap(PartialIndexKey).get(prop) as string | undefined;
 }
 
 export interface GoTypeSpec {

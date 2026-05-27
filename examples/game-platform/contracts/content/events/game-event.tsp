@@ -21,10 +21,4 @@ model GameEvent {
 
   /** Mutations applied when the event fires. */
   effects?: jsonb;
-
-  // ─── Relationships ─────────────────
-  @foreignKey("worldId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  world: GamePlatform.Worlds.World;
 }

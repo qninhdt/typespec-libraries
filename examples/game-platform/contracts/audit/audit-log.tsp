@@ -17,10 +17,12 @@ model AuditLog {
 
   /**
    * Logical type of the changed entity, e.g. "World" or "StoryNode".
+   * Discriminator of a polymorphic relation paired with `entityId`.
    */
   @index
   @maxLength(100)
   @map("entity_type")
+  @polymorphic(#["World", "StoryNode", "User", "Subscription"], "entityId")
   entityType: string;
 
   /** Primary key of the changed entity. */
@@ -44,29 +46,14 @@ model AuditLog {
 
   /**
    * Optional world slug snapshot for human-friendly correlation in logs.
-   * Demonstrates a relation that targets a non-id unique column.
+   * Audit lives in its own service so this is a denormalized snapshot,
+   * not a database FK to the worlds service.
    */
-  worldSlug?: GamePlatform.Worlds.World.slug;
+  @maxLength(120)
+  worldSlug?: string;
 
   // ─── Timestamp Fields ─────────────────
   @autoCreateTime
   @map("created_at")
   createdAt: utcDateTime;
-
-  // ─── Relationships Across Namespaces ─────────────────
-  /**
-   * User who performed the action - SET NULL when the account is deleted.
-   */
-  @foreignKey("actorId")
-  @onDelete("SET NULL")
-  @onUpdate("CASCADE")
-  actor?: GamePlatform.Accounts.User;
-
-  /**
-   * World context resolved through its stable slug instead of the primary key.
-   */
-  @foreignKey("worldSlug", "slug")
-  @onDelete("SET NULL")
-  @onUpdate("CASCADE")
-  worldContext?: GamePlatform.Worlds.World;
 }

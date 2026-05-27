@@ -5,16 +5,14 @@ import {
   UniqueKey,
   CheckKey,
   AutoIncrementKey,
-  SoftDeleteKey,
   AutoCreateTimeKey,
   AutoUpdateTimeKey,
   PrecisionKey,
   IgnoreKey,
   DefaultExpressionKey,
   VersionKey,
-  AuditKey,
-  TenantIdKey,
   IndexUsingKey,
+  PartialIndexKey,
   GoTypeKey,
 } from "./lib.js";
 
@@ -23,13 +21,14 @@ export function $map(context: DecoratorContext, target: ModelProperty, columnNam
 }
 
 export function $index(context: DecoratorContext, target: ModelProperty, name?: string): void {
-  // Auto-generate name from table name + column name if not specified
-  // Name format: [tableName]_[columnName]_idx
-  context.program.stateMap(IndexKey).set(target, name ?? "");
+  // Store the override verbatim. Undefined means "auto-derive
+  // [tableName]_[columnName]_idx in getIndexName".
+  context.program.stateMap(IndexKey).set(target, name);
 }
 
 export function $unique(context: DecoratorContext, target: ModelProperty, name?: string): void {
-  context.program.stateMap(UniqueKey).set(target, name ?? "");
+  // Same contract as @index: undefined means auto-derive.
+  context.program.stateMap(UniqueKey).set(target, name);
 }
 
 export function $check(
@@ -43,10 +42,6 @@ export function $check(
 
 export function $autoIncrement(context: DecoratorContext, target: ModelProperty): void {
   context.program.stateMap(AutoIncrementKey).set(target, true);
-}
-
-export function $softDelete(context: DecoratorContext, target: ModelProperty): void {
-  context.program.stateMap(SoftDeleteKey).set(target, true);
 }
 
 export function $autoCreateTime(context: DecoratorContext, target: ModelProperty): void {
@@ -63,6 +58,7 @@ export function $precision(
   precision: number,
   scale?: number,
 ): void {
+  // Postgres NUMERIC(precision) defaults scale to 0 when omitted.
   context.program.stateMap(PrecisionKey).set(target, {
     precision,
     scale: scale ?? 0,
@@ -94,32 +90,25 @@ export function $version(context: DecoratorContext, target: ModelProperty): void
   context.program.stateMap(VersionKey).set(target, true);
 }
 
-/**
- * Marks a column as an audit field. `role` selects which lifecycle hook
- * the emitter wires: "createdBy" / "updatedBy".
- */
-export function $audit(
-  context: DecoratorContext,
-  target: ModelProperty,
-  role: "createdBy" | "updatedBy",
-): void {
-  context.program.stateMap(AuditKey).set(target, role);
-}
-
-/**
- * Marks a column as the tenant scope. Downstream emitters use this to scaffold
- * multi-tenant policies / row-level security helpers.
- */
-export function $tenantId(context: DecoratorContext, target: ModelProperty): void {
-  context.program.stateMap(TenantIdKey).set(target, true);
-}
-
 export function $indexUsing(
   context: DecoratorContext,
   target: ModelProperty,
   method: string,
 ): void {
   context.program.stateMap(IndexUsingKey).set(target, method);
+}
+
+/**
+ * Adds a partial-index predicate to a column-level index. Combines with
+ * `@index`, `@unique`, or `@key`. The predicate string is rendered verbatim
+ * by emitters that support partial indexes.
+ */
+export function $partialIndex(
+  context: DecoratorContext,
+  target: ModelProperty,
+  predicate: string,
+): void {
+  context.program.stateMap(PartialIndexKey).set(target, predicate);
 }
 
 export interface GoTypeSpec {

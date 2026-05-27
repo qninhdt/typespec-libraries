@@ -3,9 +3,7 @@ import { TableKey, TableMixinKey, reportDiagnostic } from "./lib.js";
 import {
   camelToSnake,
   collectOrmManagedModels,
-  findTenantIdProperty,
   findVersionProperty,
-  getAuditRole,
   getColumnName,
   getNamespaceFullName,
   getNamespaceSegments,
@@ -46,31 +44,15 @@ function collectModelMetadata(
   schema?: string;
   scopes: string[];
   versionColumn?: string;
-  tenantIdColumn?: string;
-  auditColumns: string[];
 } {
   const scopes = [...getScopes(program, model)];
-  // Schema only meaningful for tables; mixins/data inherit no PG schema.
   const schema = kind === "table" ? getSchemaName(program, model) : undefined;
 
   let versionColumn: string | undefined;
-  let tenantIdColumn: string | undefined;
-  const auditColumns: string[] = [];
-
   const versionProp = findVersionProperty(program, model);
   if (versionProp) versionColumn = getColumnName(program, versionProp);
 
-  const tenantProp = findTenantIdProperty(program, model);
-  if (tenantProp) tenantIdColumn = getColumnName(program, tenantProp);
-
-  for (const prop of model.properties.values()) {
-    if (getAuditRole(program, prop)) {
-      auditColumns.push(getColumnName(program, prop));
-    }
-  }
-  auditColumns.sort();
-
-  return { schema, scopes, versionColumn, tenantIdColumn, auditColumns };
+  return { schema, scopes, versionColumn };
 }
 
 function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
@@ -134,8 +116,6 @@ function computeNormalizedOrmGraph(program: Program): NormalizedOrmGraph {
       schema: metadata.schema,
       scopes: metadata.scopes,
       versionColumn: metadata.versionColumn,
-      tenantIdColumn: metadata.tenantIdColumn,
-      auditColumns: metadata.auditColumns,
     });
   };
 

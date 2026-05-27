@@ -40,18 +40,26 @@ export async function emit(context: EmitContext<DbmlEmitterOptions>): Promise<vo
     tables.map((item) => item.model),
   );
 
-  const classifiedByTable = tables.map((table) => {
+  const classifiedByTable: ClassifiedTableEntry[] = [];
+  for (const table of tables) {
     if (table.tableName === undefined) {
-      // Selection with kinds:["table"] guarantees a tableName, but be defensive.
-      throw new Error(`Selected table model ${table.fullName} is missing a tableName.`);
+      // Selection with kinds:["table"] guarantees a tableName, but be defensive:
+      // surface the failure as a normal diagnostic so downstream emit failures
+      // share the same shape instead of throwing through Alloy.
+      reportDiagnostic(program, {
+        code: "missing-table-name",
+        target: table.model,
+        format: { modelName: table.fullName },
+      });
+      return;
     }
-    return {
+    classifiedByTable.push({
       normalized: table,
       model: table.model,
       tableName: table.tableName,
       classified: classifyProperties(program, table.model),
-    };
-  });
+    });
+  }
 
   const groupedTables = groupTablesByNamespace(classifiedByTable);
   const groupedAssociations = groupAssociationsByNamespace(graph, associations);

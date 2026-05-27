@@ -53,10 +53,6 @@ model ProcessingJob {
   errorMessage?: string;
 
   parametersJson?: jsonb;
-
-  @foreignKey("fileId")
-  @onDelete("CASCADE")
-  file: FileVault.Metadata.FileMetadata;
 }
 
 /** Artifact produced by a processing job. */
@@ -77,10 +73,6 @@ model ProcessingArtifact {
   @foreignKey("jobId")
   @onDelete("CASCADE")
   job: ProcessingJob;
-
-  @foreignKey("fileId")
-  @onDelete("CASCADE")
-  file: FileVault.Metadata.FileMetadata;
 }
 
 /** Latest summary surfaced in file details and search snippets. */
@@ -91,12 +83,11 @@ model FileSummaryRecord {
   fileId: uuid;
 
   summary: text;
-  modelName: string;
-  generatedAt: utcDateTime;
 
-  @foreignKey("fileId")
-  @onDelete("CASCADE")
-  file: FileVault.Metadata.FileMetadata;
+  @maxLength(120)
+  modelName: string;
+
+  generatedAt: utcDateTime;
 }
 
 /** Extracted searchable text. Large blobs may be stored externally. */
@@ -106,11 +97,9 @@ model ExtractedText {
   @unique
   fileId: uuid;
 
+  @maxLength(16)
   language?: string;
+
   content: text;
   extractionVersion: int32 = 1;
-
-  @foreignKey("fileId")
-  @onDelete("CASCADE")
-  file: FileVault.Metadata.FileMetadata;
 }

@@ -79,7 +79,7 @@ export function generateColumnLine(program: Program, prop: ModelProperty): strin
     return `  ${columnName} ${enumName}${settingsStr}`;
   }
 
-  const dbmlType = getDbmlType(program, prop.type);
+  const dbmlType = getDbmlType(program, prop.type, prop);
 
   if (!dbmlType) {
     if (!getCompositeFields(program, prop)) {
@@ -198,10 +198,12 @@ function joinNotes(...parts: Array<string | undefined>): string | undefined {
  * leaks the source-code identifier into a note that purports to describe the
  * DB-level constraint.
  *
- * Implementation: tokenize on word boundaries and replace any token that
- * matches a sibling property's TypeSpec name with its column name. Numeric
- * literals, operators, and unrelated identifiers (functions, casts) pass
- * through unchanged.
+ * Implementation: walk the expression splitting on quoted string literals
+ * (`'...'` and `"..."`) so identifier substitution only touches code outside
+ * literals. Rewriting a SQL token inside `'%foo%'` would corrupt the literal.
+ * Inside the unquoted segments, replace any token matching a sibling
+ * property's TypeSpec name with its column name; numeric literals, operators,
+ * and unrelated identifiers (functions, casts) pass through unchanged.
  */
 function rewriteCheckExpression(program: Program, prop: ModelProperty, expression: string): string {
   const owner = prop.model;
@@ -210,11 +212,49 @@ function rewriteCheckExpression(program: Program, prop: ModelProperty, expressio
   for (const sibling of owner.properties.values()) {
     propMap.set(sibling.name, sibling);
   }
-  return expression.replace(/[A-Za-z_][\w]*/g, (token) => {
-    const sibling = propMap.get(token);
-    if (!sibling) return token;
-    return getColumnName(program, sibling);
-  });
+  const rewriteIdentifiers = (segment: string): string =>
+    segment.replace(/[A-Za-z_][\w]*/g, (token) => {
+      const sibling = propMap.get(token);
+      if (!sibling) return token;
+      return getColumnName(program, sibling);
+    });
+
+  // Single-pass scan that respects single- and double-quoted SQL literals,
+  // including doubled-quote escapes (`''` inside a single-quoted literal).
+  let out = "";
+  let i = 0;
+  while (i < expression.length) {
+    const ch = expression[i];
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      let j = i + 1;
+      while (j < expression.length) {
+        if (expression[j] === quote) {
+          // SQL convention: a doubled quote is an escaped quote within the
+          // literal, not a terminator.
+          if (expression[j + 1] === quote) {
+            j += 2;
+            continue;
+          }
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      // Pass the literal (including its surrounding quotes) through untouched.
+      out += expression.slice(i, j);
+      i = j;
+      continue;
+    }
+    // Accumulate a run of non-quote characters and rewrite identifiers in it.
+    let k = i;
+    while (k < expression.length && expression[k] !== "'" && expression[k] !== '"') {
+      k += 1;
+    }
+    out += rewriteIdentifiers(expression.slice(i, k));
+    i = k;
+  }
+  return out;
 }
 
 function resolveEnumDefault(

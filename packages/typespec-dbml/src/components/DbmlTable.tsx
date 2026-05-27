@@ -2,11 +2,12 @@
  * DbmlTable - Generate DBML table definitions.
  */
 
-import type { Model, Program } from "@typespec/compiler";
+import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import {
   classifyProperties,
   collectCompositeTypeFields,
   getCompositeFields,
+  getPartialIndex,
   getPolymorphicConfig,
   isKey,
   isUnique,
@@ -64,17 +65,23 @@ export function DbmlTable(props: DbmlTableProps): string {
     if (getCompositeFields(program, prop)) continue;
 
     const colName = quoteDbmlIdentifier(getColumnName(program, prop));
+    const partialNote = buildPartialNote(program, prop);
 
     if (isIndex(program, prop) && !isUnique(program, prop)) {
-      indexes.push(`    ${colName}`);
+      indexes.push(`    ${colName}${partialNote}`);
     } else if (isUnique(program, prop) && !isKey(program, prop)) {
       // Unnamed `@unique` renders inline as column-level `[unique]` (handled
       // in DbmlColumn) so dbdiagram.io shows the badge inline. Only keep the
       // indexes-block entry when there's a `@unique("name")` override that
       // would otherwise lose the constraint name (DBML has no column-level
-      // name surface).
-      if (hasUniqueNameOverride(program, prop)) {
-        indexes.push(`    ${colName} [unique]`);
+      // name surface), or when a partial-index predicate needs surfacing.
+      if (hasUniqueNameOverride(program, prop) || getPartialIndex(program, prop)) {
+        const attrs = ["unique"];
+        const predicate = getPartialIndex(program, prop);
+        if (predicate) {
+          attrs.push(`note: '${escapeDbmlSingleQuotes(`partial: ${predicate}`)}'`);
+        }
+        indexes.push(`    ${colName} [${attrs.join(", ")}]`);
       }
     }
   }
@@ -121,6 +128,7 @@ function buildCompositeIndexLine(ct: {
   columns: string[];
   isUnique: boolean;
   isPrimary: boolean;
+  where?: string;
 }): string {
   // Composite primary keys never carry a user-defined name surface in DBML —
   // `[pk]` alone is enough. For non-pk indexes, preserve the constraint name
@@ -132,12 +140,27 @@ function buildCompositeIndexLine(ct: {
     attrs.push("pk");
   } else {
     if (ct.name) {
-      attrs.push(`name: '${ct.name.replaceAll("'", "\\'")}'`);
+      attrs.push(`name: '${escapeDbmlSingleQuotes(ct.name)}'`);
     }
     if (ct.isUnique) {
       attrs.push("unique");
     }
   }
+  if (ct.where) {
+    // DBML has no native partial-index syntax; surface the predicate via a
+    // `note:` setting so dbdocs renders it next to the index.
+    attrs.push(`note: '${escapeDbmlSingleQuotes(`partial: ${ct.where}`)}'`);
+  }
   const suffix = attrs.length > 0 ? ` [${attrs.join(", ")}]` : "";
   return `    (${ct.columns.join(", ")})${suffix}`;
+}
+
+function buildPartialNote(program: Program, prop: ModelProperty): string {
+  const predicate = getPartialIndex(program, prop);
+  if (!predicate) return "";
+  return ` [note: '${escapeDbmlSingleQuotes(`partial: ${predicate}`)}']`;
+}
+
+function escapeDbmlSingleQuotes(value: string): string {
+  return value.replaceAll("'", "\\'");
 }

@@ -82,6 +82,12 @@ export const $lib = createTypeSpecLibrary({
         default: `Type could not be mapped to a Zod schema.`,
       },
     },
+    "unsupported-format": {
+      severity: "error",
+      messages: {
+        default: paramMessage`No Zod equivalent for scalar/format "${"name"}". Add a @pattern decorator or use a supported scalar.`,
+      },
+    },
     "emit-write-failed": {
       severity: "error",
       messages: {

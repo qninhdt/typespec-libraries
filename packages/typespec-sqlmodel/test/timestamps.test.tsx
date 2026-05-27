@@ -41,14 +41,14 @@ describe("SQLModel @autoUpdateTime", () => {
   });
 });
 
-describe("SQLModel @softDelete", () => {
-  it("generates datetime | None field with index and default=None", async () => {
+describe("SQLModel deleted_at convention", () => {
+  it("auto-indexes a deleted_at column for the soft-delete convention", async () => {
     const output = await emitPyFile(
       `
       @table
       model User {
         @key id: uuid;
-        @softDelete deletedAt?: utcDateTime;
+        deletedAt?: utcDateTime;
       }
     `,
       "user.py",

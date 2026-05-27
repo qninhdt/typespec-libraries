@@ -81,6 +81,12 @@ export interface CompositeTypeField {
   isUnique: boolean;
   /** Whether this is a primary key constraint */
   isPrimary: boolean;
+  /**
+   * Optional partial-index predicate from `@@tableIndex(..., where)` /
+   * `@@tableUnique(..., where)`. Verbatim SQL fragment; the library does
+   * not parse it.
+   */
+  where?: string;
 }
 
 /**
@@ -111,9 +117,7 @@ export function collectCompositeTypeFields(
         resolveCompositeColumnName(program, model, column),
       );
       const snakeColumns = resolvedColumns.map((column) => camelToSnake(column));
-      const generatedName = truncatePgIdentifier(
-        [tableName, ...snakeColumns, suffix].join("_"),
-      );
+      const generatedName = truncatePgIdentifier([tableName, ...snakeColumns, suffix].join("_"));
       result.push({
         name: generatedName,
         columns: resolvedColumns,
@@ -123,22 +127,22 @@ export function collectCompositeTypeFields(
     }
   }
 
-  for (const spec of (program.stateMap(ModelIndexesKey).get(model) as ModelIndexSpec[] | undefined) ?? []) {
+  for (const spec of (program.stateMap(ModelIndexesKey).get(model) as
+    | ModelIndexSpec[]
+    | undefined) ?? []) {
     const resolved = spec.columns.map((c) => resolveCompositeColumnName(program, model, c));
     const snake = resolved.map((c) => camelToSnake(c));
-    const name = truncatePgIdentifier(
-      spec.name ?? [tableName, ...snake, "idx"].join("_"),
-    );
-    result.push({ name, columns: resolved, isUnique: false, isPrimary: false });
+    const name = truncatePgIdentifier(spec.name ?? [tableName, ...snake, "idx"].join("_"));
+    result.push({ name, columns: resolved, isUnique: false, isPrimary: false, where: spec.where });
   }
 
-  for (const spec of (program.stateMap(ModelUniquesKey).get(model) as ModelIndexSpec[] | undefined) ?? []) {
+  for (const spec of (program.stateMap(ModelUniquesKey).get(model) as
+    | ModelIndexSpec[]
+    | undefined) ?? []) {
     const resolved = spec.columns.map((c) => resolveCompositeColumnName(program, model, c));
     const snake = resolved.map((c) => camelToSnake(c));
-    const name = truncatePgIdentifier(
-      spec.name ?? [tableName, ...snake, "unique"].join("_"),
-    );
-    result.push({ name, columns: resolved, isUnique: true, isPrimary: false });
+    const name = truncatePgIdentifier(spec.name ?? [tableName, ...snake, "unique"].join("_"));
+    result.push({ name, columns: resolved, isUnique: true, isPrimary: false, where: spec.where });
   }
 
   return result;

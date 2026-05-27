@@ -4,6 +4,9 @@
     "moduleResolution": "Node16",
     "target": "ES2022",
     "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    // Deferred: noUncheckedIndexedAccess, exactOptionalPropertyTypes (require broad package source changes)
     "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,

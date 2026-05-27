@@ -34,13 +34,6 @@ model ShareGrant {
   role: ShareRole;
   expiresAt?: utcDateTime;
   revokedAt?: utcDateTime;
-
-  @foreignKey("resourceNodeId")
-  @onDelete("CASCADE")
-  resource: FileVault.Metadata.VaultNode;
-
-  @foreignKey("grantedBy")
-  grantor: FileVault.Identity.UserAccount;
 }
 
 /** Public or restricted link token. Token secret is stored hashed. */
@@ -54,19 +47,15 @@ model ShareLink {
   createdBy: uuid;
 
   @unique
+  @maxLength(128)
   tokenHash: string;
 
   role: ShareRole = ShareRole.viewer;
+
+  @maxLength(255)
   passwordHash?: string;
   maxDownloads?: int32;
   downloadCount: int32 = 0;
   expiresAt?: utcDateTime;
   revokedAt?: utcDateTime;
-
-  @foreignKey("resourceNodeId")
-  @onDelete("CASCADE")
-  resource: FileVault.Metadata.VaultNode;
-
-  @foreignKey("createdBy")
-  creator: FileVault.Identity.UserAccount;
 }

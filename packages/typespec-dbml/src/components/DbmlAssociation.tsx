@@ -33,8 +33,23 @@ export function renderAssociationTable(
   // Schema-qualify + quote the heading using the same helper used for the
   // Refs below; otherwise the join table's `Table` line and the `Ref:` lines
   // disagree when both endpoints share an `@schema`.
-  const joinSchema =
-    getSchemaName(program, association.leftModel) ?? getSchemaName(program, association.rightModel);
+  const leftSchema = getSchemaName(program, association.leftModel);
+  const rightSchema = getSchemaName(program, association.rightModel);
+  const joinSchema = leftSchema ?? rightSchema;
+  // When both sides declare a schema and they disagree, DBML cannot place the
+  // join table in two schemas at once. Pick the left side and surface a
+  // warning so users know the choice was made and where the table landed.
+  if (leftSchema && rightSchema && leftSchema !== rightSchema) {
+    reportDiagnostic(program, {
+      code: "cross-schema-many-to-many",
+      target: association.leftKey,
+      format: {
+        left: leftSchema,
+        right: rightSchema,
+        chosen: joinSchema ?? "(default)",
+      },
+    });
+  }
   const joinTable = quoteDbmlIdentifier(association.tableName);
   const joinQualified = joinSchema ? `${quoteDbmlIdentifier(joinSchema)}.${joinTable}` : joinTable;
 

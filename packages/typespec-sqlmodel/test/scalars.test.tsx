@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestHost } from "@qninhdt/typespec-orm/testing";
 import { TypeSpecSqlModelTestLibrary } from "../src/testing/index.js";
-import { emitPyFile, renderPyOutput } from "./utils.jsx";
+import { createTestRunner, emitPyFile, renderPyOutput } from "./utils.jsx";
 import { emit } from "../src/emitter.js";
 import { getOutputFileContent } from "@qninhdt/typespec-orm/testing";
+import { generateField } from "../src/components/PyField.jsx";
+import type { ModelProperty, Scalar } from "@typespec/compiler";
 
 describe("Python scalar type mappings", () => {
   it("maps uuid to UUID with uuid4 import", async () => {
@@ -24,13 +26,13 @@ describe("Python scalar type mappings", () => {
     expect(output).toContain("from uuid import UUID, uuid4");
   });
 
-  it("maps string to str with default max_length=255", async () => {
+  it("maps string to str and refuses to silently default max_length", async () => {
     const output = await emitPyFile(
       `
       @table
       model User {
         @key id: uuid;
-        name: string;
+        @maxLength(255) name: string;
       }
     `,
       "user.py",
@@ -419,5 +421,61 @@ describe("Python semantic scalar mappings", () => {
     expect(fooScalars).not.toContain("StrongPassword = Annotated");
     expect(barScalars).toContain("from .._shared.scalars import StrongPassword");
     expect(barScalars).not.toContain("StrongPassword = Annotated");
+  });
+
+  it("emits unsupported-type when scalarAliasNames is missing an entry for a custom scalar", async () => {
+    // Drive generateField directly with an empty alias map so we exercise the
+    // exact "no alias registered" branch. In production this only fires when
+    // the orchestrator forgets to plumb the map through — but rather than rely
+    // on a buggy harness, we simulate the condition with an explicit empty
+    // map on a property whose scalar has no native pydantic type.
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @minLength(8)
+      scalar StrongPassword extends string;
+
+      @table
+      model RootUser {
+        @key id: uuid;
+        password: StrongPassword;
+      }
+    `);
+
+    const passwordProp = (() => {
+      const root = runner.program.getGlobalNamespaceType();
+      const queue = [root];
+      while (queue.length > 0) {
+        const ns = queue.shift()!;
+        const model = ns.models.get("RootUser");
+        if (model) {
+          const prop = model.properties.get("password");
+          if (prop) return prop as ModelProperty;
+        }
+        for (const child of ns.namespaces.values()) queue.push(child);
+      }
+      throw new Error("password property not found");
+    })();
+
+    // Empty alias map → simulate the missing-entry path.
+    const emptyAliasNames = new Map<Scalar, string>();
+    generateField(
+      runner.program,
+      passwordProp,
+      new Set(),
+      new Set(),
+      new Set(),
+      { value: false },
+      { value: false },
+      false,
+      undefined,
+      undefined,
+      emptyAliasNames,
+    );
+
+    const hits = runner.program.diagnostics.filter(
+      (d) => d.code === "@qninhdt/typespec-sqlmodel/unsupported-type",
+    );
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits[0].severity).toBe("error");
   });
 });

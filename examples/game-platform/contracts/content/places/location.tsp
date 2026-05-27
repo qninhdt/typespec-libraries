@@ -18,10 +18,4 @@ model Location {
 
   /** Bounding box or point stored as GeoJSON. */
   coordinates?: jsonb;
-
-  // ─── Relationships ─────────────────
-  @foreignKey("worldId")
-  @onDelete("CASCADE")
-  @onUpdate("CASCADE")
-  world: GamePlatform.Worlds.World;
 }

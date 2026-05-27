@@ -43,6 +43,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -73,8 +78,11 @@ jobs:
       - name: Compile Examples
         run: pnpm run compile-examples
 
-      - name: Check Generated Drift
-        run: git diff --exit-code -- outputs
+      - name: Check Emit Determinism
+        run: |
+          mv outputs outputs-first
+          pnpm run compile-examples
+          diff -r outputs-first outputs
 
       - name: Verify Generated Go
         run: pnpm run validate-examples:ent
@@ -84,6 +92,9 @@ jobs:
 
       - name: Verify Generated TypeScript
         run: pnpm run validate-examples:zod
+
+      - name: Verify Generated DBML
+        run: pnpm run validate-examples:dbml
 
       - name: Verify Generated Protobuf
         run: pnpm run validate-examples:protobuf
