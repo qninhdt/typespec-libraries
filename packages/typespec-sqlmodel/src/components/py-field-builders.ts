@@ -78,8 +78,13 @@ export function buildPkArgs(
   state: FieldArgState,
   imports: FieldImports,
   flags: FieldFlags,
+  isPartOfCompositePk?: boolean,
 ): boolean {
-  const isPk = isKey(program, prop);
+  // A property is a primary-key column either when it carries `@key`
+  // directly or when its column name is a member of the table's
+  // composite primary key (declared via `@key x: composite<...>` on
+  // another property and threaded down by the caller).
+  const isPk = isKey(program, prop) || (isPartOfCompositePk ?? false);
   if (!isPk) return false;
   flags.needsField.value = true;
   if (dbType === "uuid" && !isNoDefault(program, prop)) {

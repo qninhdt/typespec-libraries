@@ -59,6 +59,7 @@ export function generateField(
   relationForeignKey?: ResolvedForeignKeyFieldInfo,
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"],
   scalarAliasNames?: ReadonlyMap<Scalar, string>,
+  isPartOfCompositePk?: boolean,
 ): string {
   if (getCompositeFields(program, prop)) return "";
 
@@ -90,6 +91,7 @@ export function generateField(
       needsField,
       needsColumn,
       isPartOfCompositeUnique,
+      isPartOfCompositePk,
     );
   }
 
@@ -98,7 +100,8 @@ export function generateField(
 
   let pyType = mapping.pyType;
   const isOptional = prop.optional;
-  const isPk = isKey(program, prop);
+  // Composite PK members get primary_key=True even though they don't carry @key.
+  const isPk = isKey(program, prop) || (isPartOfCompositePk ?? false);
   const isSoft = isSoftDelete(program, prop);
   const isAutoInc = isAutoIncrement(program, prop) || dbType === "serial" || dbType === "bigserial";
 
@@ -152,7 +155,7 @@ export function generateField(
   const imports: FieldImports = { std: stdImports, sa: saImports };
   const flags: FieldFlags = { needsField, needsColumn };
 
-  buildPkArgs(program, prop, dbType, state, imports, flags);
+  buildPkArgs(program, prop, dbType, state, imports, flags, isPartOfCompositePk);
   buildConstraintArgs({
     program,
     prop,
