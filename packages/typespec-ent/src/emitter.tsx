@@ -19,6 +19,7 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
   const collectionStrategy = options["collection-strategy"];
   const goVersion = options["go-version"] ?? "1.24";
   const onUpdateEmitRawSql = options["on-update-emit-raw-sql"] ?? false;
+  const emitAtlasHcl = options["emit-atlas-hcl"] ?? true;
 
   const result = bootstrapEmitter(context, {
     kinds: ["table", "mixin", "data"],
@@ -63,7 +64,7 @@ export async function emit(context: EmitContext<EntEmitterOptions>): Promise<voi
 
   const tree = (
     <SourceDirectory path=".">
-      {tables.length > 0 && (
+      {tables.length > 0 && emitAtlasHcl && (
         <SourceFile path="atlas.hcl" filetype="hcl" printWidth={9999}>
           {generateAtlasHcl(atlasSchemas)}
         </SourceFile>

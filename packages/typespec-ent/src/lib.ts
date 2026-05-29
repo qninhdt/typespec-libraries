@@ -25,6 +25,13 @@ export interface EntEmitterOptions {
    * tooling can pick the marker up via custom rules. Default: `false`.
    */
   "on-update-emit-raw-sql"?: boolean;
+  /**
+   * When false, suppress emission of `atlas.hcl` at the output-dir root.
+   * Useful when emitting into an existing Go service tree that already owns
+   * a hand-tuned `atlas.hcl` (custom env names, real Postgres URL, dev
+   * container overrides). Default: `true` (preserves prior behavior).
+   */
+  "emit-atlas-hcl"?: boolean;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
@@ -41,6 +48,7 @@ const EmitterOptionsSchema: JSONSchemaType<EntEmitterOptions> = {
     "go-version": { type: "string", nullable: true },
     version: { type: "string", nullable: true },
     "on-update-emit-raw-sql": { type: "boolean", nullable: true },
+    "emit-atlas-hcl": { type: "boolean", nullable: true },
   },
   required: [],
 };
