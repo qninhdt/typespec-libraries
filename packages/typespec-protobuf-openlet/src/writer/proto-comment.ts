@@ -18,17 +18,18 @@
  */
 export function renderProtoComment(
   doc: string | undefined,
-  opts: { indent?: string; maxColumns?: number } = {},
+  opts: { indent?: string; maxColumns?: number; escape?: boolean } = {},
 ): string[] {
   if (!doc) return [];
   const indent = opts.indent ?? "";
   const maxColumns = opts.maxColumns ?? 100;
+  const escape = opts.escape ?? true;
   const prefix = `${indent}// `;
   const contentBudget = Math.max(20, maxColumns - prefix.length);
 
   const lines: string[] = [];
   for (const rawLine of doc.split(/\r?\n/)) {
-    const escaped = escapeAtWords(rawLine).trimEnd();
+    const escaped = (escape ? escapeAtWords(rawLine) : rawLine).trimEnd();
     if (escaped === "") {
       lines.push(`${indent}//`);
       continue;

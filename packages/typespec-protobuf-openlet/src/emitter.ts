@@ -5,17 +5,13 @@ import {
   type ModelProperty,
   type Type,
 } from "@typespec/compiler";
-import { resolvePath, joinPaths } from "@typespec/compiler";
+import { resolvePath, joinPaths, emitFile } from "@typespec/compiler";
 import { reportDiagnostic, type ProtoEmitterOptions } from "./lib.js";
 import { collectPackages, filterBuckets, type PackageBucket } from "./walker/collect-packages.js";
 import { buildPackageGraph, type PackageGraph } from "./walker/package-graph.js";
 import { buildNamingContext, refNamedType } from "./walker/cross-package-refs.js";
 import { prepareEntityAllocations } from "./walker/entity-bridge.js";
-import {
-  loadAllocationTable,
-  saveAllocationTable,
-  hostAllocatorIo,
-} from "./allocator/allocator-io.js";
+import { loadAllocationTable, saveAllocationTable } from "./allocator/allocator-io.js";
 import type { ImportPathStyle } from "./walker/import-planner.js";
 import { renderProtoMessage } from "./writer/proto-message.js";
 import { renderProtoEnum } from "./writer/proto-enum.js";
@@ -85,7 +81,18 @@ export async function $onEmit(context: EmitContext<ProtoEmitterOptions>): Promis
     const allocPath = resolvePath(
       joinPaths(outputDir, options["allocation-file"] ?? DEFAULT_ALLOCATION_FILE),
     );
-    const io = hostAllocatorIo(program.host);
+    const io = {
+      async readFile(path: string): Promise<string | undefined> {
+        try {
+          return (await program.host.readFile(path)).text;
+        } catch {
+          return undefined;
+        }
+      },
+      // emitFile does mkdirp; host.writeFile does not, and the allocation file
+      // is written before any .proto so its parent dir may not exist yet.
+      writeFile: (path: string, content: string) => emitFile(program, { path, content }),
+    };
     const stored = await loadAllocationTable(io, allocPath);
     const bridge = prepareEntityAllocations(program, writeBuckets, stored);
 
@@ -118,7 +125,7 @@ export async function $onEmit(context: EmitContext<ProtoEmitterOptions>): Promis
     }
   }
 
-  const headerLines = renderProtoComment(options.header ?? DEFAULT_HEADER);
+  const headerLines = renderProtoComment(options.header ?? DEFAULT_HEADER, { escape: false });
   const fieldNameStyle = options["field-name-style"] ?? "snake_case";
   const emptyRequestRewrite = options["empty-request-rewrite"] !== false;
   const resolverOptions = {
@@ -205,7 +212,7 @@ export async function $onEmit(context: EmitContext<ProtoEmitterOptions>): Promis
 
     const relativePath = graph.filePathOf(bucket.spec.name) ?? `${bucket.spec.name}.proto`;
     const targetPath = resolvePath(joinPaths(outputDir, relativePath));
-    await program.host.writeFile(targetPath, content);
+    await emitFile(program, { path: targetPath, content });
   }
 
   // ── Buf config auto-generation (Phase 6) ──────────────────────────────────
@@ -264,7 +271,7 @@ async function maybeWriteBufConfig(
       return;
     }
   }
-  await program.host.writeFile(path, content);
+  await emitFile(program, { path, content });
 }
 
 /** Report a batch of structured writer diagnostics. */

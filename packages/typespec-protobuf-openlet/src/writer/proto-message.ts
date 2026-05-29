@@ -1,5 +1,6 @@
 import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import { getDoc, isDeprecated } from "@typespec/compiler";
+import { isIgnored as isOrmIgnored } from "@qninhdt/typespec-orm";
 import {
   getProtoFieldNumber,
   getProtoFieldName,
@@ -85,6 +86,10 @@ export function renderProtoMessage(
   const inheritedSkip = new Set<ModelProperty>();
   for (const prop of model.properties.values()) {
     if (isProtoIgnored(program, prop)) continue;
+    // ORM-only columns (@Qninhdt.Orm.ignore) have no proto representation.
+    // Safe to call on non-entity messages: returns false when the orm state
+    // map has no entry for the property.
+    if (isOrmIgnored(program, prop)) continue;
     if (inheritedSkip.has(prop)) continue;
 
     const fieldNumber = getProtoFieldNumber(program, prop);

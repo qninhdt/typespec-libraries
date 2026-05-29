@@ -2,7 +2,49 @@
 
 First-party Protobuf emitter for the openlet TypeSpec stack. Replaces `@typespec/protobuf` with an ergonomic decorator surface, auto type mapping (TypeSpec scalars → proto wire types + well-known messages), automatic camelCase → snake_case field naming, cross-file imports, single-source `@entity` sharing with ent/sqlmodel, and auto-generated buf configs.
 
-> **Status (Phase 1):** Decorator surface only. The emitter (Phase 3+) and `@entity` cross-emitter integration (Phase 5) land in subsequent phases.
+## Quickstart
+
+`tspconfig.yaml`:
+
+```yaml
+emit:
+  - "@qninhdt/typespec-protobuf-openlet"
+options:
+  "@qninhdt/typespec-protobuf-openlet":
+    go-package-prefix: "github.com/openlet/user-service/proto/gen/go"
+```
+
+`main.tsp`:
+
+```typespec
+import "@qninhdt/typespec-protobuf-openlet";
+
+using Openlet.Proto;
+
+@package("openlet.user.v1", #{ goPackage: "github.com/openlet/user/v1" })
+namespace Openlet.UserProto;
+
+@message
+model GetUserResponse {
+  @field(1) userId: string;       // → string user_id = 1;
+  @field(2) createdAt: utcDateTime; // → google.protobuf.Timestamp created_at = 2;
+}
+
+@Openlet.Proto.service
+interface UserService {
+  getUser(...GetUserRequest): GetUserResponse;
+}
+```
+
+`tsp compile` writes `openlet/user/v1.proto` plus `buf.yaml` + `buf.gen.yaml`.
+
+## Documentation
+
+- [Decorator reference](./docs/decorators.md) — every decorator, target, args, examples.
+- [Type mapping](./docs/type-mapping.md) — scalar / well-known / ORM tables + override decorators.
+- [Allocator](./docs/allocator.md) — the `@entity` field-number allocation workflow.
+- [Migrating from `@typespec/protobuf`](./docs/migrating-from-typespec-protobuf.md) — translation table + pitfalls.
+- Examples: [basic-service](./docs/examples/basic-service.tsp), [entity](./docs/examples/entity.tsp), [cross-package](./docs/examples/cross-package.tsp).
 
 ## Decorators
 
@@ -67,4 +109,4 @@ import {
 } from "@qninhdt/typespec-protobuf-openlet";
 ```
 
-Every decorator stores its config on `program.stateMap(...)` via the standard typespec-libraries pattern; the emitter (Phase 3) reads this state.
+Every decorator stores its config on `program.stateMap(...)` via the standard typespec-libraries pattern; the emitter reads this state. See the [decorator reference](./docs/decorators.md) for the full getter-helper surface (`isProtoMessage`, `getProtoFieldNumber`, `resolveProtoType`, `buildBufYaml`, …).

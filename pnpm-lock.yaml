@@ -16,6 +16,9 @@ importers:
       "@qninhdt/typespec-orm":
         specifier: workspace:*
         version: link:packages/typespec-orm
+      "@qninhdt/typespec-protobuf-openlet":
+        specifier: workspace:*
+        version: link:packages/typespec-protobuf-openlet
       "@qninhdt/typespec-sqlmodel":
         specifier: workspace:*
         version: link:packages/typespec-sqlmodel
