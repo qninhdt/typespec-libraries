@@ -130,7 +130,7 @@ const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
 };
 
 export const $lib = createTypeSpecLibrary({
-  name: "@qninhdt/typespec-protobuf-openlet",
+  name: "@qninhdt/typespec-protobuf",
   diagnostics,
   emitter: {
     options: EmitterOptionsSchema,

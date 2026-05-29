@@ -1,7 +1,7 @@
 # Migrating from `@typespec/protobuf`
 
 Mechanical swap recipe for moving a service spec from the upstream
-`@typespec/protobuf` emitter to `@qninhdt/typespec-protobuf-openlet`. Distilled
+`@typespec/protobuf` emitter to `@qninhdt/typespec-protobuf`. Distilled
 from the openlet Phase 7 migration.
 
 ## Import + using
@@ -9,13 +9,13 @@ from the openlet Phase 7 migration.
 ```diff
 - import "@typespec/protobuf";
 - using TypeSpec.Protobuf;
-+ import "@qninhdt/typespec-protobuf-openlet";
++ import "@qninhdt/typespec-protobuf";
 + using Openlet.Proto;
 ```
 
 ## Decorator translation table
 
-| `@typespec/protobuf`                                            | `@qninhdt/typespec-protobuf-openlet`                               |
+| `@typespec/protobuf`                                            | `@qninhdt/typespec-protobuf`                                       |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
 | `@TypeSpec.Protobuf.message`                                    | `@message`                                                         |
 | `@TypeSpec.Protobuf.field(1)`                                   | `@field(1)`                                                        |

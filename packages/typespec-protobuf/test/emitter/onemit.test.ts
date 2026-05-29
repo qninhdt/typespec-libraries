@@ -1,7 +1,7 @@
 import type { EmitContext, Program } from "@typespec/compiler";
 import { describe, expect, it } from "vitest";
-import { $onEmit } from "@qninhdt/typespec-protobuf-openlet";
-import type { ProtoEmitterOptions } from "@qninhdt/typespec-protobuf-openlet";
+import { $onEmit } from "@qninhdt/typespec-protobuf";
+import type { ProtoEmitterOptions } from "@qninhdt/typespec-protobuf";
 import { createTestRunner } from "../utils.js";
 
 const OUTPUT_DIR = "/output";
@@ -238,6 +238,6 @@ describe("$onEmit — single file", () => {
       }
     `);
     const content = files.get(`${OUTPUT_DIR}/openlet/test/v1.proto`)!;
-    expect(content).toContain("// emitter: @qninhdt/typespec-protobuf-openlet@");
+    expect(content).toContain("// emitter: @qninhdt/typespec-protobuf@");
   });
 });

@@ -1,7 +1,7 @@
 import type { EmitContext, Program } from "@typespec/compiler";
 import { describe, expect, it } from "vitest";
-import { $onEmit } from "@qninhdt/typespec-protobuf-openlet";
-import type { ProtoEmitterOptions } from "@qninhdt/typespec-protobuf-openlet";
+import { $onEmit } from "@qninhdt/typespec-protobuf";
+import type { ProtoEmitterOptions } from "@qninhdt/typespec-protobuf";
 import { createTestRunner } from "../utils.js";
 
 const OUTPUT_DIR = "/output";

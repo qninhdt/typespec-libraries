@@ -33,7 +33,7 @@ export function renderProtoFile(sections: ProtoFileSections): string {
     lines.push("");
   }
 
-  lines.push("// emitter: @qninhdt/typespec-protobuf-openlet@0");
+  lines.push("// emitter: @qninhdt/typespec-protobuf@0");
   lines.push("");
   lines.push(`syntax = "proto3";`);
   lines.push("");

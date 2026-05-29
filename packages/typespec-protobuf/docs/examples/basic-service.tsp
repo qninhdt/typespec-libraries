@@ -1,12 +1,12 @@
-// Basic service example for @qninhdt/typespec-protobuf-openlet.
+// Basic service example for @qninhdt/typespec-protobuf.
 //
 // Demonstrates: @package, @message, @field, @reserve, @Openlet.Proto.service,
 // auto snake_case field names, well-known type mapping (utcDateTime), and the
 // empty-request → google.protobuf.Empty rewrite.
 //
-// Compile with a tspconfig that emits @qninhdt/typespec-protobuf-openlet.
+// Compile with a tspconfig that emits @qninhdt/typespec-protobuf.
 
-import "@qninhdt/typespec-protobuf-openlet";
+import "@qninhdt/typespec-protobuf";
 
 using Openlet.Proto;
 

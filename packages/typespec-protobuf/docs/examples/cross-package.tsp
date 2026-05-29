@@ -1,4 +1,4 @@
-// Cross-package import example for @qninhdt/typespec-protobuf-openlet.
+// Cross-package import example for @qninhdt/typespec-protobuf.
 //
 // Demonstrates how a type in one @package referenced from another emits an
 // `import` statement + a fully-qualified type name, instead of inlining a copy.
@@ -9,7 +9,7 @@
 // A consumer that should NOT re-emit a package it only references uses the
 // `emit-only` tspconfig option.
 
-import "@qninhdt/typespec-protobuf-openlet";
+import "@qninhdt/typespec-protobuf";
 
 using Openlet.Proto;
 

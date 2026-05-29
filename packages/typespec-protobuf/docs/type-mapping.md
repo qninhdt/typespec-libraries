@@ -1,6 +1,6 @@
 # Type Mapping
 
-How `@qninhdt/typespec-protobuf-openlet` resolves a TypeSpec property type to a
+How `@qninhdt/typespec-protobuf` resolves a TypeSpec property type to a
 proto wire shape. The resolver (`src/types/resolver.ts`) walks a fixed order;
 the FIRST match wins.
 

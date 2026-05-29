@@ -1,4 +1,4 @@
-// Entity cross-emitter example for @qninhdt/typespec-protobuf-openlet.
+// Entity cross-emitter example for @qninhdt/typespec-protobuf.
 //
 // Demonstrates @entity — a single declaration that produces BOTH an ORM table
 // (ent/sqlmodel) AND a proto message with allocator-assigned field numbers.
@@ -7,7 +7,7 @@
 //
 // Requires BOTH libraries in scope, so @ignore must be qualified.
 
-import "@qninhdt/typespec-protobuf-openlet";
+import "@qninhdt/typespec-protobuf";
 import "@qninhdt/typespec-orm";
 
 using Openlet.Proto;

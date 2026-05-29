@@ -80,7 +80,7 @@ export const $lib = createTypeSpecLibrary({
     },
     entity: {
       description:
-        "Marks a Model as an @entity (shorthand for @table + cross-emitter proto @message). Read by typespec-protobuf-openlet via EntityModelsKey; typespec-orm only sets the flag — no code dependency on the proto emitter.",
+        "Marks a Model as an @entity (shorthand for @table + cross-emitter proto @message). Read by typespec-protobuf via EntityModelsKey; typespec-orm only sets the flag — no code dependency on the proto emitter.",
     },
   },
 } as const);

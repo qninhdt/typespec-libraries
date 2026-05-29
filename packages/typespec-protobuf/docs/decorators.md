@@ -1,6 +1,6 @@
 # Decorator Reference
 
-Every decorator exported by `@qninhdt/typespec-protobuf-openlet`. All live in the
+Every decorator exported by `@qninhdt/typespec-protobuf`. All live in the
 `Openlet.Proto` namespace — bring them into scope with `using Openlet.Proto;`.
 
 > **Source:** `src/decorators-message.ts`, `src/decorators-service.ts`, `src/decorators-field.ts`.

@@ -17,7 +17,7 @@ export function $table(context: DecoratorContext, target: Model, name?: string):
 /**
  * `@entity` — shorthand that marks a model as BOTH an ORM table and a
  * cross-emitter proto message source. `typespec-orm` only records the two
- * state-map entries; the proto emitter (`@qninhdt/typespec-protobuf-openlet`)
+ * state-map entries; the proto emitter (`@qninhdt/typespec-protobuf`)
  * reads `EntityKey` to discover entities and runs its own `@message`
  * registration + field-number allocation. This keeps the dependency
  * one-directional: orm has NO code dependency on the proto package (Phase 5

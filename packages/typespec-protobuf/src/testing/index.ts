@@ -4,28 +4,28 @@ import { resolvePath } from "@typespec/compiler";
 const packageRoot = await findTestPackageRoot(import.meta.url);
 
 export const TypeSpecProtobufOpenletTestLibrary: TypeSpecTestLibrary = {
-  name: "@qninhdt/typespec-protobuf-openlet",
+  name: "@qninhdt/typespec-protobuf",
   packageRoot,
   files: [
     {
       realDir: "",
       pattern: "package.json",
-      virtualPath: `./node_modules/@qninhdt/typespec-protobuf-openlet`,
+      virtualPath: `./node_modules/@qninhdt/typespec-protobuf`,
     },
     {
       realDir: "lib",
       pattern: "**/*.tsp",
-      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf-openlet", "lib"),
+      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf", "lib"),
     },
     {
       realDir: "lib",
       pattern: "**/*.js",
-      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf-openlet", "lib"),
+      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf", "lib"),
     },
     {
       realDir: "dist/src",
       pattern: "**/*.js",
-      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf-openlet", "dist/src"),
+      virtualPath: resolvePath("./node_modules/@qninhdt/typespec-protobuf", "dist/src"),
     },
   ],
 };

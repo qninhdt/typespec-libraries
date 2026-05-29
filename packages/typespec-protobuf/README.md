@@ -1,4 +1,4 @@
-# @qninhdt/typespec-protobuf-openlet
+# @qninhdt/typespec-protobuf
 
 First-party Protobuf emitter for the openlet TypeSpec stack. Replaces `@typespec/protobuf` with an ergonomic decorator surface, auto type mapping (TypeSpec scalars → proto wire types + well-known messages), automatic camelCase → snake_case field naming, cross-file imports, single-source `@entity` sharing with ent/sqlmodel, and auto-generated buf configs.
 
@@ -8,16 +8,16 @@ First-party Protobuf emitter for the openlet TypeSpec stack. Replaces `@typespec
 
 ```yaml
 emit:
-  - "@qninhdt/typespec-protobuf-openlet"
+  - "@qninhdt/typespec-protobuf"
 options:
-  "@qninhdt/typespec-protobuf-openlet":
+  "@qninhdt/typespec-protobuf":
     go-package-prefix: "github.com/openlet/user-service/proto/gen/go"
 ```
 
 `main.tsp`:
 
 ```typespec
-import "@qninhdt/typespec-protobuf-openlet";
+import "@qninhdt/typespec-protobuf";
 
 using Openlet.Proto;
 
@@ -106,7 +106,7 @@ import {
   PROTO_NAMESPACE,
   isProtoMessage,
   getProtoFieldNumber,
-} from "@qninhdt/typespec-protobuf-openlet";
+} from "@qninhdt/typespec-protobuf";
 ```
 
 Every decorator stores its config on `program.stateMap(...)` via the standard typespec-libraries pattern; the emitter reads this state. See the [decorator reference](./docs/decorators.md) for the full getter-helper surface (`isProtoMessage`, `getProtoFieldNumber`, `resolveProtoType`, `buildBufYaml`, …).

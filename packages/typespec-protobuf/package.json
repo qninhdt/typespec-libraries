@@ -1,5 +1,5 @@
 {
-  "name": "@qninhdt/typespec-protobuf-openlet",
+  "name": "@qninhdt/typespec-protobuf",
   "version": "0.0.0",
   "description": "First-party Protobuf emitter for the openlet TypeSpec stack — ergonomic decorators, auto type mapping, cross-file imports, single-source @entity sharing with ent/sqlmodel, auto-generated buf configs.",
   "type": "module",

@@ -50,7 +50,7 @@
     "@qninhdt/typespec-dbml": "workspace:*",
     "@qninhdt/typespec-ent": "workspace:*",
     "@qninhdt/typespec-orm": "workspace:*",
-    "@qninhdt/typespec-protobuf-openlet": "workspace:*",
+    "@qninhdt/typespec-protobuf": "workspace:*",
     "@qninhdt/typespec-sqlmodel": "workspace:*",
     "@qninhdt/typespec-zod": "workspace:*",
     "@typespec/compiler": "^1.12.0",

@@ -21,7 +21,7 @@ import {
   getProtoGoType,
   getProtoMap,
   getProtoPackage,
-} from "@qninhdt/typespec-protobuf-openlet";
+} from "@qninhdt/typespec-protobuf";
 import { createTestRunner } from "./utils.js";
 
 describe("@message", () => {

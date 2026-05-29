@@ -16,9 +16,9 @@ importers:
       "@qninhdt/typespec-orm":
         specifier: workspace:*
         version: link:packages/typespec-orm
-      "@qninhdt/typespec-protobuf-openlet":
+      "@qninhdt/typespec-protobuf":
         specifier: workspace:*
-        version: link:packages/typespec-protobuf-openlet
+        version: link:packages/typespec-protobuf
       "@qninhdt/typespec-sqlmodel":
         specifier: workspace:*
         version: link:packages/typespec-sqlmodel
@@ -148,7 +148,7 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@types/node@25.9.1)(@vitest/coverage-v8@4.1.6)(vite@7.3.2(@types/node@25.9.1)(yaml@2.9.0))
 
-  packages/typespec-protobuf-openlet:
+  packages/typespec-protobuf:
     dependencies:
       "@qninhdt/typespec-orm":
         specifier: workspace:*

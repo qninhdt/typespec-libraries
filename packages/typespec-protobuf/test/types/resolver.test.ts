@@ -1,6 +1,6 @@
 import type { ModelProperty } from "@typespec/compiler";
 import { describe, expect, it } from "vitest";
-import { resolveProtoType, type ProtoTypeRef } from "@qninhdt/typespec-protobuf-openlet";
+import { resolveProtoType, type ProtoTypeRef } from "@qninhdt/typespec-protobuf";
 import { createTestRunner } from "../utils.js";
 
 /**
