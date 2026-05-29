@@ -90,4 +90,70 @@ export const diagnostics = {
       default: paramMessage`Proto field number ${"fieldNumber"} on "${"propertyName"}" falls within the low single-byte range (1-15). Reserve these for fields that are frequently or always set on the wire.`,
     },
   },
+  "field-number-required": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" needs an explicit @field(N) annotation. Field numbers must be pinned because they are part of the wire protocol.`,
+    },
+  },
+  "field-number-reserved-range": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Proto field number ${"fieldNumber"} on "${"propertyName"}" falls in the implementation-reserved range 19000-19999.`,
+    },
+  },
+  "unknown-type-fallback": {
+    severity: "warning",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" has type "${"typeName"}" with no proto mapping. Falling back to google.protobuf.Any. Add @map / @goType to declare intent.`,
+    },
+  },
+  "storage-only-scalar-on-wire": {
+    severity: "warning",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" uses storage-only scalar "${"scalarName"}" without an explicit @map / @goType override. Falling back to google.protobuf.Any.`,
+    },
+  },
+  "anonymous-model-on-wire": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" references an anonymous model. Anonymous models cannot be emitted as proto messages — declare a named model.`,
+    },
+  },
+  "invalid-map-key": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" uses invalid proto map key "${"keyTypeName"}". Map keys must be an integral type or "string".`,
+    },
+  },
+  "nested-map-rejected": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Property "${"propertyName"}" on "${"messageName"}" uses a nested map / repeated map value, which proto3 forbids. Wrap the inner value in a named message.`,
+    },
+  },
+  "oneof-empty-group": {
+    severity: "error",
+    messages: {
+      default: paramMessage`oneof "${"oneofName"}" on "${"messageName"}" has fewer than 2 members. A oneof block must contain at least 2 fields.`,
+    },
+  },
+  "enum-zero-value-required": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Enum "${"enumName"}" must declare a member with value 0 (proto3 requires a default zero-value). Add an "unspecified" or equivalent member.`,
+    },
+  },
+  "request-shape-rewrite-warning": {
+    severity: "warning",
+    messages: {
+      default: paramMessage`Operation "${"operationName"}" request transitioned between empty and non-empty since the previous emit. The Go binding type changed (e.g. *MyRequest ↔ *emptypb.Empty). Add @keepEmptyRequest or rename the operation if this is intentional.`,
+    },
+  },
+  "package-required-for-emit": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Namespace "${"namespaceName"}" contains @message / @service declarations but is missing @package(...). Annotate the namespace with @package("openlet.<svc>.v1").`,
+    },
+  },
 } as const;

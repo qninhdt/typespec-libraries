@@ -1,9 +1,70 @@
-import { createTypeSpecLibrary } from "@typespec/compiler";
+import { createTypeSpecLibrary, type JSONSchemaType } from "@typespec/compiler";
 import { diagnostics } from "./diagnostics.js";
+
+/** Tspconfig options consumed by the emitter (Phase 3+). */
+export interface ProtoEmitterOptions {
+  /** Output directory override handled by TypeSpec. */
+  "output-dir"?: string;
+  /** Proto syntax. Currently only "proto3" is supported. */
+  syntax?: "proto3";
+  /** Custom file header replacing the default "DO NOT EDIT" banner. */
+  header?: string;
+  /** Go module prefix for `option go_package = "..."`. */
+  "go-package-prefix"?: string;
+  /** Per-well-known-type toggles. See well-known.ts. */
+  "well-known"?: {
+    timestamp?: boolean;
+    duration?: boolean;
+    date?: boolean;
+    time?: boolean;
+    decimal?: boolean;
+  };
+  /** Suppress empty-request → google.protobuf.Empty rewrite globally. */
+  "empty-request-rewrite"?: boolean;
+  /** Field-name style. Default snake_case auto-converts camelCase TypeSpec sources. */
+  "field-name-style"?: "snake_case" | "camelCase" | "preserve";
+  /** Emit cross-file `import` statements (Phase 4). Default true. */
+  "emit-imports"?: boolean;
+}
+
+const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    "output-dir": { type: "string", nullable: true },
+    syntax: { type: "string", enum: ["proto3"], nullable: true },
+    header: { type: "string", nullable: true },
+    "go-package-prefix": { type: "string", nullable: true },
+    "well-known": {
+      type: "object",
+      additionalProperties: false,
+      nullable: true,
+      properties: {
+        timestamp: { type: "boolean", nullable: true },
+        duration: { type: "boolean", nullable: true },
+        date: { type: "boolean", nullable: true },
+        time: { type: "boolean", nullable: true },
+        decimal: { type: "boolean", nullable: true },
+      },
+      required: [],
+    },
+    "empty-request-rewrite": { type: "boolean", nullable: true },
+    "field-name-style": {
+      type: "string",
+      enum: ["snake_case", "camelCase", "preserve"],
+      nullable: true,
+    },
+    "emit-imports": { type: "boolean", nullable: true },
+  },
+  required: [],
+};
 
 export const $lib = createTypeSpecLibrary({
   name: "@qninhdt/typespec-protobuf-openlet",
   diagnostics,
+  emitter: {
+    options: EmitterOptionsSchema,
+  },
   state: {
     // Message-level
     message: {

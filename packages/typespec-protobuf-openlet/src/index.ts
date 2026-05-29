@@ -1,6 +1,11 @@
 // ─── Library + state keys ──────────────────────────────────────────────────
 
 export { $lib } from "./lib.js";
+export type { ProtoEmitterOptions } from "./lib.js";
+
+// ─── Emitter entry ─────────────────────────────────────────────────────────
+
+export { $onEmit } from "./emitter.js";
 
 export {
   PROTO_NAMESPACE,
