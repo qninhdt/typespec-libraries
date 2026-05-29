@@ -32,6 +32,7 @@ export {
   isSoftDelete,
   isIgnored,
   isNoDefault,
+  isEntity,
 } from "./state-columns.js";
 
 export type { CheckConstraintInfo } from "./state-columns.js";

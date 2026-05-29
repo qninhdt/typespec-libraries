@@ -1,4 +1,5 @@
 import type { Enum, Interface, Model, Namespace, Operation, Program } from "@typespec/compiler";
+import { isEntity } from "@qninhdt/typespec-orm";
 import { isProtoMessage, isProtoService, getProtoPackage } from "../state-accessors.js";
 import type { ProtoPackageSpec } from "../decorators-service.js";
 import { getQualifiedTypeName } from "../types/utils.js";
@@ -12,8 +13,16 @@ import { getQualifiedTypeName } from "../types/utils.js";
 export interface PackageBucket {
   namespace: Namespace;
   spec: ProtoPackageSpec;
-  /** Models with `@message`, in declaration order. */
+  /**
+   * Plain `@message` models, in declaration order. Does NOT include `@entity`
+   * models — those are routed through the allocator and live in `entities`.
+   */
   messages: Model[];
+  /**
+   * `@entity` models (orm cross-emitter shorthand), in declaration order.
+   * Emitted as proto messages with allocator-assigned field numbers.
+   */
+  entities: Model[];
   /** All enums in the namespace, in declaration order. */
   enums: Enum[];
   /** Interfaces with `@service`, in declaration order. */
@@ -22,10 +31,13 @@ export interface PackageBucket {
 
 /**
  * Walk the program and collect every `@package` namespace plus its
- * `@message` models, enums, and `@service` interfaces. Visits nested
- * namespaces below a `@package` namespace and folds them into the same
- * bucket — one `.proto` file per package, regardless of TypeSpec
+ * `@message` models, `@entity` models, enums, and `@service` interfaces.
+ * Visits nested namespaces below a `@package` namespace and folds them into
+ * the same bucket — one `.proto` file per package, regardless of TypeSpec
  * namespace nesting depth.
+ *
+ * A model carrying BOTH `@entity` and `@message` is treated as an entity
+ * (allocator-driven) and emitted once — it does NOT appear in `messages`.
  */
 export function collectPackages(program: Program): PackageBucket[] {
   const buckets: PackageBucket[] = [];
@@ -40,6 +52,7 @@ export function collectPackages(program: Program): PackageBucket[] {
         namespace: ns,
         spec: pkg,
         messages: [],
+        entities: [],
         enums: [],
         services: [],
       };
@@ -48,7 +61,12 @@ export function collectPackages(program: Program): PackageBucket[] {
 
     if (bucket) {
       for (const model of ns.models.values()) {
-        if (isProtoMessage(program, model)) bucket.messages.push(model);
+        // Entity wins over plain @message so a model with both is emitted once.
+        if (isEntity(program, model)) {
+          bucket.entities.push(model);
+        } else if (isProtoMessage(program, model)) {
+          bucket.messages.push(model);
+        }
       }
       for (const e of ns.enums.values()) {
         bucket.enums.push(e);

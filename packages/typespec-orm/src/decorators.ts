@@ -6,6 +6,7 @@ export {
   $tableIndex,
   $tableUnique,
   $refine,
+  $entity,
 } from "./decorators-table.js";
 
 export type { ModelIndexSpec, RefineSpec } from "./decorators-table.js";

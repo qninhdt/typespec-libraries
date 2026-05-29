@@ -38,6 +38,7 @@ export {
   isTable,
   isTableMixin,
   isOrmManagedModel,
+  isEntity,
   getTableName,
   getColumnName,
   isIndex,

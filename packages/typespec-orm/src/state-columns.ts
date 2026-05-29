@@ -10,6 +10,7 @@ import {
   AutoIncrementKey,
   IgnoreKey,
   NoDefaultKey,
+  EntityKey,
 } from "./lib.js";
 import { truncatePgIdentifier } from "./identifier-policy.js";
 import { camelToSnake, deriveTableName } from "./naming.js";
@@ -17,6 +18,16 @@ import { getNamespaceFullName, isBuiltIn } from "./state-types.js";
 
 export function isTable(program: Program, model: Model): boolean {
   return program.stateMap(TableKey).has(model);
+}
+
+/**
+ * True when the model carries `@entity` (the cross-emitter shorthand that
+ * marks a model as BOTH an ORM table and a proto message source). All
+ * `@entity` models are also `@table` models, so `isTable` returns true for
+ * them too — `isEntity` distinguishes the shorthand from a plain `@table`.
+ */
+export function isEntity(program: Program, model: Model): boolean {
+  return program.stateMap(EntityKey).has(model);
 }
 
 export function isTableMixin(program: Program, model: Model): boolean {

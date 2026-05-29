@@ -52,7 +52,7 @@ export function buildPackageGraph(
     const filePath = opts.outputPaths?.[pkgName] ?? packageNameToFilePath(pkgName);
     filePaths.set(pkgName, filePath);
 
-    for (const model of bucket.messages) {
+    for (const model of [...bucket.messages, ...bucket.entities]) {
       const protoName = getProtoMessageOverrideName(program, model) ?? model.name;
       entries.set(model, {
         packageName: pkgName,

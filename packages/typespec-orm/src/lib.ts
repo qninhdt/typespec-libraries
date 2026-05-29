@@ -78,6 +78,10 @@ export const $lib = createTypeSpecLibrary({
     refine: {
       description: "Maps Model → array of { name, expression } for Zod .refine() emission",
     },
+    entity: {
+      description:
+        "Marks a Model as an @entity (shorthand for @table + cross-emitter proto @message). Read by typespec-protobuf-openlet via EntityModelsKey; typespec-orm only sets the flag — no code dependency on the proto emitter.",
+    },
   },
 } as const);
 
@@ -118,3 +122,4 @@ export const PartialIndexKey = $lib.stateKeys.partialIndex;
 export const GoTypeKey = $lib.stateKeys.goType;
 export const NoDefaultKey = $lib.stateKeys.noDefault;
 export const RefineKey = $lib.stateKeys.refine;
+export const EntityKey = $lib.stateKeys.entity;

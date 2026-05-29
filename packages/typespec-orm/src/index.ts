@@ -49,6 +49,7 @@ export {
   GoTypeKey,
   NoDefaultKey,
   RefineKey,
+  EntityKey,
   ORM_NAMESPACE,
   reportDiagnostic,
 } from "./lib.js";
@@ -96,6 +97,7 @@ import {
   $goType,
   $noDefault,
   $refine,
+  $entity,
 } from "./decorators.js";
 
 export const $decorators = {
@@ -132,6 +134,7 @@ export const $decorators = {
     goType: $goType,
     noDefault: $noDefault,
     refine: $refine,
+    entity: $entity,
   },
 };
 
@@ -139,6 +142,7 @@ export const $decorators = {
 export {
   isTable,
   isTableMixin,
+  isEntity,
   getTableName,
   getColumnName,
   isIndex,

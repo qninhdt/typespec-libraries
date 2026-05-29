@@ -178,6 +178,19 @@ scalar composite<
 extern dec table(target: Model, name?: valueof string);
 
 /**
+ * Marks a model as an `@entity` — shorthand for `@table` PLUS a cross-emitter
+ * proto message source. A single `@entity` declaration produces ent/sqlmodel
+ * rows AND (when the `@qninhdt/typespec-protobuf-openlet` emitter is active) a
+ * proto message, eliminating the schemas.tsp + proto.tsp duplication.
+ *
+ * `typespec-orm` only records the marker; the proto emitter reads it. There is
+ * no code dependency from orm onto the proto package.
+ *
+ * Pure shorthand: applies `@table` + an entity marker, nothing more.
+ */
+extern dec entity(target: Model, name?: valueof string);
+
+/**
  * Marks a model as a reusable table mixin. Mixins are validated and can be
  * composed into tables, but are never emitted as standalone tables.
  */

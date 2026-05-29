@@ -7,10 +7,29 @@ import {
   ModelIndexesKey,
   ModelUniquesKey,
   RefineKey,
+  EntityKey,
 } from "./lib.js";
 
 export function $table(context: DecoratorContext, target: Model, name?: string): void {
   context.program.stateMap(TableKey).set(target, name ?? "");
+}
+
+/**
+ * `@entity` — shorthand that marks a model as BOTH an ORM table and a
+ * cross-emitter proto message source. `typespec-orm` only records the two
+ * state-map entries; the proto emitter (`@qninhdt/typespec-protobuf-openlet`)
+ * reads `EntityKey` to discover entities and runs its own `@message`
+ * registration + field-number allocation. This keeps the dependency
+ * one-directional: orm has NO code dependency on the proto package (Phase 5
+ * Red Team R3).
+ *
+ * Pure shorthand (validation answer V5): applies `@table` + an entity marker,
+ * nothing more. Authors wanting fine-grained control reach for the underlying
+ * decorators directly.
+ */
+export function $entity(context: DecoratorContext, target: Model, name?: string): void {
+  context.program.stateMap(TableKey).set(target, name ?? "");
+  context.program.stateMap(EntityKey).set(target, true);
 }
 
 export function $tableMixin(context: DecoratorContext, target: Model): void {

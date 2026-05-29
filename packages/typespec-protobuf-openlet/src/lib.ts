@@ -33,6 +33,16 @@ export interface ProtoEmitterOptions {
    *  cross-package imports resolve). Used by leti/file-worker to avoid
    *  emitting `.proto` files for packages they only consume. */
   "emit-only"?: string[];
+  /** Path to the `@entity` field-number allocation JSON, relative to the
+   *  TypeSpec project root. Default `.proto-field-allocations.json`. */
+  "allocation-file"?: string;
+  /** Fail (exit 1) instead of writing the allocation file when it drifts from
+   *  the committed copy. CI sets this; local dev leaves it off so the file is
+   *  written + committed. Default false. */
+  "allocation-check"?: boolean;
+  /** Reject ambiguous renames (a dropped field + a new field in one pass)
+   *  instead of treating them as delete+add. Default true (Red Team S2). */
+  "field-name-rename-strict"?: boolean;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
@@ -79,6 +89,9 @@ const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
       items: { type: "string" },
       nullable: true,
     },
+    "allocation-file": { type: "string", nullable: true },
+    "allocation-check": { type: "boolean", nullable: true },
+    "field-name-rename-strict": { type: "boolean", nullable: true },
   },
   required: [],
 };

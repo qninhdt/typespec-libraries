@@ -162,4 +162,16 @@ export const diagnostics = {
       default: paramMessage`Cyclic proto package import detected: ${"cycle"}. Proto files cannot import each other in a cycle — break the dependency by moving the shared type to a third package.`,
     },
   },
+  "proto-field-allocation-drift": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Proto field-number allocation drifted for ${"entities"}. The allocator wants to write changes that aren't committed. Run \`make spec-allocate\` (without --allocation-check) and commit the updated allocation file. (Red Team A1/S1)`,
+    },
+  },
+  "field-name-rename-ambiguous": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Entity "${"entity"}" has both a dropped field and a new field in this emit pass. The allocator cannot tell a rename from a delete+add — pass \`--rename old=new\` to preserve the field number, or accept the wire break by disabling field-name-rename-strict. (Red Team S2)`,
+    },
+  },
 } as const;
