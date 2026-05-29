@@ -4,14 +4,7 @@
 
 import type { Enum, ModelProperty, Program } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
-import {
-  camelToSnake,
-  getDefaultValue,
-  getDoc,
-  isIndex,
-  isKey,
-  isUnique,
-} from "@qninhdt/typespec-orm";
+import { getDefaultValue, getDoc, isIndex, isKey, isUnique } from "@qninhdt/typespec-orm";
 import { FOUR_SPACES, pythonStringLiteral } from "./PyConstants.js";
 
 export function generateEnumField(
@@ -23,11 +16,13 @@ export function generateEnumField(
   needsField: { value: boolean },
   needsColumn: { value: boolean },
   isPartOfCompositeUnique?: boolean,
+  isPartOfCompositePk?: boolean,
 ): string {
   const enumTypeName = enumInfo.enumType.name;
   let pyType = enumTypeName;
   const isOptional = prop.optional;
-  const isPk = isKey(program, prop);
+  // Composite PK members get primary_key=True even without @key.
+  const isPk = isKey(program, prop) || (isPartOfCompositePk ?? false);
 
   if (isOptional) {
     pyType = `${pyType} | None`;
@@ -36,14 +31,17 @@ export function generateEnumField(
   needsField.value = true;
   needsColumn.value = true;
   saImports.add("sqlalchemy.Column");
-
-  // Always pin a Postgres enum-type name so renaming the Python class doesn't
-  // diff the migration. `name=` is what SQLAlchemy/Atlas hash on for the
-  // enum-type identity.
-  const enumTypeIdent = camelToSnake(enumTypeName);
-  const columnArgs: string[] = [
-    `SAEnum(${enumTypeName}, name=${pythonStringLiteral(enumTypeIdent)})`,
-  ];
+  // Render the column as a plain TEXT so the resulting DDL is the
+  // conventional `<col> TEXT NOT NULL` shape that pairs with a
+  // hand-authored CHECK constraint in migrations. SQLAlchemy's SAEnum
+  // would create a real Postgres ENUM type via `CREATE TYPE … AS ENUM
+  // (...)`, which is destructive against existing TEXT/CHECK columns
+  // and incompatible with hand-written migration files. The Python type
+  // stays as the generated str-enum class so callers still get type
+  // safety on read/write — SQLAlchemy round-trips a str-enum through a
+  // Text column without an explicit type adapter.
+  saImports.add("sqlalchemy.Text");
+  const columnArgs: string[] = ["Text"];
 
   if (!isOptional && !isPk) columnArgs.push("nullable=False");
   if (isIndex(program, prop)) columnArgs.push("index=True");

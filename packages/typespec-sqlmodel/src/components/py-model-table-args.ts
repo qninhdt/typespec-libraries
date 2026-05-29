@@ -45,9 +45,18 @@ function buildCompositeTableArgEntries(
 
   for (const ct of compositeTypeFields) {
     const cols = ct.columns.map((column) => pythonStringLiteral(column)).join(", ");
+    // Composite PRIMARY KEY: each member column is emitted with
+    // primary_key=True at the field level (see PyField — composite PK
+    // plumbing). SQLAlchemy assembles the composite PK from those
+    // primary_key columns; no separate constraint entry is needed and
+    // adding a UniqueConstraint here would be redundant (PRIMARY KEY
+    // already implies uniqueness). Skip emit.
+    if (ct.isPrimary && !ct.where) {
+      continue;
+    }
     // SQLAlchemy's UniqueConstraint has no partial-predicate option, so a
     // partial UNIQUE has to be expressed as `Index(..., unique=True, postgresql_where=...)`.
-    if ((ct.isPrimary || ct.isUnique) && !ct.where) {
+    if (ct.isUnique && !ct.where) {
       hasUniqueConstraint = true;
       tableArgEntries.push(
         `${FOUR_SPACES}${FOUR_SPACES}UniqueConstraint(${cols}, name=${pythonStringLiteral(ct.name)})`,
@@ -183,6 +192,11 @@ export function addEnumImports(
     return;
   }
 
+  // Python str-Enum class is still emitted for type-safe access from
+  // application code, but the underlying SQLAlchemy column type is plain
+  // `Text` (see py-field-enum.ts). The previous SAEnum import is no
+  // longer referenced; suppressing it avoids `unused-import` lint
+  // warnings on consumer projects.
   stdImports.add("enum.Enum");
-  saImports.add("sqlalchemy.Enum as SAEnum");
+  void saImports;
 }
