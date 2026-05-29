@@ -43,6 +43,26 @@ export {
   getProtoPackage,
 } from "./state-accessors.js";
 
+// ─── Type system (Phase 2) ──────────────────────────────────────────────────
+
+export type { ProtoScalar, ProtoTypeRef } from "./types/scalars.js";
+export { PROTO_MAP_KEY_SCALARS } from "./types/scalars.js";
+export {
+  PROTO_ANY,
+  PROTO_EMPTY,
+  WELL_KNOWN_BY_TYPESPEC_NAME,
+  WELL_KNOWN_TOGGLE_NAMES,
+} from "./types/well-known.js";
+export { BUILTIN_SCALAR_TO_PROTO } from "./types/builtin-scalars.js";
+export { ORM_SCALAR_TO_PROTO, STORAGE_ONLY_ORM_SCALARS } from "./types/orm-scalars.js";
+export { getScalarChain, getQualifiedTypeName } from "./types/utils.js";
+export { resolveProtoType, resolveTypeRef } from "./types/resolver.js";
+export type {
+  ProtoTypeResolution,
+  ProtoTypeResolutionWarning,
+  ResolveProtoTypeOptions,
+} from "./types/resolver.js";
+
 // ─── Decorator namespace registration ──────────────────────────────────────
 // TypeSpec resolves extern dec implementations via the $decorators export map.
 // Individual $name functions must NOT be re-exported as top-level named exports
