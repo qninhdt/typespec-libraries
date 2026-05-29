@@ -93,7 +93,13 @@ export function buildEntFieldBuilder(
       if (goType && goType.importPath && goType.typeName) {
         ctx.imports.add(goType.importPath);
         const pkg = goType.importPath.split("/").at(-1) ?? "";
-        return `field.JSON(${goStringLiteral(columnName)}, &${pkg}.${goType.typeName}{})`;
+        // Use the value form (`pkg.Type{}`) rather than `&pkg.Type{}` so the
+        // resolved Ent Go field type is the named type itself, not a pointer
+        // to it. Pointer-typed JSON fields are rare and require an explicit
+        // pointer-style spec hook (out of scope here). Slice/map goType
+        // values like `encoding/json.RawMessage` simply do not work as a
+        // pointer literal.
+        return `field.JSON(${goStringLiteral(columnName)}, ${pkg}.${goType.typeName}{})`;
       }
       return `field.JSON(${goStringLiteral(columnName)}, map[string]any{})`;
     }
