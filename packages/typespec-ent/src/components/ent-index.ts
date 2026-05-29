@@ -63,6 +63,17 @@ export function buildEntIndexes(
     const fields = composite.columns.map((column) => goStringLiteral(column)).join(", ");
     const chains: string[] = [];
     if (composite.isUnique || composite.isPrimary) chains.push("Unique()");
+    // Ent derives the storage name from the indexed columns (e.g. an index
+    // on `status` becomes `signingkey_status`). When a model has multiple
+    // composite indexes/uniques over the SAME column set — e.g. two partial
+    // unique indexes on `status` filtered by `WHERE status = 'active'` and
+    // `WHERE status = 'next'` — auto-naming collapses them. Emit
+    // `StorageKey(<name>)` so each composite gets the explicit name produced
+    // by `collectCompositeTypeFields` (`@@tableIndex(..., name)` /
+    // `@@tableUnique(..., name)` user-supplied, else a generated suffix).
+    if (composite.name) {
+      chains.push(`StorageKey(${goStringLiteral(composite.name)})`);
+    }
     if (composite.where) {
       ctx.usesEntSql = true;
       chains.push(`Annotations(entsql.IndexWhere(${goStringLiteral(composite.where)}))`);
