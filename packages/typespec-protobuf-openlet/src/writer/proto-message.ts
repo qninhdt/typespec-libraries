@@ -118,6 +118,9 @@ export function renderProtoMessage(
       program,
       opts.naming,
     );
+    // Field-level doc comment (leading // lines). Preserves the RFC URNs and
+    // field semantics authors put on proto fields.
+    const fieldDoc = renderProtoComment(getDoc(program, prop), { indent: "  " });
     const oneofName = getProtoOneof(program, prop);
 
     if (oneofName) {
@@ -125,6 +128,7 @@ export function renderProtoMessage(
       arr.push({ prop, line: fieldLine });
       oneofGroups.set(oneofName, arr);
     } else {
+      for (const d of fieldDoc) lines.push(d);
       lines.push(`  ${fieldLine}`);
     }
   }
@@ -139,7 +143,13 @@ export function renderProtoMessage(
       });
     }
     lines.push(`  oneof ${groupName} {`);
-    for (const { line } of members) lines.push(`    ${line}`);
+    for (const { prop, line } of members) {
+      // Re-render at the deeper oneof indent (4 spaces).
+      for (const d of renderProtoComment(getDoc(program, prop), { indent: "    " })) {
+        lines.push(d);
+      }
+      lines.push(`    ${line}`);
+    }
     lines.push("  }");
   }
 

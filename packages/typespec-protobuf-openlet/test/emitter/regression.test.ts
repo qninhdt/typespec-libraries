@@ -68,3 +68,42 @@ describe("regression: writer skips @Qninhdt.Orm.ignore properties", () => {
     expect(proto).not.toContain("internal_revision");
   });
 });
+
+describe("regression: RPC method names are PascalCase (wire path)", () => {
+  it("upper-cases camelCase operation names to match the gRPC wire path", async () => {
+    const runner = await createEntityTestRunner();
+    await runner.compile(`
+      @package("openlet.user.v1")
+      namespace Pkg {
+        @message model GetUserRequest { @field(1) userId: string; }
+        @message model GetUserResponse { @field(1) userId: string; }
+
+        @Openlet.Proto.service
+        interface UserService {
+          getUser(...GetUserRequest): GetUserResponse;
+        }
+      }
+    `);
+    const program = runner.program;
+    expect(program.diagnostics.filter((d) => d.severity === "error")).toHaveLength(0);
+
+    const captured = new Map<string, string>();
+    const originalWrite = program.host.writeFile;
+    program.host.writeFile = async (path: string, content: string) => {
+      captured.set(path, content);
+    };
+    const ctx: EmitContext<ProtoEmitterOptions> = {
+      program,
+      emitterOutputDir: OUTPUT_DIR,
+      options: {},
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    await $onEmit(ctx);
+    program.host.writeFile = originalWrite;
+
+    const proto = captured.get(`${OUTPUT_DIR}/openlet/user/v1.proto`)!;
+    // Wire path is /openlet.user.v1.UserService/GetUser — casing is the contract.
+    expect(proto).toContain("rpc GetUser(GetUserRequest) returns (GetUserResponse);");
+    expect(proto).not.toContain("rpc getUser(");
+  });
+});

@@ -52,7 +52,10 @@ export function renderProtoService(
   }
 
   for (const op of iface.operations.values()) {
-    const rpcName = getProtoRpcOverrideName(program, op) ?? op.name;
+    // Proto RPC method names are PascalCase by convention (the gRPC wire path
+    // is /pkg.Service/MethodName). TypeSpec operations are camelCase, so
+    // upper-case the first letter. An explicit @rpc(overrideName) wins.
+    const rpcName = getProtoRpcOverrideName(program, op) ?? pascalCaseRpc(op.name);
     const opDoc = getDoc(program, op);
     for (const line of renderProtoComment(opDoc, { indent: "  " })) lines.push(line);
 
@@ -77,6 +80,17 @@ export function renderProtoService(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
+
+/**
+ * Upper-case the first character of an operation name to form the proto RPC
+ * method name (`getUser` → `GetUser`). Matches the upstream
+ * `@typespec/protobuf` convention and the gRPC wire path
+ * `/pkg.Service/MethodName`. Names already PascalCase pass through unchanged.
+ */
+function pascalCaseRpc(name: string): string {
+  if (name.length === 0) return name;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
 
 interface RpcArgRender {
   typeName: string;
