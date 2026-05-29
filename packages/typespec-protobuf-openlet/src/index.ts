@@ -68,6 +68,17 @@ export type {
   ResolveProtoTypeOptions,
 } from "./types/resolver.js";
 
+// ─── Buf config generation (Phase 6) ────────────────────────────────────────
+
+export {
+  buildBufYaml,
+  buildBufGenYaml,
+  isRegenerable,
+  BUF_HEADER_MARKER,
+  BUF_HEADER_OPTOUT,
+} from "./writer/buf-config.js";
+export type { BufConfigOptions, BufPlugin } from "./writer/buf-config.js";
+
 // ─── Decorator namespace registration ──────────────────────────────────────
 // TypeSpec resolves extern dec implementations via the $decorators export map.
 // Individual $name functions must NOT be re-exported as top-level named exports

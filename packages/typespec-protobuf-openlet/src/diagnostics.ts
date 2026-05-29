@@ -174,4 +174,10 @@ export const diagnostics = {
       default: paramMessage`Entity "${"entity"}" has both a dropped field and a new field in this emit pass. The allocator cannot tell a rename from a delete+add — pass \`--rename old=new\` to preserve the field number, or accept the wire break by disabling field-name-rename-strict. (Red Team S2)`,
     },
   },
+  "buf-config-customized": {
+    severity: "warning",
+    messages: {
+      default: paramMessage`Buf config "${"path"}" is missing the generated header marker, so it is treated as hand-managed and was NOT regenerated. Pass buf.force to overwrite it. (Red Team S4)`,
+    },
+  },
 } as const;

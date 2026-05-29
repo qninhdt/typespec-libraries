@@ -43,6 +43,21 @@ export interface ProtoEmitterOptions {
   /** Reject ambiguous renames (a dropped field + a new field in one pass)
    *  instead of treating them as delete+add. Default true (Red Team S2). */
   "field-name-rename-strict"?: boolean;
+  /** Buf config auto-generation (Phase 6). */
+  buf?: {
+    /** Emit buf.yaml + buf.gen.yaml. Default true. */
+    enabled?: boolean;
+    /** Managed-mode go_package prefix (Go services). */
+    "go-package-prefix"?: string;
+    /** Plugins for buf.gen.yaml. Default ["go", "go-grpc"]. */
+    plugins?: Array<"go" | "go-grpc" | "python" | "grpc-python" | "pyi">;
+    /** buf-breaking path ignores (intentional file relocations). */
+    "breaking-ignore"?: string[];
+    /** Cross-module buf dependencies (Red Team D4). */
+    deps?: string[];
+    /** Overwrite hand-customized configs even when the header marker is gone. */
+    force?: boolean;
+  };
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
@@ -92,6 +107,24 @@ const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
     "allocation-file": { type: "string", nullable: true },
     "allocation-check": { type: "boolean", nullable: true },
     "field-name-rename-strict": { type: "boolean", nullable: true },
+    buf: {
+      type: "object",
+      additionalProperties: false,
+      nullable: true,
+      properties: {
+        enabled: { type: "boolean", nullable: true },
+        "go-package-prefix": { type: "string", nullable: true },
+        plugins: {
+          type: "array",
+          items: { type: "string", enum: ["go", "go-grpc", "python", "grpc-python", "pyi"] },
+          nullable: true,
+        },
+        "breaking-ignore": { type: "array", items: { type: "string" }, nullable: true },
+        deps: { type: "array", items: { type: "string" }, nullable: true },
+        force: { type: "boolean", nullable: true },
+      },
+      required: [],
+    },
   },
   required: [],
 };
