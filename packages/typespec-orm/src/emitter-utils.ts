@@ -175,6 +175,25 @@ export function buildCompositeUniqueColumns(
   return result;
 }
 
+/**
+ * Build a set of column names that are part of a composite PRIMARY KEY.
+ * Emitters must annotate each member column with `primary_key=True`
+ * (SQLAlchemy assembles a composite PK from multiple primary_key columns)
+ * and SHOULD NOT emit a separate UniqueConstraint — PRIMARY KEY implies
+ * uniqueness and SQLAlchemy refuses to map a table without an actual PK.
+ */
+export function buildCompositePkColumns(compositeTypeFields: CompositeTypeField[]): Set<string> {
+  const result = new Set<string>();
+  for (const ct of compositeTypeFields) {
+    if (ct.isPrimary) {
+      for (const col of ct.columns) {
+        result.add(col);
+      }
+    }
+  }
+  return result;
+}
+
 // ─── Property classification ─────────────────────────────────────────────────
 
 /** A property paired with its enum info (if any). */

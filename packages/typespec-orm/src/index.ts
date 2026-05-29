@@ -254,6 +254,7 @@ export {
   classifyProperties,
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
+  buildCompositePkColumns,
 } from "./emitter-utils.js";
 
 export type {
