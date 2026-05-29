@@ -150,7 +150,7 @@ describe("$onEmit — single file", () => {
     `);
     const content = files.get(`${OUTPUT_DIR}/openlet/test/v1.proto`)!;
     expect(content).toContain(`import "google/protobuf/empty.proto";`);
-    expect(content).toContain("rpc ping(google.protobuf.Empty) returns (Test.Pkg.Pong);");
+    expect(content).toContain("rpc ping(google.protobuf.Empty) returns (Pong);");
   });
 
   it("preserves named empty request when @keepEmptyRequest is set", async () => {
@@ -168,7 +168,7 @@ describe("$onEmit — single file", () => {
       }
     `);
     const content = files.get(`${OUTPUT_DIR}/openlet/test/v1.proto`)!;
-    expect(content).toContain("rpc ping(Test.Pkg.HealthCheckRequest) returns (Test.Pkg.Pong);");
+    expect(content).toContain("rpc ping(HealthCheckRequest) returns (Pong);");
   });
 
   it("emits message imports for well-known types", async () => {

@@ -156,4 +156,10 @@ export const diagnostics = {
       default: paramMessage`Namespace "${"namespaceName"}" contains @message / @service declarations but is missing @package(...). Annotate the namespace with @package("openlet.<svc>.v1").`,
     },
   },
+  "cyclic-import": {
+    severity: "error",
+    messages: {
+      default: paramMessage`Cyclic proto package import detected: ${"cycle"}. Proto files cannot import each other in a cycle — break the dependency by moving the shared type to a third package.`,
+    },
+  },
 } as const;

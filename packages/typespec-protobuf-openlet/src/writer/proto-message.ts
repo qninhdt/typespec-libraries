@@ -16,6 +16,7 @@ import {
 } from "../types/resolver.js";
 import type { ProtoReservation } from "../decorators-message.js";
 import type { ProtoTypeRef } from "../types/scalars.js";
+import type { NamingContext } from "../walker/cross-package-refs.js";
 import { renderTypeRef, getRefImportPath } from "./render-type-ref.js";
 import { renderProtoComment } from "./proto-comment.js";
 import { camelToProtoSnake } from "./snake-case.js";
@@ -43,6 +44,10 @@ export interface MessageRenderResult {
 export interface MessageRenderOptions {
   fieldNameStyle?: "snake_case" | "camelCase" | "preserve";
   resolverOptions?: ResolveProtoTypeOptions;
+  /** Cross-package naming context (Phase 4). When set, type refs resolve to
+   *  bare (same-package) or qualified (cross-package) names and accrue
+   *  imports. When absent, refs use TypeSpec-form qualified names. */
+  naming?: NamingContext;
 }
 
 /**
@@ -100,7 +105,14 @@ export function renderProtoMessage(
     if (importPath) imports.push(importPath);
 
     const fieldName = pickFieldName(program, prop, fieldNameStyle);
-    const fieldLine = renderField(prop, resolution.ref, fieldName, fieldNumber, program);
+    const fieldLine = renderField(
+      prop,
+      resolution.ref,
+      fieldName,
+      fieldNumber,
+      program,
+      opts.naming,
+    );
     const oneofName = getProtoOneof(program, prop);
 
     if (oneofName) {
@@ -127,6 +139,10 @@ export function renderProtoMessage(
   }
 
   lines.push("}");
+  // Merge cross-package imports accrued via the naming context (Phase 4).
+  if (opts.naming) {
+    for (const imp of opts.naming.imports) imports.push(imp);
+  }
   return { lines, imports, diagnostics };
 }
 
@@ -161,6 +177,7 @@ function renderField(
   fieldName: string,
   fieldNumber: number,
   program: Program,
+  naming?: NamingContext,
 ): string {
   const parts: string[] = [];
   const isRepeated = ref.kind === "repeated";
@@ -173,7 +190,7 @@ function renderField(
   if (isRepeated) parts.push("repeated");
   if (isOptionalNullable) parts.push("optional");
 
-  parts.push(renderTypeRef(ref));
+  parts.push(renderTypeRef(ref, naming));
   parts.push(fieldName);
   parts.push("=");
   parts.push(`${fieldNumber}`);

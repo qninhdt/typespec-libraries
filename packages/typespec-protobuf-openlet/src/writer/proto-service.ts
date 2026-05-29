@@ -2,6 +2,7 @@ import type { Interface, Model, Operation, Program } from "@typespec/compiler";
 import { getDoc, isDeprecated } from "@typespec/compiler";
 import { isKeepEmptyRequest, getProtoRpcOverrideName, isProtoMessage } from "../state-accessors.js";
 import { getQualifiedTypeName } from "../types/utils.js";
+import type { NamingContext } from "../walker/cross-package-refs.js";
 import { renderProtoComment } from "./proto-comment.js";
 
 export interface ServiceDiagnostic {
@@ -20,6 +21,8 @@ export interface ServiceRenderResult {
 export interface ServiceRenderOptions {
   /** When false, suppresses empty-request → google.protobuf.Empty rewrite. */
   emptyRequestRewrite?: boolean;
+  /** Cross-package naming context (Phase 4). */
+  naming?: NamingContext;
 }
 
 /**
@@ -53,8 +56,8 @@ export function renderProtoService(
     const opDoc = getDoc(program, op);
     for (const line of renderProtoComment(opDoc, { indent: "  " })) lines.push(line);
 
-    const requestRendered = renderRpcRequest(program, op, allowRewrite);
-    const responseRendered = renderRpcResponse(program, op);
+    const requestRendered = renderRpcRequest(program, op, allowRewrite, opts.naming);
+    const responseRendered = renderRpcResponse(program, op, opts.naming);
     if (requestRendered.diagnostic) diagnostics.push(requestRendered.diagnostic);
     if (responseRendered.diagnostic) diagnostics.push(responseRendered.diagnostic);
     if (requestRendered.import) imports.push(requestRendered.import);
@@ -66,6 +69,10 @@ export function renderProtoService(
   }
 
   lines.push("}");
+  // Merge cross-package imports accrued via the naming context (Phase 4).
+  if (opts.naming) {
+    for (const imp of opts.naming.imports) imports.push(imp);
+  }
   return { lines, imports, diagnostics };
 }
 
@@ -77,7 +84,22 @@ interface RpcArgRender {
   diagnostic?: ServiceDiagnostic;
 }
 
-function renderRpcRequest(program: Program, op: Operation, allowRewrite: boolean): RpcArgRender {
+/**
+ * Resolve a request/response model to its proto type name. Uses the Phase 4
+ * naming context when present (bare same-package / qualified cross-package +
+ * import accrual), otherwise falls back to the TypeSpec-form qualified name.
+ */
+function modelTypeName(program: Program, model: Model, naming?: NamingContext): string {
+  const fallback = getQualifiedTypeName(program, model);
+  return naming ? naming.nameFor(model, fallback) : fallback;
+}
+
+function renderRpcRequest(
+  program: Program,
+  op: Operation,
+  allowRewrite: boolean,
+  naming?: NamingContext,
+): RpcArgRender {
   const param = op.parameters;
   const sourceModel = pickRequestModel(op);
 
@@ -87,7 +109,7 @@ function renderRpcRequest(program: Program, op: Operation, allowRewrite: boolean
       // Author opted out of the rewrite — use the source model name when
       // available, fall back to Empty if there's no named source.
       if (sourceModel) {
-        return { typeName: getQualifiedTypeName(program, sourceModel) };
+        return { typeName: modelTypeName(program, sourceModel, naming) };
       }
     }
     if (allowRewrite) {
@@ -97,7 +119,7 @@ function renderRpcRequest(program: Program, op: Operation, allowRewrite: boolean
       };
     }
     if (sourceModel) {
-      return { typeName: getQualifiedTypeName(program, sourceModel) };
+      return { typeName: modelTypeName(program, sourceModel, naming) };
     }
     return {
       typeName: "google.protobuf.Empty",
@@ -117,7 +139,7 @@ function renderRpcRequest(program: Program, op: Operation, allowRewrite: boolean
   }
   if (!isProtoMessage(program, sourceModel)) {
     return {
-      typeName: getQualifiedTypeName(program, sourceModel),
+      typeName: modelTypeName(program, sourceModel, naming),
       diagnostic: {
         code: "unknown-type-fallback",
         target: op,
@@ -129,10 +151,10 @@ function renderRpcRequest(program: Program, op: Operation, allowRewrite: boolean
       },
     };
   }
-  return { typeName: getQualifiedTypeName(program, sourceModel) };
+  return { typeName: modelTypeName(program, sourceModel, naming) };
 }
 
-function renderRpcResponse(program: Program, op: Operation): RpcArgRender {
+function renderRpcResponse(program: Program, op: Operation, naming?: NamingContext): RpcArgRender {
   const ret = op.returnType;
   if (ret.kind !== "Model") {
     return {
@@ -158,7 +180,7 @@ function renderRpcResponse(program: Program, op: Operation): RpcArgRender {
       },
     };
   }
-  return { typeName: getQualifiedTypeName(program, ret) };
+  return { typeName: modelTypeName(program, ret, naming) };
 }
 
 /**

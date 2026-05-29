@@ -25,6 +25,14 @@ export interface ProtoEmitterOptions {
   "field-name-style"?: "snake_case" | "camelCase" | "preserve";
   /** Emit cross-file `import` statements (Phase 4). Default true. */
   "emit-imports"?: boolean;
+  /** How cross-package import paths are rendered. Default "package-path". */
+  "import-path-style"?: "package-path" | "relative" | "flat";
+  /** Optional package-name → output file path overrides. */
+  "output-paths"?: Record<string, string>;
+  /** Restrict which packages are WRITTEN (graph still spans all packages so
+   *  cross-package imports resolve). Used by leti/file-worker to avoid
+   *  emitting `.proto` files for packages they only consume. */
+  "emit-only"?: string[];
 }
 
 const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
@@ -55,6 +63,22 @@ const EmitterOptionsSchema: JSONSchemaType<ProtoEmitterOptions> = {
       nullable: true,
     },
     "emit-imports": { type: "boolean", nullable: true },
+    "import-path-style": {
+      type: "string",
+      enum: ["package-path", "relative", "flat"],
+      nullable: true,
+    },
+    "output-paths": {
+      type: "object",
+      nullable: true,
+      required: [],
+      additionalProperties: { type: "string" },
+    },
+    "emit-only": {
+      type: "array",
+      items: { type: "string" },
+      nullable: true,
+    },
   },
   required: [],
 };
