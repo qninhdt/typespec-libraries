@@ -59,11 +59,24 @@ export function buildEntField(
     return undefined;
   }
 
-  const builder = buildEntFieldBuilder(program, prop, columnName, ctx, collectionStrategy);
+  // Ent treats a field literally named `id` as the implicit primary key. A
+  // `@key` property whose storage column is anything else (e.g. `user_id`)
+  // must be declared as `field.X("id", ...).StorageKey("col")` for Ent to
+  // pick it up as the PK; otherwise Ent auto-injects a separate `int id`
+  // column, producing destructive DDL drift vs production schemas that use
+  // the column itself as primary key. Composite-key models don't reach this
+  // branch — `composite<>` properties bail out above with no emitted field.
+  const remapKeyToId = isKey(program, prop) && columnName !== "id";
+  const fieldName = remapKeyToId ? "id" : columnName;
+
+  const builder = buildEntFieldBuilder(program, prop, fieldName, ctx, collectionStrategy);
   if (builder === undefined) {
     return undefined;
   }
   const chains = buildCommonFieldChains(program, prop, ctx, compositeUniqueColumns, columnName);
+  if (remapKeyToId) {
+    chains.unshift(`StorageKey(${goStringLiteral(columnName)})`);
+  }
   const docParts: string[] = [];
   const doc = getDoc(program, prop);
   if (doc) docParts.push(doc);
