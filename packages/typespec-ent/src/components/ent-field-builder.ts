@@ -1,6 +1,5 @@
 import type { ModelProperty, Program, Type } from "@typespec/compiler";
 import {
-  camelToSnake,
   getArrayElementType,
   getColumnName,
   getGoType,
@@ -30,16 +29,15 @@ export function buildEntFieldBuilder(
   const enumInfo = getPropertyEnum(prop);
   if (enumInfo) {
     const values = enumInfo.members.map((member) => goStringLiteral(member.value)).join(", ");
-    // Map TypeSpec enum -> native Postgres ENUM type. SchemaType locks the
-    // SQL column to the named ENUM; Atlas picks this up to emit
-    // `CREATE TYPE foo AS ENUM (...)` automatically.
-    const pgEnumName = camelToSnake(enumInfo.enumType.name);
-    ctx.imports.add("entgo.io/ent/dialect");
-    return (
-      `field.Enum(${goStringLiteral(columnName)}).` +
-      `Values(${values}).` +
-      `SchemaType(map[string]string{dialect.Postgres: ${goStringLiteral(pgEnumName)}})`
-    );
+    // Plain `field.Enum(name).Values(...)` — Ent emits this as a TEXT
+    // column with a CHECK constraint by default, matching the conventional
+    // `<col> TEXT NOT NULL CHECK (<col> IN (...))` shape used in
+    // hand-authored Postgres migrations. Mapping the column to a real
+    // Postgres ENUM type instead requires creating CREATE TYPE statements
+    // and is a destructive migration vs existing TEXT/CHECK columns. If a
+    // future use case wants real ENUM types it should be opt-in via a
+    // dedicated decorator (e.g. `@pgEnum`), not the default.
+    return `field.Enum(${goStringLiteral(columnName)}).Values(${values})`;
   }
 
   if (isArrayType(prop.type)) {
