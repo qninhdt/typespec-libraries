@@ -14,6 +14,7 @@ import {
   classifyProperties,
   collectCompositeTypeFields,
   buildCompositeUniqueColumns,
+  buildCompositePkColumns,
   camelToSnake,
   getColumnName as getOrmColumnName,
   findVersionProperty,
@@ -56,6 +57,7 @@ interface RegularFieldContext {
   program: Program;
   regularProps: ReturnType<typeof classifyProperties>["fields"];
   compositeUniqueColumns: Set<string>;
+  compositePkColumns: Set<string>;
   fkInfoMap: Map<string, ResolvedForeignKeyFieldInfo>;
   builder: PyModelBuilder;
   collectionStrategy?: SqlModelEmitterOptions["collection-strategy"];
@@ -116,6 +118,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
       ? collectCompositeTypeFields(program, model, tableName)
       : [];
   const compositeUniqueColumns = buildCompositeUniqueColumns(compositeTypeFields);
+  const compositePkColumns = buildCompositePkColumns(compositeTypeFields);
   const fkInfoMap = buildForeignKeyInfoMap(model, relations);
 
   const tableArgEntries = buildTableArgEntries(
@@ -133,6 +136,7 @@ export function PyModelFile(props: PyModelFileProps): Children {
     program,
     regularProps,
     compositeUniqueColumns,
+    compositePkColumns,
     fkInfoMap,
     builder,
     collectionStrategy,
@@ -178,6 +182,7 @@ function addRegularFields(context: RegularFieldContext): void {
     program,
     regularProps,
     compositeUniqueColumns,
+    compositePkColumns,
     fkInfoMap,
     builder,
     collectionStrategy,
@@ -200,6 +205,7 @@ function addRegularFields(context: RegularFieldContext): void {
         fkInfoMap.get(columnName),
         collectionStrategy,
         scalarAliasNames,
+        compositePkColumns.has(columnName),
       ),
     );
   }
@@ -226,6 +232,14 @@ function buildPyModelCode(context: PyModelRenderContext): string {
     scalarNames,
     versionColumnName,
   } = context;
+  // The model class body uses ClassVar annotations for __tablename__ and
+  // any @ignore'd field. `buildModelClass` mutates `stdImports` to record
+  // this need, but that mutation happens AFTER the import block is
+  // already rendered. Pre-add the import here so the rendered file can
+  // resolve `ClassVar` at the top.
+  if (tableName) {
+    stdImports.add("typing.ClassVar");
+  }
   let code = FILE_HEADER;
   // `from __future__ import annotations` makes ALL annotations lazy strings,
   // letting forward references (e.g. inverse relationship class names) resolve
