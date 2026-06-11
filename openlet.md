@@ -557,7 +557,6 @@ openlet/
 **CI / CD / Quality:**
 
 - Build/test: GitHub Actions
-- Code quality: SonarQube
 - Go lint: golangci-lint
 - Python tooling: Poetry (deps), pytest (tests), Ruff (lint)
 - API contract lint: Spectral (OpenAPI/AsyncAPI specs)

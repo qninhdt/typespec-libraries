@@ -69,9 +69,6 @@ jobs:
       - name: Test Coverage
         run: pnpm run test:coverage
 
-      - name: Prepare Sonar LCOV Paths
-        run: node scripts/prepare-sonar-lcov.mjs
-
       - name: Build
         run: pnpm run build
 
@@ -98,15 +95,3 @@ jobs:
 
       - name: Verify Generated Protobuf
         run: pnpm run validate-examples:protobuf
-
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
