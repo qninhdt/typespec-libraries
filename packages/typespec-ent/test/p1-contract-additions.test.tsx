@@ -133,7 +133,7 @@ describe("P1 contract additions (Ent)", () => {
 
   // ─── Group D: native PG enum types ────────────────────────────────────────
   describe("native Postgres ENUM types", () => {
-    it("emits SchemaType + Annotations(Type:) for enum-typed fields", async () => {
+    it("emits a plain Ent enum field (TEXT+CHECK) for enum-typed fields", async () => {
       const output = await emitGoFile(
         `
         enum AccountStatus { Active, Suspended, Closed }
@@ -147,10 +147,12 @@ describe("P1 contract additions (Ent)", () => {
         "account.go",
       );
 
-      expect(output).toContain('field.Enum("status")');
-      expect(output).toContain('SchemaType(map[string]string{dialect.Postgres: "account_status"})');
-      // entsql.Annotation has no `Type` field; SchemaType alone carries the
-      // Postgres ENUM mapping that Atlas picks up.
+      expect(output).toContain('field.Enum("status").Values("Active", "Suspended", "Closed")');
+      // Enum fields emit as a plain Ent enum -> TEXT column with a CHECK
+      // constraint. Mapping to a native Postgres ENUM type is intentionally
+      // avoided (it needs destructive CREATE TYPE migrations) and would be
+      // opt-in via a dedicated decorator if ever required.
+      expect(output).not.toContain("SchemaType");
       expect(output).not.toContain("entsql.Annotation{Type:");
     });
   });
@@ -171,7 +173,8 @@ describe("P1 contract additions (Ent)", () => {
         "user_profile.go",
       );
 
-      expect(output).toContain('field.UUID("user_id", uuid.UUID{})');
+      expect(output).toContain('field.UUID("id", uuid.UUID{})');
+      expect(output).toContain('StorageKey("user_id")');
       expect(output).toContain("Immutable()");
       expect(output).not.toContain("Default(uuid.New)");
     });
