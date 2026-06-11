@@ -48,3 +48,5 @@ packages/**/@qninhdt/
 .env
 
 .claude
+# VitePress generated cache
+docs/.vitepress/cache/

@@ -4,3 +4,4 @@ outputs/
 *.tgz
 packages/**/.tmp/
 .codegraph/
+docs/.vitepress/cache/

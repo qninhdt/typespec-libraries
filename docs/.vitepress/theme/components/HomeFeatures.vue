@@ -16,7 +16,7 @@ const features = [
     icon: "📝",
     title: "Form-aware",
     description:
-      "@scope(\"frontend\") + @title / @placeholder / @inputType produce real Zod schemas with form metadata.",
+      '@scope("frontend") + @title / @placeholder / @inputType produce real Zod schemas with form metadata.',
   },
   {
     icon: "📦",

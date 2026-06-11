@@ -279,14 +279,14 @@ Behavior:
 Selectors are either dotted declaration names (namespace selectors) or
 `#`-prefixed scope names. There is no wildcard syntax.
 
-| Selector                         | Meaning                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------- |
-| `GamePlatform`                   | everything under that namespace subtree                                   |
-| `GamePlatform.Worlds`            | only the worlds subtree                                                   |
-| `GamePlatform.Worlds.World`      | one concrete declaration plus anything nested below it                    |
+| Selector                          | Meaning                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `GamePlatform`                    | everything under that namespace subtree                                   |
+| `GamePlatform.Worlds`             | only the worlds subtree                                                   |
+| `GamePlatform.Worlds.World`       | one concrete declaration plus anything nested below it                    |
 | `GamePlatform.Audit` in `exclude` | removes the audit subtree even if a broader parent namespace was included |
-| `#frontend`                      | every model decorated with `@scope("frontend")`, regardless of namespace  |
-| `#kafka:upload-events`           | every model decorated with `@scope("kafka:upload-events")`                |
+| `#frontend`                       | every model decorated with `@scope("frontend")`, regardless of namespace  |
+| `#kafka:upload-events`            | every model decorated with `@scope("kafka:upload-events")`                |
 
 Practical guidance:
 
@@ -372,24 +372,24 @@ Rules:
 - `contracts/` is read-only schema — no `tspconfig.yaml`, no `@Protobuf.service`
 - each service owns its namespace; cross-service consumption is via Kafka events
   or gRPC, never by importing another team's `tables.tsp`
-- one persistence language per service (Ent *or* SQLModel — never both)
+- one persistence language per service (Ent _or_ SQLModel — never both)
 - frontend uses `include: ["#frontend"]`; docs uses no filter
 
 ### `examples/file-vault` — multi-service, mixed-language
 
-| Service              | Language          |
-| -------------------- | ----------------- |
-| `identity-svc`       | Go (Ent)          |
-| `metadata-svc`       | Go (Ent)          |
-| `storage-svc`        | Go (Ent)          |
-| `sharing-svc`        | Go (Ent)          |
-| `notifications-svc`  | Go (Ent)          |
-| `audit-svc`          | Go (Ent)          |
-| `processing-svc`     | Python (SQLModel) |
-| `search-svc`         | Python (SQLModel) |
-| `assistant-svc`      | Python (SQLModel) |
-| `frontend`           | TypeScript (Zod)  |
-| `docs`               | DBML              |
+| Service             | Language          |
+| ------------------- | ----------------- |
+| `identity-svc`      | Go (Ent)          |
+| `metadata-svc`      | Go (Ent)          |
+| `storage-svc`       | Go (Ent)          |
+| `sharing-svc`       | Go (Ent)          |
+| `notifications-svc` | Go (Ent)          |
+| `audit-svc`         | Go (Ent)          |
+| `processing-svc`    | Python (SQLModel) |
+| `search-svc`        | Python (SQLModel) |
+| `assistant-svc`     | Python (SQLModel) |
+| `frontend`          | TypeScript (Zod)  |
+| `docs`              | DBML              |
 
 ### `examples/game-platform` — single backend, same convention
 
