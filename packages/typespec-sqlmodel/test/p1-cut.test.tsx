@@ -111,8 +111,8 @@ describe("P1 cut — JSONB typing strict-by-default", () => {
   });
 });
 
-describe("P1 cut — SAEnum stable name", () => {
-  it("emits SAEnum(..., name=<snake>) for a Postgres enum-type identity", async () => {
+describe("P1 cut — enum maps to Text", () => {
+  it("emits a Text column (not SAEnum) for an enum-typed field", async () => {
     const output = await emitPyFile(
       `
       enum AccessLevel {
@@ -129,7 +129,9 @@ describe("P1 cut — SAEnum stable name", () => {
       "member.py",
     );
 
-    expect(output).toContain('SAEnum(AccessLevel, name="access_level")');
+    expect(output).toContain("class AccessLevel(str, Enum):");
+    expect(output).toContain("sa_column=Column(Text");
+    expect(output).not.toContain("SAEnum");
   });
 });
 

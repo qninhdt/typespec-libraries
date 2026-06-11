@@ -57,9 +57,12 @@ describe("SQLModel composite type", () => {
       "user.py",
     );
 
-    expect(output).toContain(
-      'UniqueConstraint("tenant_id", "code", name="users_tenant_id_code_pk")',
-    );
+    // A composite @key emits field-level primary_key=True on each member
+    // (a real composite PRIMARY KEY); a separate UniqueConstraint would be
+    // redundant with the primary key and is intentionally not emitted.
+    expect(output).toContain("tenant_id: UUID = Field(default_factory=uuid4, primary_key=True)");
+    expect(output).toContain("code: str = Field(primary_key=True)");
+    expect(output).not.toContain("UniqueConstraint");
   });
 
   it("generates composite index with 3 columns", async () => {

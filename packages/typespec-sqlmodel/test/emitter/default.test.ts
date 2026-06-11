@@ -64,7 +64,8 @@ describe("SQLModel emitter end-to-end", () => {
     expect(user).toContain("class Status(str, Enum):");
     expect(user).toContain('active = "active"');
     expect(user).toContain("status: Status = Field(");
-    expect(user).toContain('SAEnum(Status, name="status")');
+    expect(user).toContain("sa_column=Column(Text");
+    expect(user).not.toContain("SAEnum");
     expect(user).toContain("posts: list[Post]");
     expect(user).toContain("Relationship(");
     expect(post).toContain("content: str");
