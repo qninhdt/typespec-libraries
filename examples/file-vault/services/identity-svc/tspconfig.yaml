@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/identity-svc"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/file-vault/identity-svc/ent"
+    standalone: true
+    library-name: "github.com/example/file-vault/identity-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Identity"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/identity-svc/protobuf"

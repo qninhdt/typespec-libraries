@@ -3,7 +3,14 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   // --- Ignored paths ---
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/.changeset/**", "**/outputs/**"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/.changeset/**",
+      "**/outputs/**",
+      "**/.vitepress/cache/**",
+      "**/coverage/**",
+    ],
   },
 
   // --- TypeScript source files ---

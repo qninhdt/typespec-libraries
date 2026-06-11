@@ -1,0 +1,26 @@
+import "@qninhdt/typespec-orm";
+
+using Qninhdt.Orm;
+
+namespace GamePlatform.Content.Taxonomy;
+
+/**
+ * Tag used to classify and filter content pool entries.
+ * The (world_id, name) pair is unique per world.
+ */
+@table
+model Tag {
+  ...GamePlatform.Shared.WorldOwned;
+  /** Tag name - unique within a world. */
+  @maxLength(100)
+  name: string;
+
+  /** Category used to group related tags. */
+  @index
+  @maxLength(50)
+  category: string;
+
+  // ─── Composite Unique Constraints ─────────────────
+  @unique
+  worldIdName: composite<"worldId", "name">;
+}

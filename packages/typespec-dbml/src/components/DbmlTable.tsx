@@ -2,18 +2,22 @@
  * DbmlTable - Generate DBML table definitions.
  */
 
-import type { Model, Program } from "@typespec/compiler";
+import type { Model, ModelProperty, Program } from "@typespec/compiler";
 import {
   classifyProperties,
+  collectCompositeTypeFields,
   getCompositeFields,
+  getPartialIndex,
+  getPolymorphicConfig,
   isKey,
   isUnique,
   isIndex,
-  camelToSnake,
   getColumnName,
   getDoc,
+  getSchemaName,
 } from "@qninhdt/typespec-orm";
-import { generateColumnLine } from "./DbmlColumn.jsx";
+import { generateColumnLine, hasUniqueNameOverride } from "./DbmlColumn.jsx";
+import { formatDbmlNote, quoteDbmlIdentifier } from "./DbmlConstants.js";
 
 export interface DbmlTableProps {
   readonly program: Program;
@@ -31,6 +35,7 @@ export function DbmlTable(props: DbmlTableProps): string {
 
   const lines: string[] = [];
   const indexes: string[] = [];
+  const trailingComments: string[] = [];
 
   // Generate columns (all fields including enum types)
   for (const { prop } of regularProps) {
@@ -40,33 +45,17 @@ export function DbmlTable(props: DbmlTableProps): string {
     }
   }
 
-  // Add ignored fields as notes (optional)
+  // Surface @ignore field docs as a trailing comment block AFTER the table.
+  // Injecting them mid-table between columns and the indexes block was
+  // visually noisy and made the column list look discontinuous.
   for (const { prop } of ignored) {
     const doc = getDoc(program, prop);
     if (doc) {
-      lines.push(`  // ${doc}`);
+      trailingComments.push(`// ${prop.name}: ${doc}`);
     }
   }
 
-  // Collect composite type fields for indexes
-  const compositeFields: {
-    name: string;
-    columns: string[];
-    isUnique: boolean;
-    isPrimary: boolean;
-  }[] = [];
-
-  for (const [, prop] of model.properties) {
-    const columns = getCompositeFields(program, prop);
-    if (columns) {
-      compositeFields.push({
-        name: prop.name,
-        columns,
-        isUnique: isUnique(program, prop),
-        isPrimary: isKey(program, prop),
-      });
-    }
-  }
+  const compositeFields = collectCompositeTypeFields(program, model, tableName);
 
   indexes.push(...compositeFields.map(buildCompositeIndexLine));
 
@@ -75,35 +64,103 @@ export function DbmlTable(props: DbmlTableProps): string {
     // Skip composite type configuration properties
     if (getCompositeFields(program, prop)) continue;
 
-    const colName = camelToSnake(getColumnName(program, prop));
+    const colName = quoteDbmlIdentifier(getColumnName(program, prop));
+    const partialNote = buildPartialNote(program, prop);
 
     if (isIndex(program, prop) && !isUnique(program, prop)) {
-      indexes.push(`    ${colName}`);
+      indexes.push(`    ${colName}${partialNote}`);
     } else if (isUnique(program, prop) && !isKey(program, prop)) {
-      indexes.push(`    ${colName} [unique]`);
+      // Unnamed `@unique` renders inline as column-level `[unique]` (handled
+      // in DbmlColumn) so dbdiagram.io shows the badge inline. Only keep the
+      // indexes-block entry when there's a `@unique("name")` override that
+      // would otherwise lose the constraint name (DBML has no column-level
+      // name surface), or when a partial-index predicate needs surfacing.
+      if (hasUniqueNameOverride(program, prop) || getPartialIndex(program, prop)) {
+        const attrs = ["unique"];
+        const predicate = getPartialIndex(program, prop);
+        if (predicate) {
+          attrs.push(`note: '${escapeDbmlSingleQuotes(`partial: ${predicate}`)}'`);
+        }
+        indexes.push(`    ${colName} [${attrs.join(", ")}]`);
+      }
     }
   }
 
-  const tableLines = [`Table ${tableName} {`, ...lines];
+  // Polymorphic discriminator → compound (type, id) index, mirroring Ent / SQLModel.
+  for (const { prop } of regularProps) {
+    const polymorphic = getPolymorphicConfig(program, prop);
+    if (!polymorphic?.idColumn) continue;
+    const typeColumn = getColumnName(program, prop);
+    indexes.push(
+      `    (${quoteDbmlIdentifier(typeColumn)}, ${quoteDbmlIdentifier(polymorphic.idColumn)}) [name: '${tableName}_${typeColumn}_${polymorphic.idColumn}_idx']`,
+    );
+  }
+
+  const schemaName = getSchemaName(program, model);
+  const qualifiedName = schemaName
+    ? `${quoteDbmlIdentifier(schemaName)}.${quoteDbmlIdentifier(tableName)}`
+    : quoteDbmlIdentifier(tableName);
+  const tableLines = [`Table ${qualifiedName} {`, ...lines];
+
+  // Surface @doc on the model as a DBML table-level Note.
+  const tableDoc = getDoc(program, model);
+  if (tableDoc) {
+    if (tableLines.length > 1) {
+      tableLines.push("");
+    }
+    tableLines.push(`  Note: ${formatDbmlNote(tableDoc)}`);
+  }
+
   if (indexes.length > 0) {
     tableLines.push("", "  indexes {", ...indexes, "  }");
   }
   tableLines.push("}");
 
+  if (trailingComments.length > 0) {
+    tableLines.push(...trailingComments);
+  }
+
   return tableLines.join("\n");
 }
 
 function buildCompositeIndexLine(ct: {
+  name: string;
   columns: string[];
   isUnique: boolean;
   isPrimary: boolean;
+  where?: string;
 }): string {
-  const snakeColumns = ct.columns.map((column) => camelToSnake(column));
-  let suffix = "";
+  // Composite primary keys never carry a user-defined name surface in DBML —
+  // `[pk]` alone is enough. For non-pk indexes, preserve the constraint name
+  // generated by `collectCompositeTypeFields` (which honors `@@tableIndex(name)`
+  // / `@@tableUnique(name)` overrides) via `[name: '...']` so dbdocs shows the
+  // explicit identifier the schema author chose.
+  const attrs: string[] = [];
   if (ct.isPrimary) {
-    suffix = " [pk]";
-  } else if (ct.isUnique) {
-    suffix = " [unique]";
+    attrs.push("pk");
+  } else {
+    if (ct.name) {
+      attrs.push(`name: '${escapeDbmlSingleQuotes(ct.name)}'`);
+    }
+    if (ct.isUnique) {
+      attrs.push("unique");
+    }
   }
-  return `    (${snakeColumns.join(", ")})${suffix}`;
+  if (ct.where) {
+    // DBML has no native partial-index syntax; surface the predicate via a
+    // `note:` setting so dbdocs renders it next to the index.
+    attrs.push(`note: '${escapeDbmlSingleQuotes(`partial: ${ct.where}`)}'`);
+  }
+  const suffix = attrs.length > 0 ? ` [${attrs.join(", ")}]` : "";
+  return `    (${ct.columns.join(", ")})${suffix}`;
+}
+
+function buildPartialNote(program: Program, prop: ModelProperty): string {
+  const predicate = getPartialIndex(program, prop);
+  if (!predicate) return "";
+  return ` [note: '${escapeDbmlSingleQuotes(`partial: ${predicate}`)}']`;
+}
+
+function escapeDbmlSingleQuotes(value: string): string {
+  return value.replaceAll("'", "\\'");
 }

@@ -1,14 +1,14 @@
-/**
- * Main Zod emitter - generates namespace-grouped Zod schemas from TypeSpec data models.
- */
-
 import { render, writeOutput, SourceDirectory, SourceFile } from "@alloy-js/core";
-import type { EmitContext } from "@typespec/compiler";
+import { type EmitContext } from "@typespec/compiler";
 import { Output } from "@typespec/emitter-framework";
-import { normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
-import { zod } from "./external-packages/zod.js";
+import { bootstrapEmitter, isBootstrapSuccess } from "@qninhdt/typespec-orm";
+import { zod, ZOD_VERSION } from "./external-packages/zod.js";
 import { ZodModelFile } from "./components/ZodModelFile.js";
+import { collectScalarsForModels, ZodScalarsFile } from "./components/ZodScalarsFile.js";
+import { ZodMetaFile } from "./components/ZodMetaFile.js";
 import { reportDiagnostic, type ZodEmitterOptions } from "./lib.js";
+import { generatePackageJson } from "./emitter/package-json.js";
+import { generateRootBarrel } from "./emitter/root-barrel.js";
 
 export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   const options = context.options;
@@ -16,29 +16,33 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   const isStandalone = options.standalone ?? false;
   const libraryName = options["library-name"];
 
-  if (isStandalone && !libraryName) {
-    reportDiagnostic(context.program, {
-      code: "standalone-requires-library-name",
-      target: context.program.getGlobalNamespaceType(),
-    });
-    return;
-  }
-
-  const graph = normalizeOrmGraph(context.program);
-  const selection = selectModelsForEmitter(context.program, graph, {
+  const result = bootstrapEmitter(context, {
+    kinds: ["mixin", "data"],
     include: options.include,
     exclude: options.exclude,
-    kinds: ["data"],
+    autoIncludeDependencies: options["auto-include-dependencies"],
+    standalone: options.standalone,
+    libraryName,
   });
 
-  if (selection.models.length === 0) {
+  if (!isBootstrapSuccess(result)) {
+    if (result.reason === "standalone-requires-library-name") {
+      reportDiagnostic(context.program, {
+        code: "standalone-requires-library-name",
+        target: context.program.getGlobalNamespaceType(),
+      });
+    }
     return;
   }
 
-  const namespaceGroups = [...selection.byNamespace.values()].sort((a, b) =>
-    a[0].namespace.localeCompare(b[0].namespace),
-  );
+  const { selection, namespaceGroups } = result;
   const basePath = isStandalone ? "src" : ".";
+  const scalars = collectScalarsForModels(
+    context.program,
+    selection.models.map((model) => model.model),
+  );
+  const hasScalarsFile = scalars.length > 0;
+  const rootBarrelSource = generateRootBarrel(selection.models, hasScalarsFile);
 
   const tree = (
     <Output program={context.program} externals={[zod]}>
@@ -46,33 +50,12 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
         {isStandalone && (
           <>
             <SourceFile path="package.json" filetype="json" printWidth={9999}>
-              {JSON.stringify(
-                {
-                  name: libraryName,
-                  version: "0.0.0",
-                  private: true,
-                  type: "module",
-                  main: "./dist/index.js",
-                  types: "./dist/index.d.ts",
-                  exports: {
-                    ".": {
-                      import: "./dist/index.js",
-                      types: "./dist/index.d.ts",
-                    },
-                    "./*": {
-                      types: "./dist/*.d.ts",
-                    },
-                  },
-                  dependencies: {
-                    zod: "^3.23.0",
-                  },
-                  devDependencies: {
-                    typescript: "^5.0.0",
-                  },
-                },
-                null,
-                2,
-              )}
+              {generatePackageJson({
+                libraryName: libraryName!,
+                models: selection.models,
+                description: options.description,
+                license: options.license,
+              })}
             </SourceFile>
             <SourceFile path="tsconfig.json" filetype="json" printWidth={9999}>
               {JSON.stringify(
@@ -85,10 +68,15 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                     outDir: "./dist",
                     rootDir: "./src",
                     declaration: true,
-                    emitDeclarationOnly: true,
                     esModuleInterop: true,
                     strict: true,
                     skipLibCheck: true,
+                    // Stricter defaults: align generated packages with the
+                    // safety knobs we expect in the workspace itself.
+                    noUncheckedIndexedAccess: true,
+                    exactOptionalPropertyTypes: true,
+                    verbatimModuleSyntax: true,
+                    forceConsistentCasingInFileNames: true,
                   },
                   include: ["src/**/*.ts"],
                   exclude: ["node_modules", "dist"],
@@ -100,6 +88,8 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
           </>
         )}
         <SourceDirectory path={basePath}>
+          <ZodMetaFile />
+          <ZodScalarsFile program={context.program} scalars={scalars} />
           {namespaceGroups.map((models) => (
             <SourceDirectory path={models[0].namespaceDir}>
               {models.map((model) => (
@@ -108,14 +98,13 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
                   model={model.model}
                   label={model.label ?? model.name}
                   path={`${model.model.name}.ts`}
+                  namespaceDir={model.namespaceDir}
                 />
               ))}
             </SourceDirectory>
           ))}
           <SourceFile path="index.ts" filetype="typescript" printWidth={9999}>
-            {selection.models
-              .map((model) => `export * from "./${model.namespaceDir}/${model.model.name}.js";`)
-              .join("\n")}
+            {rootBarrelSource}
           </SourceFile>
         </SourceDirectory>
       </SourceDirectory>
@@ -123,5 +112,17 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   );
 
   const output = render(tree);
-  await writeOutput(output, outputDir);
+  try {
+    await writeOutput(output, outputDir);
+  } catch (e) {
+    reportDiagnostic(context.program, {
+      code: "emit-write-failed",
+      target: context.program.getGlobalNamespaceType(),
+      format: { message: e instanceof Error ? e.message : String(e) },
+    });
+  }
 }
+
+// Re-export ZOD_VERSION so it remains tree-shakable for users importing
+// the emitter package directly. Not part of the public API contract.
+export { ZOD_VERSION };

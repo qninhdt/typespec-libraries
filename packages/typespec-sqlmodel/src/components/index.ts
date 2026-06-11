@@ -11,7 +11,7 @@ export {
   generateEnumClass,
   generateInit,
   buildPythonImportBlock,
-  resolveFormatPyType,
+  getNativePydanticType,
 } from "./PyConstants.js";
 export type { PythonTypeMapping } from "./PyConstants.js";
 
@@ -19,3 +19,8 @@ export { generateField, generateIgnoredField } from "./PyField.jsx";
 export { generateRelationField } from "./PyRelationField.jsx";
 export { PyModelFile } from "./PyModel.jsx";
 export { PyDataFile } from "./PyDataModel.jsx";
+export {
+  buildPythonScalarAliasNames,
+  collectAliasableScalarsForModels,
+  PyScalarsFile,
+} from "./PyScalars.jsx";

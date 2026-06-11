@@ -90,7 +90,8 @@ describe("normalizeOrmGraph", () => {
 
       namespace Demo.Users {
         @table
-        model User is Demo.Shared.AuditFields {
+        model User {
+          ...Demo.Shared.AuditFields;
           @key id: uuid;
           status: Demo.Shared.Status;
         }
@@ -107,7 +108,6 @@ describe("normalizeOrmGraph", () => {
       }
 
       namespace Demo.Forms {
-        @data("Project Form")
         model ProjectForm {
           ownerId: uuid;
         }
@@ -148,7 +148,7 @@ describe("normalizeOrmGraph", () => {
       ]),
     );
     expect(projectForm.kind).toBe("data");
-    expect(projectForm.label).toBe("Project Form");
+    expect(projectForm.label).toBe("ProjectForm");
   });
 
   it("reports selector conflicts, redundant selectors, and filtered dependencies", async () => {
@@ -260,7 +260,6 @@ describe("normalizeOrmGraph", () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace Demo.Zeta {
-        @data("Z Form")
         model ZetaForm {
           value: string;
         }
@@ -282,5 +281,306 @@ describe("normalizeOrmGraph", () => {
     expect(selection.topLevelNamespaces).toEqual(["test"]);
     expect([...selection.byNamespace.keys()]).toEqual(["Test.Demo.Alpha", "Test.Demo.Zeta"]);
     expect(selection.models.map((model) => model.name)).toEqual(["Alpha", "ZetaForm"]);
+  });
+
+  it("selects only data models when kinds is ['data']", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+
+        model UserForm {
+          name: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      kinds: ["data"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["UserForm"]);
+    expect(selection.models.every((m) => m.kind === "data")).toBe(true);
+  });
+
+  it("selects only table models when kinds is ['table']", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+
+        model UserForm {
+          name: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      kinds: ["table"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["User"]);
+    expect(selection.models.every((m) => m.kind === "table")).toBe(true);
+  });
+
+  it("matches scope selectors of the form #X against @scope values", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("auth")
+        model User {
+          @key id: uuid;
+        }
+
+        @table
+        model AuditLog {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      include: ["#auth"],
+      kinds: ["table"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["User"]);
+  });
+
+  it("unions namespace and tag selectors when both appear in include", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Forms {
+        model SignUpForm {
+          email: string;
+        }
+      }
+
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("auth")
+        model User {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      include: ["Test.Demo.Forms", "#auth"],
+      kinds: ["table", "data"],
+    });
+
+    expect(selection.models.map((model) => model.name).sort()).toEqual(["SignUpForm", "User"]);
+  });
+
+  it("excludes models matched by a tag exclude even when their namespace is included", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+
+        @table
+        @Qninhdt.Orm.scope("audit")
+        model AuditLog {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      include: ["Test.Demo.Users"],
+      exclude: ["#audit"],
+      kinds: ["table"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["User"]);
+  });
+
+  it("strict default still raises filtered-dependency when a required dep is omitted", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        model User {
+          @key id: uuid;
+        }
+      }
+
+      namespace Demo.Projects {
+        @table
+        model Project {
+          @key id: uuid;
+          ownerId: uuid;
+          @foreignKey("ownerId")
+          owner: Demo.Users.User;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      include: ["Test.Demo.Projects"],
+      kinds: ["table"],
+    });
+
+    expect(selection.models.map((model) => model.name)).toEqual(["Project"]);
+    const codes = runner.program.diagnostics.map((diag) => diag.code);
+    expect(codes).toContain("@qninhdt/typespec-orm/filtered-dependency");
+  });
+
+  it("autoIncludeDependencies pulls required deps in and silences filtered-dependency", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Shared {
+        @tableMixin
+        model AuditFields {
+          createdAt: utcDateTime;
+        }
+      }
+
+      namespace Demo.Users {
+        @table
+        model User {
+          ...Demo.Shared.AuditFields;
+          @key id: uuid;
+        }
+      }
+
+      namespace Demo.Projects {
+        @table
+        model Project {
+          ...Demo.Shared.AuditFields;
+          @key id: uuid;
+          ownerId: uuid;
+          @foreignKey("ownerId")
+          owner: Demo.Users.User;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const selection = selectModelsForEmitter(runner.program, graph, {
+      include: ["Test.Demo.Projects"],
+      autoIncludeDependencies: true,
+      kinds: ["table", "mixin"],
+    });
+
+    expect(selection.models.map((model) => model.name).sort()).toEqual([
+      "AuditFields",
+      "Project",
+      "User",
+    ]);
+    const codes = runner.program.diagnostics.map((diag) => diag.code);
+    expect(codes).not.toContain("@qninhdt/typespec-orm/filtered-dependency");
+  });
+
+  it("populates schema, scopes, and version metadata", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @Qninhdt.Orm.schema("audit")
+      namespace Demo.Audit {
+        @table
+        @Qninhdt.Orm.scope("frontend")
+        @Qninhdt.Orm.scope("audit")
+        model EventLog {
+          @key id: uuid;
+          @version revision: int32 = 0;
+          message: string;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const log = graph.models.find((entry) => entry.name === "EventLog");
+    expect(log).toBeDefined();
+    expect(log!.schema).toBe("audit");
+    expect(log!.scopes.sort()).toEqual(["audit", "frontend"]);
+    expect(log!.versionColumn).toBe("revision");
+  });
+
+  it("warns when an include list repeats a tag selector", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("frontend")
+        model User {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    selectModelsForEmitter(runner.program, graph, {
+      include: ["#frontend", "#frontend"],
+      kinds: ["table"],
+    });
+
+    const codes = runner.program.diagnostics.map((diag) => diag.code);
+    expect(codes).toContain("@qninhdt/typespec-orm/redundant-include-selector");
+  });
+
+  it("pre-resolves enum members onto enum dependencies", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        enum Plan {
+          Free,
+          Pro,
+        }
+
+        @table
+        model User {
+          @key id: uuid;
+          plan: Plan;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    const user = graph.models.find((entry) => entry.name === "User");
+    expect(user).toBeDefined();
+    const enumDep = user!.dependencies.find((dep) => dep.kind === "enum");
+    expect(enumDep).toBeDefined();
+    expect(enumDep!.enumMembers).toBeDefined();
+    expect(enumDep!.enumMembers!.map((member) => member.name).sort()).toEqual(["Free", "Pro"]);
+  });
+
+  it("warns about scopes declared via @scope but never referenced by a selector", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      namespace Demo.Users {
+        @table
+        @Qninhdt.Orm.scope("ghost")
+        model User {
+          @key id: uuid;
+        }
+      }
+    `);
+
+    const graph = normalizeOrmGraph(runner.program);
+    selectModelsForEmitter(runner.program, graph, {
+      kinds: ["table"],
+    });
+
+    const unused = runner.program.diagnostics.filter(
+      (diag) => diag.code === "@qninhdt/typespec-orm/unused-scope",
+    );
+    expect(unused.length).toBeGreaterThan(0);
   });
 });

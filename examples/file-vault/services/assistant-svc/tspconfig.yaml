@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/assistant-svc"
+emit:
+  - "@qninhdt/typespec-sqlmodel"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-sqlmodel":
+    output-dir: "{cwd}/outputs/file-vault/assistant-svc/sqlmodel"
+    standalone: true
+    library-name: "file-vault-assistant-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Assistant"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/assistant-svc/protobuf"

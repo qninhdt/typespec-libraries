@@ -1,81 +1,49 @@
-import {
-  render,
-  SourceDirectory,
-  SourceFile,
-  type OutputDirectory,
-  type ContentOutputFile,
-} from "@alloy-js/core";
-import {
-  createTestHost as coreCreateTestHost,
-  createTestWrapper,
-} from "@typespec/compiler/testing";
-import { TypeSpecOrmTestLibrary } from "@qninhdt/typespec-orm/testing";
+import { render, SourceDirectory, SourceFile, type OutputDirectory } from "@alloy-js/core";
+import type { Program, Scalar } from "@typespec/compiler";
 import { TypeSpecSqlModelTestLibrary } from "../src/testing/index.js";
-import { camelToSnake, normalizeOrmGraph, selectModelsForEmitter } from "@qninhdt/typespec-orm";
+import {
+  createTestRunner as sharedCreateTestRunner,
+  createEmitterTestRunner as sharedCreateEmitterTestRunner,
+  getOutputFileContent,
+  expectFileContains,
+} from "@qninhdt/typespec-orm/testing";
+import {
+  camelToSnake,
+  normalizeOrmGraph,
+  selectModelsForEmitter,
+  type NormalizedOrmModel,
+} from "@qninhdt/typespec-orm";
 import { PyModelFile } from "../src/components/PyModel.jsx";
 import { PyDataFile } from "../src/components/PyDataModel.jsx";
 import { generateInit } from "../src/components/PyConstants.js";
+import {
+  buildPythonScalarAliasNames,
+  collectAliasableScalarsForModels,
+  PyScalarsFile,
+} from "../src/components/PyScalars.jsx";
 import { expect } from "vitest";
 import type { SqlModelEmitterOptions } from "../src/lib.js";
 
-export async function createTestHost() {
-  return coreCreateTestHost({
-    libraries: [TypeSpecOrmTestLibrary, TypeSpecSqlModelTestLibrary],
-  });
+interface ScalarGroup {
+  topLevel: string;
+  scalars: Scalar[];
+  aliasNames: Map<Scalar, string>;
 }
 
+const LIBRARIES = [TypeSpecSqlModelTestLibrary];
+
 export async function createTestRunner() {
-  const host = await createTestHost();
-  return createTestWrapper(host, {
-    wrapper: (code) =>
-      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
-  });
+  return sharedCreateTestRunner(LIBRARIES);
 }
 
 export async function createEmitterTestRunner(emitterOptions?: Record<string, unknown>) {
-  const host = await createTestHost();
-  return createTestWrapper(host, {
-    wrapper: (code) =>
-      `import "@qninhdt/typespec-orm"; using Qninhdt.Orm;\nnamespace Test {\n${code}\n}`,
-    compilerOptions: {
-      emit: ["@qninhdt/typespec-sqlmodel"],
-      options: {
-        "@qninhdt/typespec-sqlmodel": { ...emitterOptions },
-      },
-    },
+  return sharedCreateEmitterTestRunner({
+    libraries: LIBRARIES,
+    emitterName: "@qninhdt/typespec-sqlmodel",
+    emitterOptions,
   });
 }
 
-// ─── Output Assertion Utilities ──────────────────────────────────────────────
-
-/**
- * Find a ContentOutputFile by filename in the rendered output tree.
- */
-function findOutputFile(dir: OutputDirectory, fileName: string): ContentOutputFile | undefined {
-  for (const item of dir.contents) {
-    if (item.kind === "file" && "contents" in item && item.path.endsWith(fileName)) {
-      return item as ContentOutputFile;
-    }
-    if (item.kind === "directory") {
-      const found = findOutputFile(item, fileName);
-      if (found) return found;
-    }
-  }
-  return undefined;
-}
-
-function listAllFiles(dir: OutputDirectory): string[] {
-  const files: string[] = [];
-  for (const item of dir.contents) {
-    if (item.kind === "file") files.push(item.path);
-    if (item.kind === "directory") files.push(...listAllFiles(item));
-  }
-  return files;
-}
-
-/**
- * Compile TypeSpec, build JSX tree, render in memory, and return a specific file's content.
- */
 export async function emitPyFile(
   code: string,
   fileName: string,
@@ -83,15 +51,7 @@ export async function emitPyFile(
   emitterOptions: SqlModelEmitterOptions = {},
 ): Promise<string> {
   const output = await renderPyOutput(code, moduleName, emitterOptions);
-
-  const file = findOutputFile(output, fileName);
-  if (!file) {
-    const available = listAllFiles(output);
-    throw new Error(
-      `File "${fileName}" not found in output. Available files: ${available.join(", ")}`,
-    );
-  }
-  return file.contents;
+  return getOutputFileContent(output, fileName);
 }
 
 export async function renderPyOutput(
@@ -102,7 +62,17 @@ export async function renderPyOutput(
   const runner = await createTestRunner();
   await runner.compile(code);
 
-  const diags = runner.program.diagnostics.filter((d) => d.severity === "error");
+  const diags = runner.program.diagnostics.filter(
+    (d) =>
+      d.severity === "error" &&
+      // Many existing fixtures use bare `string` (without @maxLength) because
+      // the emitter previously fell back to a silent max_length=255. The
+      // production behavior is now `error` (see lib.ts), but those fixtures
+      // are testing unrelated concerns. Dedicated tests assert the diagnostic
+      // fires; here we let the wrapper ignore it so unrelated tests can keep
+      // compiling small fragments.
+      d.code !== "@qninhdt/typespec-sqlmodel/string-without-max-length",
+  );
   expect(
     diags,
     `TypeSpec compilation errors: ${diags.map((d) => d.message).join("; ")}`,
@@ -111,17 +81,24 @@ export async function renderPyOutput(
   const program = runner.program;
   const graph = normalizeOrmGraph(program);
   const selection = selectModelsForEmitter(program, graph, {
-    kinds: ["table", "data"],
+    kinds: ["table", "mixin", "data"],
   });
   const tables = selection.models.filter((model) => model.kind === "table");
+  const mixins = selection.models.filter((model) => model.kind === "mixin");
   const dataModels = selection.models.filter((model) => model.kind === "data");
   const namespaceGroups = [...selection.byNamespace.values()];
+  const scalarGroups = buildScalarGroups(program, selection.models);
+  const scalarGroupsByTopLevel = new Map(scalarGroups.map((group) => [group.topLevel, group]));
   const isStandalone = emitterOptions.standalone ?? false;
   const libraryName = emitterOptions["library-name"] ?? moduleName;
 
   const allModelNames: string[] = [];
   const moduleFiles: string[] = [];
   for (const model of tables) {
+    allModelNames.push(model.model.name);
+    moduleFiles.push(camelToSnake(model.model.name));
+  }
+  for (const model of mixins) {
     allModelNames.push(model.model.name);
     moduleFiles.push(camelToSnake(model.model.name));
   }
@@ -147,6 +124,11 @@ version = "0.0.0"
 `}
         </SourceFile>
       )}
+      {scalarGroups.map((group) => (
+        <SourceDirectory path={group.topLevel || "."}>
+          <PyScalarsFile program={program} scalars={group.scalars} aliasNames={group.aliasNames} />
+        </SourceDirectory>
+      ))}
       {namespaceGroups.map((models) => (
         <SourceDirectory path={models[0].namespaceDir}>
           {models
@@ -157,12 +139,37 @@ version = "0.0.0"
                 normalizedModel={model}
                 modelLookup={graph.byModel}
                 collectionStrategy={emitterOptions["collection-strategy"]}
+                scalarAliasNames={
+                  scalarGroupsByTopLevel.get(model.namespacePath[0] ?? "")?.aliasNames
+                }
+              />
+            ))}
+          {models
+            .filter((model) => model.kind === "mixin")
+            .map((model) => (
+              <PyModelFile
+                program={program}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                collectionStrategy={emitterOptions["collection-strategy"]}
+                scalarAliasNames={
+                  scalarGroupsByTopLevel.get(model.namespacePath[0] ?? "")?.aliasNames
+                }
               />
             ))}
           {models
             .filter((model) => model.kind === "data")
             .map((model) => (
-              <PyDataFile program={program} model={model.model} label={model.label ?? model.name} />
+              <PyDataFile
+                program={program}
+                model={model.model}
+                label={model.label ?? model.name}
+                normalizedModel={model}
+                modelLookup={graph.byModel}
+                scalarAliasNames={
+                  scalarGroupsByTopLevel.get(model.namespacePath[0] ?? "")?.aliasNames
+                }
+              />
             ))}
           <SourceFile path="__init__.py" filetype="py" printWidth={9999}>
             {initContent}
@@ -175,18 +182,33 @@ version = "0.0.0"
   return render(tree);
 }
 
-/**
- * Assert that the generated Python file contains the given substrings.
- */
+function buildScalarGroups(program: Program, models: NormalizedOrmModel[]): ScalarGroup[] {
+  const byTopLevel = new Map<string, NormalizedOrmModel[]>();
+  for (const model of models) {
+    const topLevel = model.namespacePath[0] ?? "";
+    const group = byTopLevel.get(topLevel) ?? [];
+    group.push(model);
+    byTopLevel.set(topLevel, group);
+  }
+
+  return [...byTopLevel.entries()].map(([topLevel, groupModels]) => {
+    const scalars = collectAliasableScalarsForModels(
+      program,
+      groupModels.map((model) => model.model),
+    );
+    return {
+      topLevel,
+      scalars,
+      aliasNames: buildPythonScalarAliasNames(program, scalars),
+    };
+  });
+}
+
 export async function expectPyFileContains(
   code: string,
   fileName: string,
   ...substrings: string[]
 ): Promise<void> {
-  const actual = await emitPyFile(code, fileName);
-  for (const sub of substrings) {
-    expect(actual, `Expected "${fileName}" to contain:\n${sub}\n\nActual:\n${actual}`).toContain(
-      sub,
-    );
-  }
+  const output = await renderPyOutput(code);
+  expectFileContains(output, fileName, ...substrings);
 }

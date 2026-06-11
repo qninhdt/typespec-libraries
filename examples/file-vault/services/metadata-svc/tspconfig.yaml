@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/metadata-svc"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/file-vault/metadata-svc/ent"
+    standalone: true
+    library-name: "github.com/example/file-vault/metadata-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Metadata"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/metadata-svc/protobuf"

@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/audit-svc"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/file-vault/audit-svc/ent"
+    standalone: true
+    library-name: "github.com/example/file-vault/audit-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Audit"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/audit-svc/protobuf"

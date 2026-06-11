@@ -1,0 +1,49 @@
+# CODEOWNERS — review gating per directory.
+#
+# Rules are evaluated last-match-wins, so place broad defaults at the top and
+# narrow overrides below. Replace the `@TODO-*` placeholders with real GitHub
+# team handles (`@org/team-name`) before merging this to main.
+
+# ── Default owner: anyone touching the repo without a more specific match ──
+*                                       @TODO-platform
+
+# ── Emitter packages (shared libraries) ──
+/packages/typespec-orm/                 @TODO-platform
+/packages/typespec-ent/                 @TODO-platform @TODO-go-guild
+/packages/typespec-sqlmodel/            @TODO-platform @TODO-python-guild
+/packages/typespec-zod/                 @TODO-platform @TODO-frontend-guild
+/packages/typespec-dbml/                @TODO-platform @TODO-data-guild
+
+# ── Shared contracts (multi-team approval) ──
+/examples/file-vault/contracts/shared/  @TODO-platform @TODO-file-vault-leads
+/examples/game-platform/contracts/shared/ @TODO-platform @TODO-game-platform-leads
+
+# ── Per-namespace contracts: owning team ──
+/examples/file-vault/contracts/identity/        @TODO-identity-team
+/examples/file-vault/contracts/metadata/        @TODO-metadata-team
+/examples/file-vault/contracts/storage/         @TODO-storage-team
+/examples/file-vault/contracts/sharing/         @TODO-sharing-team
+/examples/file-vault/contracts/notifications/   @TODO-notifications-team
+/examples/file-vault/contracts/audit/           @TODO-audit-team
+/examples/file-vault/contracts/processing/      @TODO-processing-team
+/examples/file-vault/contracts/search/          @TODO-search-team
+/examples/file-vault/contracts/assistant/       @TODO-assistant-team
+
+# ── Per-service entry (main.tsp + tspconfig.yaml): owning team ──
+/examples/file-vault/services/identity-svc/         @TODO-identity-team
+/examples/file-vault/services/metadata-svc/         @TODO-metadata-team
+/examples/file-vault/services/storage-svc/          @TODO-storage-team
+/examples/file-vault/services/sharing-svc/          @TODO-sharing-team
+/examples/file-vault/services/notifications-svc/    @TODO-notifications-team
+/examples/file-vault/services/audit-svc/            @TODO-audit-team
+/examples/file-vault/services/processing-svc/       @TODO-processing-team
+/examples/file-vault/services/search-svc/           @TODO-search-team
+/examples/file-vault/services/assistant-svc/        @TODO-assistant-team
+/examples/file-vault/services/frontend/             @TODO-frontend-guild
+/examples/file-vault/services/docs/                 @TODO-platform @TODO-data-guild
+
+# ── CI / repo plumbing: platform team only ──
+/.github/                               @TODO-platform
+/package.json                           @TODO-platform
+/pnpm-lock.yaml                         @TODO-platform
+/tsconfig.json                          @TODO-platform

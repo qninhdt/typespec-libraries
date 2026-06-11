@@ -7,8 +7,4 @@ describe("ORM library definition", () => {
     expect(ormLib.diagnostics).toHaveProperty("multiple-keys");
     expect(ormLib.diagnostics).toHaveProperty("unsupported-relation-shape");
   });
-
-  it("exposes emitter option schema metadata", () => {
-    expect(ormLib.emitter).toBeUndefined();
-  });
 });

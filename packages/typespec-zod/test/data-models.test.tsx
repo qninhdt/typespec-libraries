@@ -2,10 +2,23 @@ import { describe, expect, it } from "vitest";
 import { emitZodFile } from "./utils.jsx";
 
 describe("Zod @data model generation", () => {
+  it("treats unmarked models as form schemas", async () => {
+    const output = await emitZodFile(
+      `
+      model UserForm {
+        name: string;
+      }
+    `,
+      "UserForm.ts",
+    );
+
+    expect(output).toContain("export const UserFormSchema = z.object(");
+    expect(output).toContain("name: z.string()");
+  });
+
   it("generates schema variable declaration with correct name", async () => {
     const output = await emitZodFile(
       `
-      @data("User form")
       model CreateUserForm {
         name: string;
         email: string;
@@ -21,7 +34,6 @@ describe("Zod @data model generation", () => {
   it("generates z.object() as the base schema", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
       }
@@ -35,7 +47,6 @@ describe("Zod @data model generation", () => {
   it("generates type alias using z.infer", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
       }
@@ -50,7 +61,6 @@ describe("Zod @data model generation", () => {
   it("generates optional fields with .optional()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         name: string;
         bio?: string;
@@ -68,7 +78,6 @@ describe("Zod @data model generation", () => {
   it("generates default values with .default()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         enabled: boolean = true;
         count?: int32 = 0;
@@ -83,7 +92,6 @@ describe("Zod @data model generation", () => {
   it("generates field with constraints", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
         @minLength(1) @maxLength(100) name: string;
       }
@@ -95,12 +103,11 @@ describe("Zod @data model generation", () => {
     expect(output).toContain(".max(");
   });
 
-  it("generates field with @format constraints", async () => {
+  it("generates field with email scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model TestForm {
-        @format("email") email: string;
+        contact: email;
       }
     `,
       "TestForm.ts",
@@ -108,13 +115,56 @@ describe("Zod @data model generation", () => {
 
     expect(output).toContain(".email()");
   });
+
+  it("generates inherited schema fields and metadata", async () => {
+    const output = await emitZodFile(
+      `
+      model BaseForm {
+        @title("Email Address") contact: email;
+      }
+
+      model InviteForm {
+        ...BaseForm;
+        message?: string;
+      }
+    `,
+      "InviteForm.ts",
+    );
+
+    expect(output).toContain('import { BaseFormSchema } from "./BaseForm.js";');
+    expect(output).not.toContain("contact: z.string().email()");
+    expect(output).not.toContain("contact: z.email()");
+    expect(output).toContain("export const InviteFormSchema = BaseFormSchema.extend(");
+    expect(output).not.toContain(".safeExtend(");
+    expect(output).toContain("message: z.string().optional()");
+  });
+
+  it("generates table mixins as reusable Zod schemas", async () => {
+    const mixin = await emitZodFile(
+      `
+      @tableMixin
+      model Timestamped {
+        createdAt: utcDateTime;
+      }
+
+      @table
+      model User {
+        ...Timestamped;
+        @key id: uuid;
+      }
+    `,
+      "Timestamped.ts",
+    );
+
+    expect(mixin).toContain("export const TimestampedSchema = z.object(");
+    expect(mixin).toContain("createdAt:");
+  });
 });
 
 describe("Zod model file structure", () => {
   it("generates generated header comment", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
       }
@@ -128,7 +178,6 @@ describe("Zod model file structure", () => {
   it("exports schema and type", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
       }

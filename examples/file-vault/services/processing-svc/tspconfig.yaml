@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/processing-svc"
+emit:
+  - "@qninhdt/typespec-sqlmodel"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-sqlmodel":
+    output-dir: "{cwd}/outputs/file-vault/processing-svc/sqlmodel"
+    standalone: true
+    library-name: "file-vault-processing-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Processing"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/processing-svc/protobuf"

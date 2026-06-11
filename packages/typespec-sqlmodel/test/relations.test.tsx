@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { emitPyFile } from "./utils.jsx";
 
 describe("SQLModel one-to-many relationships", () => {
-  it("generates Relationship with back_populates and cascade", async () => {
+  it("generates Relationship with back_populates and FK cascade", async () => {
     const output = await emitPyFile(
       `
       @table
@@ -33,7 +33,7 @@ describe("SQLModel one-to-many relationships", () => {
     expect(output).toContain("Relationship");
   });
 
-  it('generates cascade="all, delete-orphan" for CASCADE parent', async () => {
+  it("does not infer delete-orphan ownership from DB cascade", async () => {
     const output = await emitPyFile(
       `
       @table
@@ -54,7 +54,8 @@ describe("SQLModel one-to-many relationships", () => {
       "user.py",
     );
 
-    expect(output).toContain('"cascade": "all, delete-orphan"');
+    expect(output).toContain('back_populates="user"');
+    expect(output).not.toContain("delete-orphan");
   });
 
   it("FK field has foreign_key reference to target table's PK", async () => {
@@ -84,6 +85,33 @@ describe("SQLModel one-to-many relationships", () => {
     expect(output).toContain('ForeignKey("users.id", ondelete="CASCADE")');
     // Relationship should NOT have foreign_keys in sa_relationship_kwargs
     expect(output).not.toContain("foreign_keys");
+  });
+
+  it("uses exact mapped FK column names when applying relation metadata", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("user")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        @map("ownerId")
+        ownerId: uuid;
+        @foreignKey("ownerId")
+        @onDelete("CASCADE")
+        user: User;
+      }
+    `,
+      "post.py",
+    );
+
+    expect(output).toContain("ownerId: UUID = Field(");
+    expect(output).toContain('ForeignKey("users.id", ondelete="CASCADE")');
   });
 
   it("Relationship does NOT include foreign_keys when FK is explicit", async () => {
@@ -275,5 +303,126 @@ describe("SQLModel collection strategies", () => {
 
     expect(output).toContain("tags: list[str] = Field(");
     expect(output).toContain("sa_column=Column(ARRAY(String), nullable=False)");
+  });
+});
+
+describe("SQLModel relationship sa_relationship_kwargs", () => {
+  it("emits foreign_keys when two FKs point at the same parent", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+      }
+
+      @table
+      model Message {
+        @key id: uuid;
+        senderId: uuid;
+        recipientId: uuid;
+        @foreignKey("senderId")
+        sender: User;
+        @foreignKey("recipientId")
+        recipient: User;
+      }
+    `,
+      "message.py",
+    );
+
+    // Both navs target the same User parent; SQLAlchemy needs explicit
+    // foreign_keys to disambiguate.
+    expect(output).toContain('"foreign_keys": "Message.sender_id"');
+    expect(output).toContain('"foreign_keys": "Message.recipient_id"');
+  });
+
+  it("emits passive_deletes and cascade kwargs on the parent collection when child FK uses onDelete cascade", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @mappedBy("user")
+        posts: Post[];
+      }
+
+      @table
+      model Post {
+        @key id: uuid;
+        userId: uuid;
+        @foreignKey("user_id")
+        @onDelete("CASCADE")
+        user: User;
+      }
+    `,
+      "user.py",
+    );
+
+    // Without passive_deletes the ORM bypasses the DB-level CASCADE.
+    expect(output).toContain('"passive_deletes": True');
+    expect(output).toContain('"cascade": "all, delete"');
+  });
+
+  it("m2m emits back_populates on both sides", async () => {
+    const left = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        users: User[];
+      }
+    `,
+      "user.py",
+    );
+
+    const right = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        roles: Role[];
+      }
+
+      @table
+      model Role {
+        @key id: uuid;
+        @manyToMany("user_roles")
+        users: User[];
+      }
+    `,
+      "role.py",
+    );
+
+    expect(left).toContain('back_populates="users"');
+    expect(right).toContain('back_populates="roles"');
+  });
+});
+
+describe("SQLModel forward-ref future annotations", () => {
+  it("emits `from __future__ import annotations` as the first import in model files", async () => {
+    const output = await emitPyFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+      }
+    `,
+      "user.py",
+    );
+
+    const headerIdx = output.indexOf("# Source: https://github.com/qninhdt/typespec-libraries");
+    const futureIdx = output.indexOf("from __future__ import annotations");
+    const firstFromIdx = output.indexOf("\nfrom ", headerIdx);
+
+    expect(futureIdx).toBeGreaterThan(headerIdx);
+    expect(futureIdx).toBe(firstFromIdx + 1);
   });
 });

@@ -6,6 +6,11 @@ dist/
 packages/*/dist/
 __pycache__/
 
+# Generated examples (rebuilt by `pnpm compile-examples` in CI; never the
+# source of truth — `.tsp` contracts are). Validation outputs are also local-only.
+outputs/
+outputs-validation/
+
 # Dependency directories
 node_modules/
 
@@ -20,6 +25,10 @@ node_modules/
 
 # Temp folder
 temp/
+packages/**/.tmp/
+
+# Local code index
+.codegraph/
 
 # Test
 coverage/
@@ -37,3 +46,7 @@ packages/**/@qninhdt/
 
 # Environment variables
 .env
+
+.claude
+# VitePress generated cache
+docs/.vitepress/cache/

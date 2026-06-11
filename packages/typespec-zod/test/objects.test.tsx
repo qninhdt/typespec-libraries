@@ -5,7 +5,6 @@ describe("Zod object schema generation", () => {
   it("generates z.object({...}) for model", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         email: string;
@@ -22,7 +21,6 @@ describe("Zod object schema generation", () => {
   it("generates field name as key in object", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         firstName: string;
         lastName: string;
@@ -38,13 +36,11 @@ describe("Zod object schema generation", () => {
   it("generates nested object schemas", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Address {
         street: string;
         city: string;
       }
 
-      @data("Form")
       model User {
         name: string;
         address: Address;
@@ -60,7 +56,6 @@ describe("Zod object schema generation", () => {
   it("generates optional fields with .optional()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         name: string;
         bio?: string;
@@ -79,7 +74,6 @@ describe("Zod object schema generation", () => {
   it("generates default values with .default()", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         enabled: boolean = true;
         count: int32 = 0;
@@ -91,13 +85,25 @@ describe("Zod object schema generation", () => {
 
     expect(output).toContain(".default(");
   });
+
+  it("escapes string literal schemas", async () => {
+    const output = await emitZodFile(
+      `
+      model User {
+        value: "a\\"b";
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain('z.literal("a\\"b")');
+  });
 });
 
 describe("Zod array schema generation", () => {
   it("generates z.array() for array types", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         tags: string[];
       }
@@ -111,7 +117,6 @@ describe("Zod array schema generation", () => {
   it("generates array with element schema", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         emails: string[];
       }
@@ -126,7 +131,6 @@ describe("Zod array schema generation", () => {
   it("generates array with constraints", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @minItems(1) @maxItems(10) tags: string[];
       }
@@ -144,7 +148,6 @@ describe("Zod tuple schema generation", () => {
   it("generates z.tuple([...]) for tuple types", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         coordinates: [int32, int32];
       }
@@ -158,7 +161,6 @@ describe("Zod tuple schema generation", () => {
   it("generates tuple with element schemas", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         values: [string, int32, boolean];
       }
@@ -174,7 +176,6 @@ describe("Zod union schema generation", () => {
   it("generates z.union([...]) for unions", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Result {
         value: string | null;
       }
@@ -185,10 +186,29 @@ describe("Zod union schema generation", () => {
     expect(output).toContain("z.union(");
   });
 
+  it("declares named union schemas referenced by model fields", async () => {
+    const output = await emitZodFile(
+      `
+      union Contact {
+        email: string,
+        phone: string,
+      }
+
+      model Result {
+        contact: Contact;
+      }
+    `,
+      "Result.ts",
+    );
+
+    expect(output).toContain("const ContactSchema = z.union(");
+    expect(output).toContain("contact: ContactSchema");
+    expect(output).not.toContain("export const ContactSchema");
+  });
+
   it("generates z.null() for null type", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Result {
         value: string | null;
       }
@@ -202,7 +222,6 @@ describe("Zod union schema generation", () => {
   it("generates z.never() for empty union", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         value: never;
       }
@@ -216,7 +235,6 @@ describe("Zod union schema generation", () => {
   it("generates z.unknown() for unknown type", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Config {
         data: unknown;
       }

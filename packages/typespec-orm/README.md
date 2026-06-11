@@ -26,7 +26,7 @@ pnpm add -D @typespec/compiler @qninhdt/typespec-orm
 
 ## Importing The Library
 
-```typescript
+```typespec
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -36,7 +36,7 @@ using Qninhdt.Orm;
 
 ### Namespaces are required
 
-`@table`, `@data`, and `@tableMixin` must be declared inside a namespace. Required referenced declarations must also be namespaced.
+`@table`, default form models, and `@tableMixin` must be declared inside a namespace. Required referenced declarations must also be namespaced.
 
 This matters because the shared ORM graph treats namespaces as the source of truth for:
 
@@ -80,7 +80,7 @@ The normalized graph is the contract between this package and the emitters. Each
 - resolved mixin sources
 - hard and soft dependencies on models, mixins, enums, and scalars
 
-That shared graph is what makes the emitters behave consistently. GORM, SQLModel, Zod, and DBML no longer perform their own disconnected model discovery passes.
+That shared graph is what makes the emitters behave consistently. Ent, SQLModel, Zod, and DBML no longer perform their own disconnected model discovery passes.
 
 ## Namespace Normalization Rules
 
@@ -93,7 +93,7 @@ Namespace handling is intentionally deterministic:
 
 Example:
 
-```typescript
+```typespec
 namespace Demo.GamePlatform.Content.Stories;
 ```
 
@@ -114,8 +114,8 @@ normalizes to:
 - `@tableMixin`
   Marks a model as a reusable ORM mixin.
 
-- `@data(label?)`
-  Marks a model as a non-table data shape for forms and DTOs.
+- Unmarked models
+  Any namespaced model without `@table` or `@tableMixin` is treated as a non-table data shape for forms and DTOs.
 
 ### Column and persistence decorators
 
@@ -125,8 +125,8 @@ normalizes to:
 - `@index(name?)`
   Adds a non-unique index.
 
-- `@unique`
-  Adds a unique constraint for the field.
+- `@unique(name?)`
+  Adds a unique constraint for the field. Pass `name` to override the auto-derived constraint name (`{table}_{column}_unique`).
 
 - `@check(name, expression)`
   Adds a named database check constraint anchored to the property.
@@ -136,9 +136,6 @@ normalizes to:
 
 - `@autoIncrement`
   Marks an integer field as auto-incrementing.
-
-- `@softDelete`
-  Marks a datetime field as the soft-delete column.
 
 - `@autoCreateTime`
   Marks a datetime field as create timestamp metadata.
@@ -171,17 +168,65 @@ normalizes to:
 - `@title(text)`
 - `@placeholder(text)`
 - `@@inputType(scalar, htmlType)`
+- `@data(label?)`
+  Marks a model as a non-DB form / DTO shape and sets an optional label.
 
 `@@inputType` targets a scalar. When applied to a field, use `Field::type` or the source scalar for lookup-typed fields:
 
-```typescript
+```typespec
 @@inputType(CreateWorldForm.summary::type, "textarea");
 @@inputType(Demo.Worlds.World.prompt::type, "textarea");
 ```
 
+### Schema and defaults
+
+- `@schema(name)`
+  PostgreSQL schema scope for a `@table` model or namespace; model-level wins over namespace-level.
+
+- `@defaultExpression(expression)`
+  Raw SQL default evaluated by the database (e.g. `gen_random_uuid()`); mutually exclusive with literal defaults.
+
+### Optimistic locking
+
+- `@version`
+  Marks a column as the optimistic-locking version. One per model.
+
+### Selectors
+
+- `@scope(name)`
+  Tags a model or property for selector matching (`#name`); accumulates across decorators.
+
+### Model-level augments
+
+- `@@tableIndex(Model, ["a", "b"], name?)`
+  Multi-column non-unique index defined off the table.
+
+- `@@tableUnique(Model, ["a", "b"], name?)`
+  Multi-column unique constraint defined off the table.
+
+## Scalars
+
+This library exposes a small set of custom scalars on top of the TypeSpec built-ins. The DB layer maps each one to a concrete column type.
+
+| Scalar                                                                                                                | DB column type             | Notes                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `uuid`                                                                                                                | `UUID`                     | PostgreSQL UUID column.                                                                                      |
+| `text`                                                                                                                | `TEXT`                     | Unlimited text (vs `VARCHAR` for plain `string`).                                                            |
+| `jsonb`                                                                                                               | `JSONB`                    | Binary JSON.                                                                                                 |
+| `serial`                                                                                                              | `SERIAL`                   | Auto-incrementing 32-bit integer.                                                                            |
+| `bigserial`                                                                                                           | `BIGSERIAL`                | Auto-incrementing 64-bit integer.                                                                            |
+| `citext`                                                                                                              | `CITEXT`                   | Case-insensitive text (PostgreSQL CITEXT extension).                                                         |
+| `tsvector`                                                                                                            | `TSVECTOR`                 | Full-text search vector.                                                                                     |
+| `tsquery`                                                                                                             | `TSQUERY`                  | Full-text search query.                                                                                      |
+| `interval`                                                                                                            | `INTERVAL`                 | Time interval; extends `duration`.                                                                           |
+| `inet`                                                                                                                | `INET`                     | IPv4 or IPv6 host address.                                                                                   |
+| `email`, `ipv4`, `ipv6`, `ip`, `cidr`, `mac`, `base64`, `hostname`, `cuid`, `cuid2`, `ulid`, `nanoid`, `jwt`, `emoji` | `string` (with `@pattern`) | Semantic string scalars; emitters with native validation use them directly, others fall back to the pattern. |
+| `latitude`, `longitude`                                                                                               | `DOUBLE PRECISION`         | `float64` with `@minValue` / `@maxValue` bounds.                                                             |
+| `url`                                                                                                                 | `string`                   | The TypeSpec built-in `url` aliases to `string` at the DB layer (no dedicated PostgreSQL URL type).          |
+
 ## Basic Example
 
-```typescript
+```typespec
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -190,53 +235,54 @@ namespace Demo.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Accounts;
 
 @table
-model User is Demo.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Shared.Timestamped {
-  @unique code: string;
+model Badge {
+...Demo.Shared.Timestamped;
+@unique code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
 
 namespace Demo.Worlds;
 
 @table
-model World is Demo.Shared.Timestamped {
-  ownerId: uuid;
-  slug: string;
+model World {
+...Demo.Shared.Timestamped;
+ownerId: uuid;
+slug: string;
 
-  @foreignKey("ownerId")
-  owner: Demo.Accounts.User;
+@foreignKey("ownerId")
+owner: Demo.Accounts.User;
 }
 
 namespace Demo.Forms;
-
-@data("Create Invitation Form")
 model CreateInvitationForm {
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: Demo.Accounts.User.email;
+@title("Invitee Email")
+@placeholder("friend@example.com")
+inviteeEmail: Demo.Accounts.User.email;
 }
 ```
 
@@ -246,7 +292,7 @@ model CreateInvitationForm {
 
 Owned relations are declared on the navigation property:
 
-```typescript
+```typespec
 authorId: uuid;
 
 @foreignKey("authorId")
@@ -255,7 +301,7 @@ author: User;
 
 The optional second argument targets a non-`id` field:
 
-```typescript
+```typespec
 organizationCode: string;
 
 @foreignKey("organizationCode", "code")
@@ -264,28 +310,28 @@ organization: Organization;
 
 ### Inverse relations
 
-```typescript
+```typespec
 @mappedBy("author")
 posts: Post[];
 ```
 
 ### Many-to-many shorthand
 
-```typescript
+```typespec
 @table
 model User {
-  @key id: uuid;
+@key id: uuid;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
 model Badge {
-  @key id: uuid;
+@key id: uuid;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
 ```
 
@@ -301,14 +347,13 @@ Rules:
 
 This package supports source-property reuse patterns such as:
 
-```typescript
-@data
+```typespec
 model PublicUser {
   email: Demo.GamePlatform.Accounts.User.email;
 }
 ```
 
-That lets `@data` models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
+That lets default form models and other consumers inherit the source property's underlying scalar type and constraints without duplicating the full column definition manually.
 
 Use lookup types when you want:
 
@@ -324,10 +369,11 @@ Emitters using this core support:
 
 ```yaml
 include:
-  - "Demo.Worlds"
-  - "Demo.Forms"
-exclude:
-  - "Demo.Audit"
+
+- "Demo.Worlds"
+- "Demo.Forms"
+  exclude:
+- "Demo.Audit"
 ```
 
 Selectors can match:
@@ -384,6 +430,15 @@ Important diagnostics surfaced by the core include:
 - `many-to-many-conflicting-table`
 - `many-to-many-conflicting-explicit-table`
 - `duplicate-constraint-name`
+- `multiple-version-columns` — more than one `@version` column on a model.
+- `multiple-auto-increment-columns` — more than one `@autoIncrement` column on a model.
+- `auto-increment-requires-key` — `@autoIncrement` must sit on a non-optional `@key`.
+- `auto-create-and-update-conflict` — `@autoCreateTime` and `@autoUpdateTime` cannot share a property.
+- `cascade-without-relation` — `@onDelete`/`@onUpdate` on a non-relation column.
+- `foreign-key-without-index` — `@foreignKey` without an index/unique/key (PG hot-spot).
+- `pg-reserved-identifier` — table or column name collides with a PostgreSQL reserved word.
+- `auto-increment-on-non-integer` — `@autoIncrement` requires an integer scalar.
+- `auto-time-on-non-datetime` — `@autoCreateTime`/`@autoUpdateTime` require a datetime scalar.
 
 ## Troubleshooting Common Diagnostics
 

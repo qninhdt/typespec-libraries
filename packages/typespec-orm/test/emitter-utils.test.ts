@@ -48,11 +48,41 @@ describe("collectCompositeTypeFields", () => {
     ]);
   });
 
-  it("builds composite unique column set in snake_case", () => {
+  it("collects inherited composite metadata", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model TenantScoped {
+        tenantId: uuid;
+        code: string;
+        @unique tenantCode: composite<"tenantId", "code">;
+      }
+
+      @table
+      model Project extends TenantScoped {
+        @key id: uuid;
+      }
+    `);
+    const project = collectTableModels(runner.program)[0]?.model;
+    expect(project).toBeDefined();
+    if (!project) {
+      throw new Error("Expected generated test model");
+    }
+
+    expect(collectCompositeTypeFields(runner.program, project, "projects")).toEqual([
+      {
+        name: "projects_tenant_id_code_unique",
+        columns: ["tenant_id", "code"],
+        isUnique: true,
+        isPrimary: false,
+      },
+    ]);
+  });
+
+  it("builds composite unique column set from resolved columns", () => {
     const result = buildCompositeUniqueColumns([
       {
         name: "users_email_deleted_at_unique",
-        columns: ["email", "deletedAt"],
+        columns: ["email", "deleted_at"],
         isUnique: true,
         isPrimary: false,
       },
@@ -104,6 +134,38 @@ describe("classifyProperties", () => {
     expect(classified.ignored.map((item) => item.prop.name)).toEqual(["computed"]);
     expect(classified.relations.map((item) => item.prop.name)).toEqual(["team"]);
     expect(classified.fields.map((item) => item.prop.name)).toEqual(["id", "role", "teamId"]);
+  });
+
+  it("classifies inherited fields and relations", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      @table
+      model Team {
+        @key id: uuid;
+      }
+
+      model TeamOwned {
+        @key id: uuid;
+        teamId: uuid;
+        @foreignKey("teamId") team: Team;
+      }
+
+      @table
+      model User extends TeamOwned {
+        name: string;
+      }
+    `);
+    const user = collectTableModels(runner.program).find(
+      (item) => item.model.name === "User",
+    )?.model;
+    expect(user).toBeDefined();
+    if (!user) {
+      throw new Error("Expected User model");
+    }
+
+    const classified = classifyProperties(runner.program, user);
+    expect(classified.relations.map((item) => item.prop.name)).toEqual(["team"]);
+    expect(classified.fields.map((item) => item.prop.name)).toEqual(["name", "id", "teamId"]);
   });
 
   it("skips unresolved relation decorators from regular fields", async () => {

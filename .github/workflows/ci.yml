@@ -43,6 +43,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -64,36 +69,29 @@ jobs:
       - name: Test Coverage
         run: pnpm run test:coverage
 
-      - name: Prepare Sonar LCOV Paths
-        run: node scripts/prepare-sonar-lcov.mjs
-
       - name: Build
         run: pnpm run build
 
       - name: Compile Examples
         run: pnpm run compile-examples
 
-      - name: Verify Generated Outputs Are Current
-        run: git diff --exit-code -- outputs
+      - name: Check Emit Determinism
+        run: |
+          mv outputs outputs-first
+          pnpm run compile-examples
+          diff -r outputs-first outputs
 
       - name: Verify Generated Go
-        working-directory: outputs/gorm
-        run: go build -mod=mod ./...
+        run: pnpm run validate-examples:ent
 
       - name: Verify Generated Python
-        run: python -m compileall outputs/sqlmodel
+        run: pnpm run validate-examples:sqlmodel
 
       - name: Verify Generated TypeScript
-        run: pnpm --dir outputs/zod exec tsc -p tsconfig.json
+        run: pnpm run validate-examples:zod
 
-      - name: Cache SonarQube packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
+      - name: Verify Generated DBML
+        run: pnpm run validate-examples:dbml
 
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      - name: Verify Generated Protobuf
+        run: pnpm run validate-examples:protobuf

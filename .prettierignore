@@ -2,3 +2,6 @@ dist/
 node_modules/
 outputs/
 *.tgz
+packages/**/.tmp/
+.codegraph/
+docs/.vitepress/cache/

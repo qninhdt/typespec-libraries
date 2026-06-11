@@ -7,12 +7,27 @@ export interface SqlModelEmitterOptions {
   standalone?: boolean;
   /** Python distribution name for standalone package */
   "library-name"?: string;
+  /** Distribution version written to the standalone pyproject.toml (default: "0.0.0") */
+  version?: string;
+  /** Optional description written to the standalone pyproject.toml */
+  description?: string;
+  /**
+   * License text written to a `LICENSE` file alongside the standalone package.
+   * Defaults to a generic proprietary placeholder so the artifact at least
+   * carries an explicit notice. Set to a SPDX-style block or full license
+   * text when distributing.
+   */
+  license?: string;
   /** Namespace selectors to include */
   include?: string[];
   /** Namespace selectors to exclude */
   exclude?: string[];
+  /** When true, transitively pull required dependencies into the selection */
+  "auto-include-dependencies"?: boolean;
   /** Explicit persistence strategy for collection fields */
   "collection-strategy"?: "jsonb" | "postgres";
+  /** When true, write `atlas.hcl` alongside the generated package (default: false) */
+  "emit-atlas"?: boolean;
 }
 
 const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
@@ -22,9 +37,14 @@ const EmitterOptionsSchema: JSONSchemaType<SqlModelEmitterOptions> = {
     "output-dir": { type: "string", nullable: true },
     standalone: { type: "boolean", nullable: true },
     "library-name": { type: "string", nullable: true },
+    version: { type: "string", nullable: true },
+    description: { type: "string", nullable: true },
+    license: { type: "string", nullable: true },
     include: { type: "array", items: { type: "string" }, nullable: true },
     exclude: { type: "array", items: { type: "string" }, nullable: true },
-    "collection-strategy": { type: "string", nullable: true },
+    "auto-include-dependencies": { type: "boolean", nullable: true },
+    "collection-strategy": { type: "string", enum: ["jsonb", "postgres"], nullable: true },
+    "emit-atlas": { type: "boolean", nullable: true },
   },
   required: [],
 };
@@ -45,9 +65,15 @@ export const $lib = createTypeSpecLibrary({
       },
     },
     "missing-back-reference": {
-      severity: "warning",
+      severity: "error",
       messages: {
         default: paramMessage`One-to-many "${"propName"}" on "${"modelName"}" has no inverse many-to-one on "${"targetModel"}". SQLAlchemy may not resolve the foreign key automatically.`,
+      },
+    },
+    "string-without-max-length": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Property "${"propName"}" is a bare string. Add @maxLength(N) or use the "text" scalar for unlimited text.`,
       },
     },
     "emit-write-failed": {
@@ -62,16 +88,22 @@ export const $lib = createTypeSpecLibrary({
         default: "No models decorated with @table or @data were found. Nothing to emit.",
       },
     },
-    "unknown-format": {
-      severity: "warning",
-      messages: {
-        default: paramMessage`@format("${"format"}") on property "${"propName"}" has no Python/Pydantic equivalent and will be ignored.`,
-      },
-    },
-    "foreign-key-target-not-table": {
+    "cross-namespace-many-to-many-unsupported": {
       severity: "error",
       messages: {
-        default: paramMessage`@foreignKey on "${"propName"}": the property type must be a model decorated with @table, but "${"typeName"}" is not.`,
+        default: paramMessage`Many-to-many relationship between "${"leftModel"}" (namespace "${"leftNamespace"}") and "${"rightModel"}" (namespace "${"rightNamespace"}") spans top-level packages. Move both models under the same top-level namespace, or split the relationship through a third join table.`,
+      },
+    },
+    "init-export-collision": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Generated __init__.py for package "${"packageName"}" exports "${"name"}" more than once. A child package, model, or reserved attribute is colliding.`,
+      },
+    },
+    "filtered-association-table-missing": {
+      severity: "error",
+      messages: {
+        default: paramMessage`Many-to-many association table "${"tableName"}" was placed under top-level "${"topLevel"}" which is not in the selected output set. The generated import "from ${"topLevel"}.__associations__ import ${"symbol"}" will fail to resolve at runtime. Adjust 'include'/'exclude' so the chosen top-level package is emitted, or remove the association.`,
       },
     },
   },

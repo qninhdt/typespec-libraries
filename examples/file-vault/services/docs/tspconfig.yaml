@@ -1,0 +1,7 @@
+output-dir: "{cwd}/outputs/file-vault/docs"
+emit:
+  - "@qninhdt/typespec-dbml"
+options:
+  "@qninhdt/typespec-dbml":
+    output-dir: "{cwd}/outputs/file-vault/docs/dbml"
+    split-by-namespace: false

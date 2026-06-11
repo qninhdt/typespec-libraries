@@ -4,8 +4,8 @@ import {
   collectTableModels,
   collectDataModels,
   getColumnName,
+  getOrmScalarName,
   getDoc,
-  getFormat,
   getForeignKey,
   getForeignKeyTarget,
   getMaxLength,
@@ -19,11 +19,15 @@ import {
   getTitle,
   getPlaceholder,
   getCompositeFields,
+  getGoType,
+  getIndexUsing,
+  getPolymorphicConfig,
+  getRefines,
   isAutoCreateTime,
   isAutoIncrement,
   isAutoUpdateTime,
   isIndex,
-  isSoftDelete,
+  isPolymorphicProperty,
   isUnique,
 } from "@qninhdt/typespec-orm";
 import { createTestRunner } from "./utils.js";
@@ -118,6 +122,35 @@ describe("@unique decorator", () => {
 
     expect(isUnique(runner.program, email)).toBe(true);
   });
+
+  it("honors an explicit @unique(name) override", async () => {
+    const runner = await createTestRunner();
+    const { email } = (await runner.compile(`
+      @table
+      model User {
+        @test @key id: uuid;
+        @test @unique("user_email_uq") email: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    expect(isUnique(runner.program, email)).toBe(true);
+    const { getUniqueName } = await import("@qninhdt/typespec-orm");
+    expect(getUniqueName(runner.program, email)).toBe("user_email_uq");
+  });
+
+  it("falls back to the auto-derived unique name when no argument given", async () => {
+    const runner = await createTestRunner();
+    const { email } = (await runner.compile(`
+      @table
+      model User {
+        @test @key id: uuid;
+        @test @unique email: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    const { getUniqueName } = await import("@qninhdt/typespec-orm");
+    expect(getUniqueName(runner.program, email)).toBe("users_email_unique");
+  });
 });
 
 describe("@autoIncrement decorator", () => {
@@ -132,21 +165,6 @@ describe("@autoIncrement decorator", () => {
     `)) as Record<string, ModelProperty>;
 
     expect(isAutoIncrement(runner.program, id)).toBe(true);
-  });
-});
-
-describe("@softDelete decorator", () => {
-  it("marks a property as soft delete", async () => {
-    const runner = await createTestRunner();
-    const { deletedAt } = (await runner.compile(`
-      @table
-      model User {
-        @test @key id: uuid;
-        @test @softDelete deletedAt?: utcDateTime;
-      }
-    `)) as Record<string, ModelProperty>;
-
-    expect(isSoftDelete(runner.program, deletedAt)).toBe(true);
   });
 });
 
@@ -338,11 +356,10 @@ describe("composite<> type", () => {
   });
 });
 
-describe("@data decorator", () => {
-  it("marks a model as a data/form model", async () => {
+describe("data models (auto-detected)", () => {
+  it("auto-detects models without @table/@tableMixin as data models", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
-      @data
       model LoginForm {
         email: string;
         password: string;
@@ -352,20 +369,106 @@ describe("@data decorator", () => {
     const dataModels = collectDataModels(runner.program);
     expect(dataModels).toHaveLength(1);
     expect(dataModels[0].model.name).toBe("LoginForm");
+    expect(dataModels[0].label).toBe("LoginForm");
+  });
+});
+
+describe("@polymorphic decorator", () => {
+  it("captures allowedTypes and idColumn", async () => {
+    const runner = await createTestRunner();
+    const { ownerType } = (await runner.compile(`
+      @table
+      model Workspace {
+        @key id: uuid;
+        @test
+        @polymorphic(#["user", "team"], "owner_id")
+        ownerType: string;
+        ownerId: uuid;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    expect(isPolymorphicProperty(runner.program, ownerType)).toBe(true);
+    const cfg = getPolymorphicConfig(runner.program, ownerType);
+    expect(cfg?.allowedTypes).toEqual(["user", "team"]);
+    expect(cfg?.idColumn).toBe("owner_id");
   });
 
-  it("supports optional label", async () => {
+  it("works without idColumn", async () => {
     const runner = await createTestRunner();
-    await runner.compile(`
-      @data("Login Form")
-      model LoginForm {
+    const { kind } = (await runner.compile(`
+      @table
+      model Event {
+        @key id: uuid;
+        @test
+        @polymorphic(#["click", "view"])
+        kind: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    const cfg = getPolymorphicConfig(runner.program, kind);
+    expect(cfg?.allowedTypes).toEqual(["click", "view"]);
+    expect(cfg?.idColumn).toBeUndefined();
+  });
+});
+
+describe("@indexUsing decorator", () => {
+  it("captures the index method", async () => {
+    const runner = await createTestRunner();
+    const { search } = (await runner.compile(`
+      @table
+      model Document {
+        @key id: uuid;
+        @test
+        @index
+        @indexUsing("gin")
+        search: string;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    expect(getIndexUsing(runner.program, search)).toBe("gin");
+  });
+});
+
+describe("@goType decorator", () => {
+  it("parses import path and type name", async () => {
+    const runner = await createTestRunner();
+    const { payload } = (await runner.compile(`
+      @table
+      model Job {
+        @key id: uuid;
+        @test
+        @goType("github.com/example/types.JobPayload")
+        payload: Record<unknown>;
+      }
+    `)) as Record<string, ModelProperty>;
+
+    const spec = getGoType(runner.program, payload);
+    expect(spec?.importPath).toBe("github.com/example/types");
+    expect(spec?.typeName).toBe("JobPayload");
+  });
+});
+
+describe("@refine decorator", () => {
+  it("collects multiple refinements per model", async () => {
+    const runner = await createTestRunner();
+    const { Form } = (await runner.compile(`
+      @test
+      model Form {
         email: string;
         password: string;
+        confirm: string;
       }
-    `);
+      @@refine(Form, "passwordMatch", "data.password === data.confirm");
+      @@refine(Form, "nonEmpty", "data.email.length > 0");
+    `)) as Record<string, Model>;
 
-    const dataModels = collectDataModels(runner.program);
-    expect(dataModels[0].label).toBe("Login Form");
+    const refines = getRefines(runner.program, Form);
+    expect(refines).toHaveLength(2);
+    expect(refines[0]).toEqual({
+      name: "passwordMatch",
+      expression: "data.password === data.confirm",
+    });
+    expect(refines[1].name).toBe("nonEmpty");
   });
 });
 
@@ -373,7 +476,6 @@ describe("@title decorator", () => {
   it("sets a title for a form field", async () => {
     const runner = await createTestRunner();
     const { email } = (await runner.compile(`
-      @data
       model LoginForm {
         @test @title("Email Address") email: string;
       }
@@ -387,7 +489,6 @@ describe("@placeholder decorator", () => {
   it("sets a placeholder for a form field", async () => {
     const runner = await createTestRunner();
     const { email } = (await runner.compile(`
-      @data
       model LoginForm {
         @test @placeholder("Enter your email") email: string;
       }
@@ -465,16 +566,16 @@ describe("TypeSpec built-in decorators with ORM", () => {
     expect(getPattern(runner.program, code)).toBe("[A-Z]{3}-[0-9]{4}");
   });
 
-  it("reads @format", async () => {
+  it("resolves ORM semantic scalar", async () => {
     const runner = await createTestRunner();
     const { email } = (await runner.compile(`
       @table
       model User {
         @test @key id: uuid;
-        @test @format("email") email: string;
+        @test email: email;
       }
     `)) as Record<string, ModelProperty>;
 
-    expect(getFormat(runner.program, email)).toBe("email");
+    expect(getOrmScalarName(email.type)).toBe("email");
   });
 });

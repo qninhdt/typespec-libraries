@@ -2,7 +2,7 @@
 
 TypeSpec emitter that generates DBML from `@qninhdt/typespec-orm` table models.
 
-This emitter is meant for schema review, architecture visualization, and keeping DBML aligned with the same TypeSpec schema used by the runtime emitters.
+This PostgreSQL-oriented emitter is meant for schema review, architecture visualization, and keeping DBML aligned with the same TypeSpec schema used by the runtime emitters.
 
 ## When To Use This Emitter
 
@@ -18,7 +18,7 @@ DBML output is the right fit when you want:
 Use this emitter when you want DBML that stays in sync with:
 
 - namespace-aware table organization
-- the same relation semantics used by GORM and SQLModel
+- the same relation semantics used by Ent and SQLModel
 - lookup-type columns
 - FK delete/update actions
 - synthesized many-to-many join tables
@@ -54,19 +54,21 @@ options:
 
 Supported options:
 
-| Option               | Type       | Meaning                                            |
-| -------------------- | ---------- | -------------------------------------------------- |
-| `output-dir`         | `string`   | target directory handled by the TypeSpec compiler  |
-| `filename`           | `string`   | single-file output name without the `.dbml` suffix |
-| `split-by-namespace` | `boolean`  | emit one DBML file per namespace group             |
-| `include`            | `string[]` | namespace or declaration selectors to keep         |
-| `exclude`            | `string[]` | namespace or declaration selectors to drop         |
+| Option               | Type       | Meaning                                                                                       |
+| -------------------- | ---------- | --------------------------------------------------------------------------------------------- |
+| `output-dir`         | `string`   | target directory handled by the TypeSpec compiler                                             |
+| `filename`           | `string`   | single-file output name without the `.dbml` suffix                                            |
+| `split-by-namespace` | `boolean`  | emit one DBML file per namespace group                                                        |
+| `include`            | `string[]` | namespace or declaration selectors to keep                                                    |
+| `exclude`            | `string[]` | namespace or declaration selectors to drop                                                    |
+| `project-name`       | `string`   | identifier rendered in the DBML `Project { ... }` header (single-file mode, default `schema`) |
 
 Notes:
 
 - `filename` applies to single-file mode only
 - in split mode, the final namespace segment becomes the file name
 - filtering uses the same shared dependency rules as the code emitters
+- unsupported column types fail emission instead of producing empty column lines
 
 ## Selector Behavior
 
@@ -205,7 +207,7 @@ For `@manyToMany(...)`, the emitter synthesizes:
 
 DBML is documentation-oriented output, so some runtime-level concepts are represented in DBML-friendly ways:
 
-- named checks are preserved in column notes
+- named checks are preserved in column notes with property names rewritten to their mapped column names
 - lookup-derived fields resolve to the source property's scalar type instead of rendering as opaque TypeSpec syntax
 - FK delete and update actions are preserved in `Ref:` metadata
 
@@ -223,8 +225,10 @@ This makes DBML useful for review even when the source schema uses richer TypeSp
 
 ## Limitations
 
-- DBML is documentation-oriented output, so named checks are preserved as notes rather than a richer DBML-native construct
+- DBML is documentation-oriented output, so named checks are preserved as notes rather than a richer DBML-native construct (with column-mapped expressions so the rendered note matches the actual schema)
 - many-to-many shorthand remains simple join-table generation; payload-column junctions should be explicit models
+- in split-by-namespace mode, each generated `.dbml` carries its own `Project` header and is parsed standalone; cross-file `Ref:` imports are not synthesized
+- `TableGroup` blocks are emitted in single-file mode for namespace-grouped diagrams in dbdiagram.io
 
 ## Review Workflow
 
@@ -242,6 +246,7 @@ Because the files are generated from the same normalized graph as the runtime em
 - DBML output is not a migration tool; it is a review/documentation artifact
 - if you need payload fields on a join, model the junction table explicitly instead of relying on shorthand
 - selector filtering still enforces dependency closure, even though the output is documentation-focused
+- unsupported column mappings are errors by default
 
 ## Verification
 
@@ -249,7 +254,6 @@ The repo verifies DBML generation through:
 
 ```sh
 pnpm run compile-examples
-git diff --exit-code -- outputs
 ```
 
 ## Related Docs

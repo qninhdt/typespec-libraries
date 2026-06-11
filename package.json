@@ -22,17 +22,20 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "clean:examples": "rm -rf outputs/gorm outputs/sqlmodel outputs/zod outputs/dbml",
-    "compile-examples": "pnpm run clean:examples && tsp compile examples/ --config tspconfig.yaml && pnpm run format-examples",
-    "verify-generated": "pnpm run compile-examples && git diff --exit-code -- outputs",
-    "compile-examples:gorm": "rm -rf outputs/gorm && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-gorm && pnpm run format-examples:gorm",
-    "compile-examples:sqlmodel": "rm -rf outputs/sqlmodel && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-sqlmodel && pnpm run format-examples:sqlmodel",
-    "compile-examples:zod": "rm -rf outputs/zod && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-zod && pnpm run format-examples:zod",
-    "compile-examples:dbml": "rm -rf outputs/dbml && tsp compile examples/ --config tspconfig.yaml --emit @qninhdt/typespec-dbml",
-    "format-examples": "pnpm run format-examples:gorm && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
-    "format-examples:gorm": "gofmt -w outputs/gorm/",
-    "format-examples:sqlmodel": "ruff format outputs/sqlmodel/",
-    "format-examples:zod": "prettier --write outputs/zod/"
+    "clean:examples": "rm -rf outputs/file-vault outputs/game-platform outputs-validation",
+    "compile-example:file-vault": "sh -c 'for svc in identity-svc metadata-svc storage-svc sharing-svc notifications-svc audit-svc processing-svc search-svc assistant-svc frontend docs; do tsp compile examples/file-vault/services/$svc || exit $?; done'",
+    "compile-example:game-platform": "sh -c 'for svc in backend frontend docs; do tsp compile examples/game-platform/services/$svc || exit $?; done'",
+    "compile-examples": "pnpm run clean:examples && pnpm run compile-example:file-vault && pnpm run compile-example:game-platform && pnpm run format-examples",
+    "format-examples": "pnpm run format-examples:ent && pnpm run format-examples:sqlmodel && pnpm run format-examples:zod",
+    "format-examples:ent": "find outputs -path '*/ent/*' -name '*.go' -type f -exec gofmt -w {} +",
+    "format-examples:sqlmodel": "find outputs -path '*/sqlmodel' -type d -exec ruff format {} +",
+    "format-examples:zod": "find outputs -path '*/zod' -type d -exec prettier --write {} +",
+    "validate-examples:ent": "sh -c 'set -e; for d in outputs/file-vault/*/ent outputs/game-platform/*/ent; do test -d \"$d\" || continue; (cd \"$d\" && go build -mod=mod ./...); done'",
+    "validate-examples:sqlmodel": "sh -c 'set -e; for d in outputs/file-vault/*/sqlmodel outputs/game-platform/*/sqlmodel; do test -d \"$d\" || continue; python -m compileall \"$d\"; done'",
+    "validate-examples:zod": "sh -c 'set -e; for d in outputs/file-vault/frontend/zod outputs/game-platform/frontend/zod; do test -d \"$d\" || continue; pnpm --dir \"$d\" exec tsc -p tsconfig.json; done'",
+    "validate-examples:dbml": "test -s outputs/file-vault/docs/dbml/schema.dbml && test -s outputs/game-platform/docs/dbml/schema.dbml",
+    "validate-examples:protobuf": "sh -c 'set -e; for d in outputs/file-vault/*/protobuf outputs/game-platform/*/protobuf; do test -d \"$d\" || continue; protos=\"$(find \"$d\" -name \"*.proto\" | sort)\"; test -n \"$protos\" || continue; protoc -I \"$d\" --descriptor_set_out=/tmp/$(basename $(dirname \"$d\")).pb $protos; done'",
+    "validate-examples": "pnpm run validate-examples:ent && pnpm run validate-examples:sqlmodel && pnpm run validate-examples:zod && pnpm run validate-examples:dbml && pnpm run validate-examples:protobuf"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -45,21 +48,23 @@
   },
   "dependencies": {
     "@qninhdt/typespec-dbml": "workspace:*",
-    "@qninhdt/typespec-gorm": "workspace:*",
+    "@qninhdt/typespec-ent": "workspace:*",
     "@qninhdt/typespec-orm": "workspace:*",
+    "@qninhdt/typespec-protobuf": "workspace:*",
     "@qninhdt/typespec-sqlmodel": "workspace:*",
     "@qninhdt/typespec-zod": "workspace:*",
-    "@typespec/compiler": "latest"
+    "@typespec/compiler": "^1.12.0",
+    "@typespec/protobuf": "^0.82.0"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.30.0",
-    "@types/node": "^25.4.0",
-    "eslint": "^10.0.3",
+    "@changesets/cli": "^2.31.0",
+    "@types/node": "^25.9.1",
+    "eslint": "^10.4.0",
     "husky": "^9.1.7",
-    "lint-staged": "^16.3.3",
-    "prettier": "^3.8.1",
+    "lint-staged": "^17.0.5",
+    "prettier": "^3.8.3",
     "typescript": "~5.7.0",
-    "typescript-eslint": "^8.57.0",
-    "zod": "^3.25.76"
+    "typescript-eslint": "^8.59.4",
+    "zod": "^4.4.3"
   }
 }

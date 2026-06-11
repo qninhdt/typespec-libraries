@@ -6,61 +6,92 @@
 
 import { SourceFile } from "@alloy-js/core";
 import type { Children } from "@alloy-js/core/jsx-runtime";
-import type { Model, ModelProperty, Program } from "@typespec/compiler";
+import { type Model, type Program, type Scalar, type Type } from "@typespec/compiler";
 import type { EnumMemberInfo } from "@qninhdt/typespec-orm";
 import {
   getDoc,
-  getFormat,
-  getMaxLength,
-  getMaxValue,
-  getMinLength,
-  getMinValue,
-  getPattern,
-  getPlaceholder,
-  getPropertyEnum,
-  getTitle,
-  resolveDbType,
+  getEnumMembers,
+  getModelOwnProperties,
+  isArrayType,
+  getArrayElementType,
   camelToSnake,
+  type NormalizedOrmModel,
 } from "@qninhdt/typespec-orm";
-import { reportDiagnostic } from "../lib.js";
 import {
   FILE_HEADER,
   FOUR_SPACES,
-  getPythonTypeMap,
   generateEnumClass,
   buildPythonImportBlock,
-  resolveFormatPyType,
+  pythonTripleQuotedString,
+  toPythonRelativeImport,
 } from "./PyConstants.js";
+import { generatePydanticField } from "./py-data-fields.js";
+import { collectAliasableCustomScalars } from "./py-field-utils.js";
 
 export interface PyDataFileProps {
   readonly program: Program;
   readonly model: Model;
   readonly label: string;
+  readonly normalizedModel?: NormalizedOrmModel;
+  readonly modelLookup?: Map<Model, NormalizedOrmModel>;
+  readonly scalarAliasNames?: ReadonlyMap<Scalar, string>;
 }
 
 /**
  * JSX component: renders a complete Python source file for a Pydantic BaseModel.
  */
 export function PyDataFile(props: PyDataFileProps): Children {
-  const { program, model, label } = props;
+  const { program, model, label, normalizedModel, modelLookup, scalarAliasNames } = props;
   const fileName = camelToSnake(model.name) + ".py";
+  const namespacePath = normalizedModel?.namespacePath ?? getModelNamespacePath(model);
+  const sourceModels = normalizedModel?.mixins ?? [];
 
   const stdImports = new Set<string>();
-  const pydanticImports = new Set<string>(["BaseModel"]);
+  const pydanticImports = new Set<string>();
+  if (sourceModels.length === 0) {
+    pydanticImports.add("BaseModel");
+  }
   const enumTypes = new Map<string, EnumMemberInfo[]>();
   const fieldDefs: string[] = [];
+  const referencedModels = new Set<Model>();
 
-  for (const [, prop] of model.properties) {
-    const enumInfo = getPropertyEnum(prop);
-    if (enumInfo && !enumTypes.has(enumInfo.enumType.name)) {
-      enumTypes.set(enumInfo.enumType.name, enumInfo.members);
-      stdImports.add("enum.Enum");
-    }
-    fieldDefs.push(generatePydanticField(program, prop, stdImports, pydanticImports));
+  const allCustomScalars = collectAliasableCustomScalars(program, model);
+  const scalarNames = Array.from(allCustomScalars)
+    .map((s) => scalarAliasNames?.get(s) ?? s.name)
+    .sort((left, right) => left.localeCompare(right));
+
+  for (const prop of getModelOwnProperties(model)) {
+    collectEnumTypes(prop.type, enumTypes);
+    fieldDefs.push(
+      generatePydanticField(
+        program,
+        prop,
+        model,
+        referencedModels,
+        stdImports,
+        pydanticImports,
+        scalarAliasNames,
+      ),
+    );
   }
+  if (enumTypes.size > 0) stdImports.add("enum.Enum");
 
   let code = FILE_HEADER;
+  // `from __future__ import annotations` makes ALL annotations lazy strings,
+  // letting forward references resolve without TYPE_CHECKING gymnastics.
+  // MUST be the first import statement.
+  code += "from __future__ import annotations\n\n";
   code += buildPythonImportBlock(stdImports, new Set(), pydanticImports, "pydantic");
+  const allReferenced = new Set<Model>([...sourceModels, ...referencedModels]);
+  code += buildReferencedModelImportBlock(allReferenced, modelLookup, namespacePath);
+  if (scalarNames.length > 0) {
+    // `_scalars.py` sits at the top-level package root. Walk up
+    // `namespacePath.length` levels; clamp to 1 so a root-namespace model
+    // (length 0) still emits `from ._scalars import ...` rather than the
+    // Python-invalid `from _scalars import ...`.
+    const dots = ".".repeat(Math.max(namespacePath.length, 1));
+    code += `from ${dots}_scalars import ${[...new Set(scalarNames)].join(", ")}\n`;
+  }
   code += "\n\n";
 
   for (const [enumName, members] of enumTypes) {
@@ -69,8 +100,15 @@ export function PyDataFile(props: PyDataFileProps): Children {
   }
 
   const modelDoc = getDoc(program, model);
-  code += `class ${model.name}(BaseModel):\n`;
-  code += `${FOUR_SPACES}"""${modelDoc ?? label}"""\n`;
+  const baseList =
+    sourceModels.length > 0
+      ? sourceModels
+          .map((source) => source.name)
+          .sort((a, b) => a.localeCompare(b))
+          .join(", ")
+      : "BaseModel";
+  code += `class ${model.name}(${baseList}):\n`;
+  code += `${FOUR_SPACES}${pythonTripleQuotedString(modelDoc ?? label)}\n`;
   code += "\n";
 
   for (const field of fieldDefs) {
@@ -84,118 +122,48 @@ export function PyDataFile(props: PyDataFileProps): Children {
   );
 }
 
-// ─── Pydantic field generator ───────────────────────────────────────────────
-
-interface PydanticFieldContext {
-  pyType: string;
-  doc?: string;
+function getModelNamespacePath(model: Model): string[] {
+  const segments: string[] = [];
+  let current = model.namespace;
+  while (current && current.name !== "") {
+    segments.push(camelToSnake(current.name));
+    current = current.namespace;
+  }
+  return segments.reverse();
 }
 
-function generatePydanticField(
-  program: Program,
-  prop: ModelProperty,
-  stdImports: Set<string>,
-  pydanticImports: Set<string>,
-): string {
-  const pyFieldName = camelToSnake(prop.name);
-  const { pyType, doc } = resolvePydanticFieldContext(program, prop, stdImports, pydanticImports);
-  const fieldArgs = buildPydanticFieldArgs(program, prop, doc);
-  pydanticImports.add("Field");
-  const docComment = doc ? `${FOUR_SPACES}# ${doc}\n` : "";
-  return `${docComment}${FOUR_SPACES}${pyFieldName}: ${pyType} = Field(${fieldArgs.join(", ")})\n`;
-}
-
-function resolvePydanticFieldContext(
-  program: Program,
-  prop: ModelProperty,
-  stdImports: Set<string>,
-  pydanticImports: Set<string>,
-): PydanticFieldContext {
-  const dbType = resolveDbType(prop.type);
-  const mapping = dbType ? getPythonTypeMap(dbType) : getPythonTypeMap("unknown");
-  const enumInfo = getPropertyEnum(prop);
-  const baseType = enumInfo?.enumType.name ?? mapping.pyType;
-
-  if (!enumInfo) {
-    for (const imp of mapping.imports) {
-      stdImports.add(imp);
+function collectEnumTypes(type: Type, enumTypes: Map<string, EnumMemberInfo[]>): void {
+  if (type.kind === "ModelProperty") {
+    collectEnumTypes(type.type, enumTypes);
+    return;
+  }
+  if (isArrayType(type)) {
+    const elementType = getArrayElementType(type);
+    if (elementType) collectEnumTypes(elementType, enumTypes);
+    return;
+  }
+  if (type.kind === "Enum") {
+    if (!enumTypes.has(type.name)) {
+      enumTypes.set(type.name, getEnumMembers(type));
     }
   }
-
-  return {
-    pyType: prop.optional
-      ? `${resolvePydanticFormatType(program, prop, baseType, pydanticImports)} | None`
-      : resolvePydanticFormatType(program, prop, baseType, pydanticImports),
-    doc: getDoc(program, prop),
-  };
 }
 
-function resolvePydanticFormatType(
-  program: Program,
-  prop: ModelProperty,
-  pyType: string,
-  pydanticImports: Set<string>,
+function buildReferencedModelImportBlock(
+  referencedModels: Set<Model>,
+  modelLookup: Map<Model, NormalizedOrmModel> | undefined,
+  namespacePath: string[],
 ): string {
-  const format = getFormat(program, prop);
-  if (!format) {
-    return pyType;
+  if (referencedModels.size === 0) {
+    return "";
   }
 
-  const formatType = resolveFormatPyType(format);
-  if (formatType) {
-    pydanticImports.add(formatType);
-    return formatType;
+  let code = "";
+  for (const targetModel of [...referencedModels].sort((a, b) => a.name.localeCompare(b.name))) {
+    const targetInfo = modelLookup?.get(targetModel);
+    if (!targetInfo) continue;
+    code += `from ${toPythonRelativeImport(namespacePath, targetInfo.namespacePath, camelToSnake(targetModel.name))} import ${targetModel.name}\n`;
   }
-
-  if (format !== "") {
-    reportDiagnostic(program, {
-      code: "unknown-format",
-      target: prop,
-      format: { format, propName: prop.name },
-    });
-  }
-
-  return pyType;
-}
-
-function buildPydanticFieldArgs(program: Program, prop: ModelProperty, doc?: string): string[] {
-  const fieldArgs: string[] = [prop.optional ? "None" : "..."];
-  pushValidationFieldArgs(program, prop, fieldArgs);
-
-  const titleVal = getTitle(program, prop);
-  if (titleVal) {
-    fieldArgs.push(`title="${escapePythonString(titleVal)}"`);
-  }
-  if (doc) {
-    fieldArgs.push(`description="${escapePythonString(doc)}"`);
-  }
-
-  const placeholder = getPlaceholder(program, prop);
-  if (placeholder) {
-    fieldArgs.push(`json_schema_extra={"placeholder": ${toPythonStringLiteral(placeholder)}}`);
-  }
-
-  return fieldArgs;
-}
-
-function pushValidationFieldArgs(program: Program, prop: ModelProperty, fieldArgs: string[]): void {
-  const maxLen = getMaxLength(program, prop);
-  const minLen = getMinLength(program, prop);
-  const minVal = getMinValue(program, prop);
-  const maxVal = getMaxValue(program, prop);
-  const pattern = getPattern(program, prop);
-
-  if (maxLen !== undefined) fieldArgs.push(`max_length=${maxLen}`);
-  if (minLen !== undefined) fieldArgs.push(`min_length=${minLen}`);
-  if (minVal !== undefined) fieldArgs.push(`ge=${minVal}`);
-  if (maxVal !== undefined) fieldArgs.push(`le=${maxVal}`);
-  if (pattern !== undefined) fieldArgs.push(`pattern=r"${pattern}"`);
-}
-
-function escapePythonString(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll('"', String.raw`\"`);
-}
-
-function toPythonStringLiteral(value: string): string {
-  return String.raw`"${escapePythonString(value)}"`;
+  if (code) code += "\n";
+  return code;
 }

@@ -1,0 +1,15 @@
+output-dir: "{cwd}/outputs/file-vault/sharing-svc"
+emit:
+  - "@qninhdt/typespec-ent"
+  - "@typespec/protobuf"
+options:
+  "@qninhdt/typespec-ent":
+    output-dir: "{cwd}/outputs/file-vault/sharing-svc/ent"
+    standalone: true
+    library-name: "github.com/example/file-vault/sharing-svc"
+    collection-strategy: "jsonb"
+    include:
+      - "FileVault.Sharing"
+    auto-include-dependencies: true
+  "@typespec/protobuf":
+    emitter-output-dir: "{cwd}/outputs/file-vault/sharing-svc/protobuf"

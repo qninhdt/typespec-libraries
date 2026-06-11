@@ -6,12 +6,14 @@ import { Children, refkey } from "@alloy-js/core";
 import { MemberExpression } from "@alloy-js/typescript";
 import { Type } from "@typespec/compiler";
 import { useTsp } from "@typespec/emitter-framework";
-import { refkeySym, shouldReference } from "../utils.js";
+import { getRefines } from "@qninhdt/typespec-orm";
+import { callPart, refkeySym, shouldReference, zodMemberExpr } from "../utils.js";
 import { zodBaseSchemaParts } from "../zod-base-schema.js";
 import { zodConstraintsParts } from "../zod-constraints.js";
 import { zodDescriptionParts } from "../zod-description.js";
 import { zodMemberParts } from "../zod-member-parts.js";
-import { ZodCustomTypeComponent } from "./ZodCustomTypeComponent.js";
+import { getZodOptions } from "../context/zod-options.js";
+import { isModelInCycle } from "../traversal.js";
 
 export interface ZodSchemaProps {
   readonly type: Type;
@@ -26,11 +28,28 @@ export function ZodSchema(props: ZodSchemaProps): Children {
 
   if (!props.nested) {
     // we are making a declaration
+    const brandEnabled = getZodOptions($.program)["branded-scalars"] ?? false;
+    const brandParts =
+      brandEnabled && props.type.kind === "Scalar"
+        ? [callPart("brand", JSON.stringify(props.type.name))]
+        : [];
+    const refineParts =
+      props.type.kind === "Model"
+        ? getRefines($.program, props.type).map((r) =>
+            callPart(
+              "refine",
+              `(data) => ${r.expression}`,
+              `{ message: ${JSON.stringify(r.name)} }`,
+            ),
+          )
+        : [];
     return (
       <MemberExpression>
         {zodBaseSchemaParts(props.type)}
         {zodConstraintsParts(props.type)}
         {zodDescriptionParts(props.type)}
+        {brandParts}
+        {refineParts}
       </MemberExpression>
     );
   }
@@ -41,26 +60,43 @@ export function ZodSchema(props: ZodSchemaProps): Children {
     : { type: props.type };
 
   if (shouldReference($.program, type)) {
-    return (
-      <ZodCustomTypeComponent type={type} member={member} reference>
+    // Wrap references to models that participate in a reference cycle in
+    // `z.lazy(() => Schema)` so self-referential and mutually-recursive
+    // models don't blow up at module init time.
+    if (type.kind === "Model" && isModelInCycle(type)) {
+      const lazyArg = (
+        <>
+          {"() => "}
+          <MemberExpression>
+            <MemberExpression.Part refkey={refkey(type, refkeySym)} />
+          </MemberExpression>
+        </>
+      );
+      return (
         <MemberExpression>
-          <MemberExpression.Part refkey={refkey(type, refkeySym)} />
+          {zodMemberExpr(callPart("lazy", lazyArg))}
           {zodConstraintsParts(type, member)}
           {zodMemberParts(member)}
           {zodDescriptionParts(type, member)}
         </MemberExpression>
-      </ZodCustomTypeComponent>
-    );
-  }
-
-  return (
-    <ZodCustomTypeComponent type={type} member={member} reference>
+      );
+    }
+    return (
       <MemberExpression>
-        {zodBaseSchemaParts(type)}
+        <MemberExpression.Part refkey={refkey(type, refkeySym)} />
         {zodConstraintsParts(type, member)}
         {zodMemberParts(member)}
         {zodDescriptionParts(type, member)}
       </MemberExpression>
-    </ZodCustomTypeComponent>
+    );
+  }
+
+  return (
+    <MemberExpression>
+      {zodBaseSchemaParts(type)}
+      {zodConstraintsParts(type, member)}
+      {zodMemberParts(member)}
+      {zodDescriptionParts(type, member)}
+    </MemberExpression>
   );
 }

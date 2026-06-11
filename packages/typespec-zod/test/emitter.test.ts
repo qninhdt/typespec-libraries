@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -24,10 +24,30 @@ describe("Zod emitter entrypoint", () => {
     ).toBe(true);
   });
 
-  it("returns cleanly when there are no data models to emit", async () => {
+  it("emits no files when no data models are selected", async () => {
     const runner = await createTestRunner();
     await runner.compile(`model Placeholder {}`);
     const outDir = await mkdtemp(join(tmpdir(), "zod-emitter-empty-"));
+
+    await $onEmit({
+      program: runner.program,
+      options: { include: ["Missing.Namespace"] },
+      emitterOutputDir: outDir,
+    } as never);
+
+    const errorDiagnostics = runner.program.diagnostics.filter((diag) => diag.severity === "error");
+    expect(errorDiagnostics).toEqual([]);
+    await expect(readdir(outDir)).resolves.toEqual([]);
+  });
+
+  it("reports unsupported field types as errors", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model Broken {
+        payload: composite<"left", "right">;
+      }
+    `);
+    const outDir = await mkdtemp(join(tmpdir(), "zod-emitter-unsupported-"));
 
     await $onEmit({
       program: runner.program,
@@ -35,14 +55,18 @@ describe("Zod emitter entrypoint", () => {
       emitterOutputDir: outDir,
     } as never);
 
-    expect(runner.program.diagnostics.some((diag) => diag.severity === "error")).toBe(false);
+    expect(
+      runner.program.diagnostics.some(
+        (diag) =>
+          diag.code === "@qninhdt/typespec-zod/unsupported-type" && diag.severity === "error",
+      ),
+    ).toBe(true);
   });
 
   it("emits standalone package files for data models", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       namespace Demo.Forms {
-        @data("Register Form")
         model RegisterForm {
           email: string;
         }
@@ -66,5 +90,7 @@ describe("Zod emitter entrypoint", () => {
     expect(packageJson).toContain('"name": "demo-zod"');
     expect(indexFile).toContain('export * from "./test/demo/forms/RegisterForm.js";');
     expect(modelFile).toContain("RegisterFormSchema");
+    expect(modelFile).toContain("email: z.string()");
+    expect(modelFile).toContain("export type RegisterForm = z.infer<typeof RegisterFormSchema>;");
   });
 });

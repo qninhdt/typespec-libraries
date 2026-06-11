@@ -11,20 +11,12 @@ describe("DBML scalars", () => {
     expect(output).toContain("id uuid");
   });
 
-  it("maps string to varchar with default length", async () => {
+  it("maps string to text by default", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; name: string; }`,
       "users.dbml",
     );
-    expect(output).toContain("name varchar(255)");
-  });
-
-  it("maps string to varchar with default length", async () => {
-    const output = await emitDbmlFile(
-      `@table model User { @key id: uuid; name: string; }`,
-      "users.dbml",
-    );
-    expect(output).toContain("name varchar(255) [not null]");
+    expect(output).toContain("name text");
   });
 
   it("maps text to text", async () => {
@@ -59,20 +51,20 @@ describe("DBML scalars", () => {
     expect(output).toContain("big_num bigint");
   });
 
-  it("maps float32 to float", async () => {
+  it("maps float32 to real", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; score: float32; }`,
       "users.dbml",
     );
-    expect(output).toContain("score float");
+    expect(output).toContain("score real");
   });
 
-  it("maps float64 to double", async () => {
+  it("maps float64 to double precision", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; score: float64; }`,
       "users.dbml",
     );
-    expect(output).toContain("score double");
+    expect(output).toContain("score double precision");
   });
 
   it("maps decimal with precision", async () => {
@@ -80,15 +72,15 @@ describe("DBML scalars", () => {
       `@table model Product { @key id: uuid; @precision(10, 2) price: decimal; }`,
       "products.dbml",
     );
-    expect(output).toContain("price decimal(10, 2)");
+    expect(output).toContain("price numeric(10, 2)");
   });
 
-  it("maps utcDateTime to timestamp", async () => {
+  it("maps utcDateTime to timestamptz", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; createdAt: utcDateTime; }`,
       "users.dbml",
     );
-    expect(output).toContain("created_at timestamp");
+    expect(output).toContain("created_at timestamptz");
   });
 
   it("maps plainDate to date", async () => {
@@ -99,12 +91,12 @@ describe("DBML scalars", () => {
     expect(output).toContain("event_date date");
   });
 
-  it("maps bytes to blob", async () => {
+  it("maps bytes to bytea", async () => {
     const output = await emitDbmlFile(
       `@table model User { @key id: uuid; avatar: bytes; }`,
       "users.dbml",
     );
-    expect(output).toContain("avatar blob");
+    expect(output).toContain("avatar bytea");
   });
 
   it("maps jsonb to jsonb", async () => {
@@ -129,5 +121,26 @@ describe("DBML scalars", () => {
       "counters.dbml",
     );
     expect(output).toContain("id bigserial");
+  });
+
+  it("emits TypeSpec default values", async () => {
+    const output = await emitDbmlFile(
+      `
+      @table
+      model User {
+        @key id: uuid;
+        credits: int32 = 0;
+        enabled: boolean = false;
+        status: string = "active";
+        displayName: string = "";
+      }
+    `,
+      "users.dbml",
+    );
+
+    expect(output).toContain("credits integer [not null, default: `0`]");
+    expect(output).toContain("enabled boolean [not null, default: `false`]");
+    expect(output).toContain("status text [not null, default: 'active']");
+    expect(output).toContain("display_name text [not null, default: '']");
   });
 });

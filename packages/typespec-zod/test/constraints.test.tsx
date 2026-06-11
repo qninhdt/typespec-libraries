@@ -5,7 +5,6 @@ describe("Zod string constraints", () => {
   it("generates .min() for @minLength", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @minLength(2) name: string;
       }
@@ -19,7 +18,6 @@ describe("Zod string constraints", () => {
   it("generates .max() for @maxLength", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @maxLength(100) bio: string;
       }
@@ -33,7 +31,6 @@ describe("Zod string constraints", () => {
   it("generates .regex() for @pattern", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @pattern("^[A-Za-z]+$") code: string;
       }
@@ -45,12 +42,24 @@ describe("Zod string constraints", () => {
     expect(output).toContain("^[A-Za-z]+$");
   });
 
-  it("generates .email() for @format email", async () => {
+  it("escapes slashes in regex literals", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
-        @format("email") email: string;
+        @pattern("^a/b$") code: string;
+      }
+    `,
+      "User.ts",
+    );
+
+    expect(output).toContain('.regex(new RegExp("^a/b$"))');
+  });
+
+  it("generates .email() for email scalar", async () => {
+    const output = await emitZodFile(
+      `
+      model User {
+        contact: email;
       }
     `,
       "User.ts",
@@ -59,12 +68,11 @@ describe("Zod string constraints", () => {
     expect(output).toContain(".email()");
   });
 
-  it("generates .url() for @format url", async () => {
+  it("generates .url() for url scalar", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
-        @format("url") website?: string;
+        website?: url;
       }
     `,
       "User.ts",
@@ -76,9 +84,8 @@ describe("Zod string constraints", () => {
   it("generates multiple string constraints combined", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
-        @minLength(1) @maxLength(255) @format("email") email: string;
+        @minLength(1) @maxLength(255) contact: email;
       }
     `,
       "User.ts",
@@ -94,7 +101,6 @@ describe("Zod numeric constraints", () => {
   it("generates .min() (gte) for @minValue", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @minValue(0) quantity: int32;
       }
@@ -108,7 +114,6 @@ describe("Zod numeric constraints", () => {
   it("generates .max() (lte) for @maxValue", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @maxValue(100) quantity: int32;
       }
@@ -122,7 +127,6 @@ describe("Zod numeric constraints", () => {
   it("generates .gt() for @minValueExclusive", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @minValueExclusive(0) quantity: int32;
       }
@@ -136,7 +140,6 @@ describe("Zod numeric constraints", () => {
   it("generates .lt() for @maxValueExclusive", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @maxValueExclusive(100) quantity: int32;
       }
@@ -150,7 +153,6 @@ describe("Zod numeric constraints", () => {
   it("generates .nonnegative() for @minValue(0)", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @minValue(0) quantity: int32;
       }
@@ -164,7 +166,6 @@ describe("Zod numeric constraints", () => {
   it("generates multiple numeric constraints combined", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model Product {
         @minValue(0) @maxValue(100) quantity: int32;
       }
@@ -181,7 +182,6 @@ describe("Zod array constraints", () => {
   it("generates .min() for @minItems", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @minItems(1) tags: string[];
       }
@@ -195,7 +195,6 @@ describe("Zod array constraints", () => {
   it("generates .max() for @maxItems", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @maxItems(10) tags: string[];
       }
@@ -209,7 +208,6 @@ describe("Zod array constraints", () => {
   it("generates both .min() and .max() for @minItems/@maxItems", async () => {
     const output = await emitZodFile(
       `
-      @data("Form")
       model User {
         @minItems(1) @maxItems(10) tags: string[];
       }

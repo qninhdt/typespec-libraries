@@ -1,14 +1,15 @@
 # TypeSpec Libraries
 
-TypeSpec ORM and schema-generation tooling for teams that want one namespace-first source of truth and multiple generated targets.
+TypeSpec ORM and schema-generation tooling for teams that want one namespace-first source of truth for PostgreSQL-backed generated packages and upstream Protobuf contracts.
 
-This repository contains:
+This repository contains supported build-time packages for PostgreSQL-backed generated packages and upstream Protobuf contracts:
 
 - `@qninhdt/typespec-orm`: shared decorators, relation resolution, validation, normalization, and selector filtering
-- `@qninhdt/typespec-gorm`: Go + GORM emitter for `@table` and `@data`
-- `@qninhdt/typespec-sqlmodel`: Python + SQLModel emitter for `@table` and `@data`
-- `@qninhdt/typespec-zod`: Zod emitter for `@data`
+- `@qninhdt/typespec-ent`: Go + Ent emitter for `@table` and default form models
+- `@qninhdt/typespec-sqlmodel`: Python + SQLModel emitter for `@table` and default form models
+- `@qninhdt/typespec-zod`: Zod emitter for default form and `@tableMixin` schemas
 - `@qninhdt/typespec-dbml`: DBML emitter for `@table`
+- `@typespec/protobuf`: upstream Protobuf emitter for shared service contracts
 
 ## Why This Repo Exists
 
@@ -16,7 +17,7 @@ The goal of this repo is not just code generation. It is to make a TypeSpec sche
 
 - namespaces define output structure
 - relations are validated once in shared ORM logic
-- emitters fail loudly on unsupported persistence shapes
+- emitters fail on unsupported or lossy mappings by default
 - filtered generation is dependency-aware
 - examples are checked in and verified in CI
 
@@ -55,17 +56,17 @@ Unsupported persistence mappings, invalid relation shapes, conflicting selectors
 
 ## Repository Layout
 
-```text
+`text
 packages/
   typespec-orm/
-  typespec-gorm/
+  typespec-ent/
   typespec-sqlmodel/
   typespec-zod/
   typespec-dbml/
 examples/
 outputs/
 docs/
-```
+`
 
 Important directories:
 
@@ -78,24 +79,25 @@ Important directories:
 | Package                      | Input                                  | Output                       | Primary Responsibility                                             |
 | ---------------------------- | -------------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
 | `@qninhdt/typespec-orm`      | TypeSpec decorators and compiler state | none                         | Validation, normalization, relation resolution, selector filtering |
-| `@qninhdt/typespec-gorm`     | normalized ORM graph                   | Go packages for GORM         | Persisted models and DTOs for Go services                          |
+| `@qninhdt/typespec-ent`      | normalized ORM graph                   | Go packages for Ent          | Persisted models and DTOs for Go services                          |
 | `@qninhdt/typespec-sqlmodel` | normalized ORM graph                   | Python packages for SQLModel | Persisted models and DTOs for Python services                      |
-| `@qninhdt/typespec-zod`      | normalized ORM graph                   | Zod schemas + inferred types | Frontend and API validation for `@data` models                     |
+| `@qninhdt/typespec-zod`      | normalized ORM graph                   | Zod schemas + inferred types | Frontend and API validation for default form models                |
 | `@qninhdt/typespec-dbml`     | normalized ORM graph                   | DBML files                   | Database review and architecture documentation                     |
 
 ## Installation
 
 Install only the packages you need, but most users start with the ORM core plus one or more emitters:
 
-```sh
+`sh
 pnpm add -D \
   @typespec/compiler \
   @qninhdt/typespec-orm \
-  @qninhdt/typespec-gorm \
+  @qninhdt/typespec-ent \
   @qninhdt/typespec-sqlmodel \
   @qninhdt/typespec-zod \
-  @qninhdt/typespec-dbml
-```
+  @qninhdt/typespec-dbml \
+  @typespec/protobuf
+`
 
 Emitter peer dependencies are documented in each package README.
 
@@ -103,18 +105,19 @@ Emitter peer dependencies are documented in each package README.
 
 The generator packages are TypeSpec build-time dependencies. The generated outputs have their own runtime expectations:
 
-| Target   | Typical runtime dependencies                                                                                 | Notes                                                                   |
-| -------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| GORM     | `gorm.io/gorm`, `github.com/google/uuid`, optionally `gorm.io/datatypes` and `github.com/shopspring/decimal` | standalone mode writes `go.mod`; non-standalone mode emits code only    |
-| SQLModel | `sqlmodel`, SQLAlchemy, Pydantic-compatible typing support                                                   | standalone mode writes `pyproject.toml` and package roots               |
-| Zod      | `zod`, TypeScript for package builds                                                                         | standalone mode writes `package.json`, `tsconfig.json`, and root barrel |
-| DBML     | none                                                                                                         | DBML is documentation output, not runtime code                          |
+| Target   | Typical runtime dependencies                                                                             | Notes                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Ent      | `entgo.io/ent`, `github.com/google/uuid`, optionally `encoding/json` and `github.com/shopspring/decimal` | standalone mode writes `go.mod`, `ent/generate.go`, and Atlas config                                     |
+| SQLModel | `sqlmodel`, SQLAlchemy, Pydantic-compatible typing support                                               | standalone mode writes `pyproject.toml` and package roots                                                |
+| Zod      | `zod`, TypeScript for package builds                                                                     | standalone mode writes `package.json`, `tsconfig.json`, and root barrel                                  |
+| Protobuf | generated by upstream `@typespec/protobuf` during TypeSpec compilation                                   | message fields require explicit `@field(number)` and service interfaces use upstream `@Protobuf.service` |
+| DBML     | none                                                                                                     | DBML is documentation output, not runtime code                                                           |
 
 ## End-to-End Example
 
 ### Schema
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -123,127 +126,128 @@ namespace Demo.Platform.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Platform.Accounts;
 
 @table
-model User is Demo.Platform.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Platform.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Platform.Shared.Timestamped {
-  @unique
-  @maxLength(80)
-  code: string;
+model Badge {
+...Demo.Platform.Shared.Timestamped;
+@unique
+@maxLength(80)
+code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
 
 namespace Demo.Platform.Forms;
-
-@data("Create Invitation Form")
 model CreateInvitationForm {
-  @title("Invitee Email")
-  @placeholder("friend@example.com")
-  inviteeEmail: Demo.Platform.Accounts.User.email;
+@title("Invitee Email")
+@placeholder("friend@example.com")
+inviteeEmail: Demo.Platform.Accounts.User.email;
 }
-```
+`
 
 ### Compiler Configuration
 
-```yaml
+`yaml
 emit:
-  - "@qninhdt/typespec-gorm"
-  - "@qninhdt/typespec-sqlmodel"
-  - "@qninhdt/typespec-zod"
-  - "@qninhdt/typespec-dbml"
+
+- "@qninhdt/typespec-ent"
+- "@qninhdt/typespec-sqlmodel"
+- "@qninhdt/typespec-zod"
+- "@qninhdt/typespec-dbml"
 
 options:
-  "@qninhdt/typespec-gorm":
-    output-dir: "./outputs/gorm"
-    standalone: true
-    library-name: "github.com/acme/domain-models"
-    collection-strategy: "jsonb"
+"@qninhdt/typespec-ent":
+output-dir: "./outputs/ent"
+standalone: true
+library-name: "github.com/acme/domain-models"
+collection-strategy: "jsonb"
 
-  "@qninhdt/typespec-sqlmodel":
-    output-dir: "./outputs/sqlmodel"
-    standalone: true
-    library-name: "acme-models"
-    collection-strategy: "jsonb"
+"@qninhdt/typespec-sqlmodel":
+output-dir: "./outputs/sqlmodel"
+standalone: true
+library-name: "acme-models"
+collection-strategy: "jsonb"
 
-  "@qninhdt/typespec-zod":
-    output-dir: "./outputs/zod"
-    standalone: true
-    library-name: "@acme/forms"
+"@qninhdt/typespec-zod":
+output-dir: "./outputs/zod"
+standalone: true
+library-name: "@acme/forms"
 
-  "@qninhdt/typespec-dbml":
-    output-dir: "./outputs/dbml"
-    split-by-namespace: true
-```
+"@qninhdt/typespec-dbml":
+output-dir: "./outputs/dbml"
+split-by-namespace: true
+`
 
 ### Compile
 
-```sh
+`sh
 tsp compile .
-```
+`
 
 ## Shared Concepts Across Packages
 
-### `@table`, `@data`, and `@tableMixin`
+### `@table`, default form models, and `@tableMixin`
 
 - `@table` models participate in persistence emitters
-- `@data` models participate in form/DTO emitters
+- default form models participate in form/DTO emitters
 - `@tableMixin` models are reusable ORM fragments that are validated but never emitted as standalone tables
 
 ### Referenced-column foreign keys
 
 You can point a relation at something other than `id`:
 
-```typescript
+`typescript
 @table
 model Organization {
-  @key
-  @unique
-  code: string;
+@key
+@unique
+code: string;
 }
 
 @table
 model User {
-  organizationCode: string;
+organizationCode: string;
 
-  @foreignKey("organizationCode", "code")
-  organization: Organization;
+@foreignKey("organizationCode", "code")
+organization: Organization;
 }
-```
+`
 
 ### Named checks
 
-```typescript
+`typescript
 @check("users_credits_non_negative", "credits >= 0")
 credits: int32 = 0;
-```
+`
 
 ### Many-to-many shorthand
 
-```typescript
+`typescript
 @manyToMany("user_badges")
 badges?: Badge[];
-```
+`
 
 Both sides must opt in with the same join table name.
 
@@ -251,12 +255,13 @@ Both sides must opt in with the same join table name.
 
 Every emitter supports the same selector model:
 
-```yaml
+`yaml
 include:
-  - "Demo.Platform.Forms"
-exclude:
-  - "Demo.Platform.Audit"
-```
+
+- "Demo.Platform.Forms"
+  exclude:
+- "Demo.Platform.Audit"
+  `
 
 Selectors can target:
 
@@ -271,40 +276,50 @@ Behavior:
 
 ### Selector Reference
 
-Selectors are plain dotted declaration names. There is no wildcard syntax.
+Selectors are either dotted declaration names (namespace selectors) or
+`#`-prefixed scope names. There is no wildcard syntax.
 
-| Selector                               | Meaning                                                                   |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| `Demo.GamePlatform`                    | everything under that namespace subtree                                   |
-| `Demo.GamePlatform.Forms`              | only the forms subtree                                                    |
-| `Demo.GamePlatform.Worlds.World`       | one concrete declaration plus anything nested below it                    |
-| `Demo.GamePlatform.Audit` in `exclude` | removes the audit subtree even if a broader parent namespace was included |
+| Selector                          | Meaning                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `GamePlatform`                    | everything under that namespace subtree                                   |
+| `GamePlatform.Worlds`             | only the worlds subtree                                                   |
+| `GamePlatform.Worlds.World`       | one concrete declaration plus anything nested below it                    |
+| `GamePlatform.Audit` in `exclude` | removes the audit subtree even if a broader parent namespace was included |
+| `#frontend`                       | every model decorated with `@scope("frontend")`, regardless of namespace  |
+| `#kafka:upload-events`            | every model decorated with `@scope("kafka:upload-events")`                |
 
 Practical guidance:
 
-- use namespace selectors for bounded-context level output
-- use concrete declaration selectors sparingly, usually for targeted tests or partial package generation
-- if a selected model depends on an excluded enum, alias, mixin, or relation target, emission fails before files are written
+- use namespace selectors for bounded-context-level output (one service owns one namespace)
+- use `#scope` selectors for cross-cutting concerns that don't fit a single namespace —
+  frontend exposure, Kafka event payloads consumed by services that don't own the namespace
+- a model can carry multiple `@scope(...)` decorators; selectors union across them
+- enable `auto-include-dependencies: true` on an emitter to transitively pull required
+  mixins / FK targets so service configs don't enumerate `*.Shared` mixins by hand;
+  default `false` keeps the strict `filtered-dependency` diagnostic
+- if a selected model depends on an excluded enum, alias, mixin, or relation target
+  (and closure is off), emission fails before files are written
 
 ## Output Philosophy
 
-### GORM
+### Ent
 
-- namespace directories become Go package directories
-- standalone mode emits `go.mod` and a root `models.go`
-- `@manyToMany(...)` becomes GORM relationship tags
-- `@check(...)` becomes named check tags
+- `@table` and `@tableMixin` emit into the standard `ent/schema` package
+- standalone mode emits `go.mod`, `ent/generate.go`, and `atlas.hcl`
+- `@data` models remain namespace-derived Go DTO structs
+- `@manyToMany(...)` becomes Ent edge storage-key metadata
+- `@check(...)` becomes Ent SQL annotation metadata
 
 ### SQLModel
 
 - namespace directories become Python packages
 - standalone mode emits `pyproject.toml`
-- package roots expose `metadata = SQLModel.metadata`
+- package roots expose `target_metadata = SQLModel.metadata`
 - many-to-many shorthand generates `__associations__.py`
 
 ### Zod
 
-- only `@data` models are emitted
+- only default form models and `@tableMixin` schemas are emitted
 - standalone mode emits `src/...` plus a root `index.ts`
 - schemas, inferred types, and form metadata are emitted in a single render pass
 
@@ -315,45 +330,96 @@ Practical guidance:
 
 ## Feature Matrix
 
-| Feature                                | ORM Core | GORM                | SQLModel            | Zod             | DBML               |
-| -------------------------------------- | -------- | ------------------- | ------------------- | --------------- | ------------------ |
-| Namespace-first output                 | yes      | yes                 | yes                 | yes             | yes                |
-| Shared `include` / `exclude` selectors | yes      | yes                 | yes                 | yes             | yes                |
-| `@tableMixin`                          | yes      | yes                 | yes                 | n/a             | yes                |
-| Referenced-column foreign keys         | yes      | yes                 | yes                 | n/a             | yes                |
-| Collection persistence strategies      | yes      | `jsonb`, `postgres` | `jsonb`, `postgres` | n/a             | array rendering    |
-| Named `@check(...)` constraints        | yes      | yes                 | yes                 | n/a             | preserved as notes |
-| `@manyToMany(...)` shorthand           | yes      | yes                 | yes                 | n/a             | yes                |
-| Form metadata                          | yes      | form tags           | Pydantic metadata   | `*Meta` exports | n/a                |
-| Alembic helper                         | n/a      | n/a                 | yes                 | n/a             | n/a                |
-| Namespace-split DBML                   | n/a      | n/a                 | n/a                 | n/a             | yes                |
+| Feature                                | ORM Core | Ent                            | SQLModel                       | Zod             | DBML                                |
+| -------------------------------------- | -------- | ------------------------------ | ------------------------------ | --------------- | ----------------------------------- |
+| Namespace-first output                 | yes      | yes                            | yes                            | yes             | yes                                 |
+| Shared `include` / `exclude` selectors | yes      | yes                            | yes                            | yes             | yes                                 |
+| `@tableMixin`                          | yes      | yes                            | yes                            | n/a             | yes                                 |
+| Referenced-column foreign keys         | yes      | yes                            | yes                            | n/a             | yes                                 |
+| Collection persistence strategies      | yes      | PostgreSQL `jsonb`, `postgres` | PostgreSQL `jsonb`, `postgres` | n/a             | PostgreSQL-oriented array rendering |
+| Named `@check(...)` constraints        | yes      | yes                            | yes                            | n/a             | preserved as notes                  |
+| `@manyToMany(...)` shorthand           | yes      | yes                            | yes                            | n/a             | yes                                 |
+| Form metadata                          | yes      | form tags                      | Pydantic metadata              | `*Meta` exports | n/a                                 |
+| Atlas config                           | n/a      | yes                            | yes                            | n/a             | n/a                                 |
+| Namespace-split DBML                   | n/a      | n/a                            | n/a                            | n/a             | yes                                 |
 
 ## Example Project In This Repo
 
-The checked-in example under [`examples/`](examples/) is deliberately more than a toy schema. It demonstrates:
+Two checked-in examples under [`examples/`](examples/) demonstrate the
+per-service generation pattern at different scales. Both use the same
+folder convention: a shared `contracts/` tree (single source of truth)
+plus per-service generation roots under `services/`.
+
+### Layout
+
+```
+examples/<system>/
+  contracts/
+    shared/                 # @tableMixin bases, cross-service primitives
+    <bounded-context>/      # tables.tsp + dtos.tsp per service-owned namespace
+    frontend/               # @scope("frontend") forms + DTOs
+  services/
+    <service>-svc/
+      main.tsp              # imports the contracts subset this service needs
+      grpc.tsp              # @Protobuf.service interfaces
+      tspconfig.yaml        # one persistence language + protobuf
+    frontend/               # Zod
+    docs/                   # DBML, no filter
+```
+
+Rules:
+
+- `contracts/` is read-only schema — no `tspconfig.yaml`, no `@Protobuf.service`
+- each service owns its namespace; cross-service consumption is via Kafka events
+  or gRPC, never by importing another team's `tables.tsp`
+- one persistence language per service (Ent _or_ SQLModel — never both)
+- frontend uses `include: ["#frontend"]`; docs uses no filter
+
+### `examples/file-vault` — multi-service, mixed-language
+
+| Service             | Language          |
+| ------------------- | ----------------- |
+| `identity-svc`      | Go (Ent)          |
+| `metadata-svc`      | Go (Ent)          |
+| `storage-svc`       | Go (Ent)          |
+| `sharing-svc`       | Go (Ent)          |
+| `notifications-svc` | Go (Ent)          |
+| `audit-svc`         | Go (Ent)          |
+| `processing-svc`    | Python (SQLModel) |
+| `search-svc`        | Python (SQLModel) |
+| `assistant-svc`     | Python (SQLModel) |
+| `frontend`          | TypeScript (Zod)  |
+| `docs`              | DBML              |
+
+### `examples/game-platform` — single backend, same convention
+
+`backend` (Go/Ent) + `frontend` (Zod) + `docs` (DBML). Proves the
+convention works for small systems too.
+
+The schemas demonstrate:
 
 - nested namespaces across several bounded contexts
-- reusable mixins
+- reusable mixins under `contracts/shared/`
 - lookup types across namespaces
-- named checks
-- many-to-many shorthand
-- collection persistence
-- Zod metadata
+- named checks, many-to-many shorthand, collection persistence
+- upstream Protobuf contracts with explicit `@field(number)`
+- per-service auto-include-dependencies pulling shared mixins automatically
+- `@scope("frontend")` Zod surface that's a strict subset of the persistence schema
 - namespace-split DBML generation
 
 Useful commands:
 
 ```sh
 pnpm run compile-examples
-pnpm run verify-generated
+pnpm run compile-example:file-vault
+pnpm run compile-example:game-platform
+pnpm run validate-examples
 ```
 
 Generated outputs are checked into:
 
-- [`outputs/gorm`](outputs/gorm)
-- [`outputs/sqlmodel`](outputs/sqlmodel)
-- [`outputs/zod`](outputs/zod)
-- [`outputs/dbml`](outputs/dbml)
+- [`outputs/file-vault/`](outputs/file-vault) — one subdirectory per service
+- [`outputs/game-platform/`](outputs/game-platform) — `backend/`, `frontend/`, `docs/`
 
 ## Migration Notes
 
@@ -363,6 +429,9 @@ If you are coming from the pre-namespace versions of this repo, the main behavio
 - emitters no longer invent a flat `models/` folder
 - `library-name` replaced older emitter-specific package or module metadata options
 - Zod no longer supports a custom `filename`; output is namespace-derived per model plus a root barrel
+- owned emitters fail unsupported types instead of emitting degraded fallbacks
+- database emitters are PostgreSQL-only; MySQL and SQLite options are not supported
+- local `@qninhdt/typespec-protobuf` and GORM directions were removed; use upstream `@typespec/protobuf` with explicit `@field(number)`
 - filtering is shared across emitters and validated against dependencies instead of being loosely best-effort
 
 The migration path is usually straightforward:
@@ -377,7 +446,7 @@ The migration path is usually straightforward:
 
 Common commands:
 
-```sh
+`sh
 pnpm install
 pnpm run build
 pnpm run test
@@ -385,8 +454,7 @@ pnpm run typecheck
 pnpm run lint
 pnpm run format:check
 pnpm run compile-examples
-pnpm run verify-generated
-```
+`
 
 CI verifies:
 
@@ -397,14 +465,15 @@ CI verifies:
 - unit tests
 - example compilation
 - generated artifact drift
-- `go build` for generated GORM output
-- `python -m compileall` for generated SQLModel output
-- `tsc -p tsconfig.json` for generated Zod output
+- generated Ent Go package builds for both checked-in examples
+- generated SQLModel Python packages compile for both checked-in examples
+- generated Zod TypeScript packages typecheck for both checked-in examples
+- upstream Protobuf output exists for the file-vault contract example
 
 ## Package Documentation
 
 - [`packages/typespec-orm/README.md`](packages/typespec-orm/README.md)
-- [`packages/typespec-gorm/README.md`](packages/typespec-gorm/README.md)
+- [`packages/typespec-ent/README.md`](packages/typespec-ent/README.md)
 - [`packages/typespec-sqlmodel/README.md`](packages/typespec-sqlmodel/README.md)
 - [`packages/typespec-zod/README.md`](packages/typespec-zod/README.md)
 - [`packages/typespec-dbml/README.md`](packages/typespec-dbml/README.md)
@@ -423,6 +492,10 @@ Common errors and what they usually mean:
   A shorthand join table name collides with an explicit table model. Keep one approach only.
 - `standalone-requires-library-name`
   The emitter is configured to write package metadata, but you did not provide the package/module name via `library-name`.
+- `unsupported-type`
+  The emitter cannot map a field without losing semantics. Fix the schema or choose a supported TypeSpec type.
+- `@typespec/protobuf/field-index`
+  A Protobuf message field is missing its explicit upstream `@field(number)` decorator.
 
 ## Known Boundaries
 

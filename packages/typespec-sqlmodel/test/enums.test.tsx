@@ -30,7 +30,7 @@ describe("SQLModel enum generation", () => {
     expect(output).toContain("from enum import Enum");
   });
 
-  it("generates SAEnum column for enum field", async () => {
+  it("generates a Text column (not SAEnum) for enum field", async () => {
     const output = await emitPyFile(
       `
       enum Role {
@@ -47,9 +47,31 @@ describe("SQLModel enum generation", () => {
       "user.py",
     );
 
-    // Field should use sa_column with SAEnum
-    expect(output).toContain("SAEnum(Role)");
-    expect(output).toContain("Enum as SAEnum");
+    // Enum fields map to a TEXT column (CHECK constraint), not a native
+    // Postgres ENUM / SQLAlchemy SAEnum, to avoid destructive CREATE TYPE
+    // migrations. The Python enum class is still generated for typing.
+    expect(output).toContain("class Role(str, Enum):");
+    expect(output).toContain("sa_column=Column(Text");
+    expect(output).not.toContain("SAEnum");
+  });
+
+  it("escapes enum string values", async () => {
+    const output = await emitPyFile(
+      `
+      enum Weird {
+        quoted: "a\\"b",
+      }
+
+      @table
+      model User {
+        @key id: uuid;
+        weird: Weird;
+      }
+    `,
+      "user.py",
+    );
+
+    expect(output).toContain('quoted = "a\\"b"');
   });
 
   it("generates optional enum with | None", async () => {

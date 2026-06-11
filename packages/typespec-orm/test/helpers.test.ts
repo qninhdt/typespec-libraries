@@ -42,6 +42,18 @@ describe("camelToSnake", () => {
   it("handles already snake_case", () => {
     expect(camelToSnake("user_id")).toBe("user_id");
   });
+
+  it("handles trailing abbreviation ID", () => {
+    expect(camelToSnake("userID")).toBe("user_id");
+  });
+
+  it("handles trailing abbreviation URL", () => {
+    expect(camelToSnake("parseURL")).toBe("parse_url");
+  });
+
+  it("handles abbreviation in the middle", () => {
+    expect(camelToSnake("getHTTPResponse")).toBe("get_http_response");
+  });
 });
 
 describe("camelToPascal", () => {
@@ -95,6 +107,14 @@ describe("deriveTableName", () => {
   it("pluralizes -ch ending by adding -es", () => {
     expect(deriveTableName("Match")).toBe("matches");
   });
+
+  it("pluralizes -z ending by doubling z and adding -es", () => {
+    expect(deriveTableName("Quiz")).toBe("quizzes");
+  });
+
+  it("handles single-word model name", () => {
+    expect(deriveTableName("Post")).toBe("posts");
+  });
 });
 
 describe("metadata and relation helpers", () => {
@@ -107,13 +127,13 @@ describe("metadata and relation helpers", () => {
           createdAt: utcDateTime;
         }
 
-        @data("User Form")
         model UserForm {
           email: string;
         }
 
         @table
-        model User is AuditFields {
+        model User {
+          ...AuditFields;
           @key id: uuid;
         }
       }
@@ -123,7 +143,7 @@ describe("metadata and relation helpers", () => {
     const mixins = collectTableMixins(runner.program);
 
     expect(dataModels).toHaveLength(1);
-    expect(dataModels[0].label).toBe("User Form");
+    expect(dataModels[0].label).toBe("UserForm");
     expect(getTypeFullName(runner.program, dataModels[0].model)).toBe(
       "Test.Demo.Accounts.UserForm",
     );
@@ -161,7 +181,37 @@ describe("metadata and relation helpers", () => {
     expect(resolveDbType(copiedSecret!.type)).toBe("string");
   });
 
-  it("falls back to format-derived input types and unwraps enums", async () => {
+  it("resolves PG-canonical scalars to their distinct DB type names", async () => {
+    const runner = await createTestRunner();
+    await runner.compile(`
+      model Sample {
+        ci: citext;
+        tsv: tsvector;
+        tsq: tsquery;
+        win: interval;
+        addr: inet;
+        v4: ipv4;
+        v6: ipv6;
+        net: cidr;
+      }
+    `);
+
+    const sample = runner.program
+      .getGlobalNamespaceType()
+      .namespaces.get("Test")!
+      .models.get("Sample")!;
+    const props = sample.properties;
+    expect(resolveDbType(props.get("ci")!.type)).toBe("citext");
+    expect(resolveDbType(props.get("tsv")!.type)).toBe("tsvector");
+    expect(resolveDbType(props.get("tsq")!.type)).toBe("tsquery");
+    expect(resolveDbType(props.get("win")!.type)).toBe("interval");
+    expect(resolveDbType(props.get("addr")!.type)).toBe("inet");
+    expect(resolveDbType(props.get("v4")!.type)).toBe("ipv4");
+    expect(resolveDbType(props.get("v6")!.type)).toBe("ipv6");
+    expect(resolveDbType(props.get("net")!.type)).toBe("cidr");
+  });
+
+  it("falls back to semantic-scalar-derived input types and unwraps enums", async () => {
     const runner = await createTestRunner();
     await runner.compile(`
       enum Role {
@@ -170,8 +220,7 @@ describe("metadata and relation helpers", () => {
       }
 
       model User {
-        @format("email")
-        email: string;
+        email: email;
         role: Role;
         roleCopy: User.role;
       }
@@ -181,15 +230,15 @@ describe("metadata and relation helpers", () => {
       .getGlobalNamespaceType()
       .namespaces.get("Test")!
       .models.get("User")!;
-    const email = user.properties.get("email")!;
+    const emailProp = user.properties.get("email")!;
     const roleCopy = user.properties.get("roleCopy")!;
 
-    expect(getInputTypeForProperty(runner.program, email)).toBe("email");
+    expect(getInputTypeForProperty(runner.program, emailProp)).toBe("email");
     expect(getPropertyEnum(roleCopy)).toEqual({
       enumType: user.properties.get("role")!.type,
       members: [
-        { name: "admin", value: "admin" },
-        { name: "user", value: "user" },
+        { name: "admin", value: "admin", rawValue: "admin", valueKind: "string" },
+        { name: "user", value: "user", rawValue: "user", valueKind: "string" },
       ],
     });
   });

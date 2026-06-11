@@ -8,15 +8,12 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
-      exclude: ["src/testing/**"],
+      exclude: ["src/testing/**", "src/index.ts", "src/lib.ts"],
       reporter: ["text", "json", "html", "lcov"],
     },
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-      },
-    },
+    isolate: false,
+    maxWorkers: 1,
   },
   esbuild: {
     jsx: "preserve",

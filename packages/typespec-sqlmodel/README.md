@@ -5,9 +5,9 @@ TypeSpec emitter that generates namespace-grouped SQLModel packages.
 This emitter consumes `@qninhdt/typespec-orm` schemas and generates:
 
 - SQLModel classes for `@table`
-- Pydantic-style data models for `@data`
+- Pydantic-style data models for default form models
 - package scaffolding for standalone distribution
-- Alembic-friendly package metadata
+- Atlas-friendly package metadata via `atlas-provider-sqlalchemy`
 
 ## What This Emitter Is For
 
@@ -17,12 +17,12 @@ It is designed for:
 
 - namespace-derived Python package layouts
 - explicit relation mapping
-- strict persistence behavior
-- easy migration setup through `metadata = SQLModel.metadata`
+- strict persistence behavior that fails unsupported mappings by default
+- easy migration setup through `target_metadata = SQLModel.metadata` (consumed by `atlas-provider-sqlalchemy`)
 
 ## Installation
 
-```sh
+`sh
 pnpm add -D \
   @typespec/compiler \
   @typespec/emitter-framework \
@@ -30,47 +30,50 @@ pnpm add -D \
   @alloy-js/typescript \
   @qninhdt/typespec-orm \
   @qninhdt/typespec-sqlmodel
-```
+`
 
 ## Runtime Expectations
 
 Generated Python output targets the SQLModel and SQLAlchemy ecosystem.
 
 - standalone mode writes `pyproject.toml`
-- package roots export `metadata = SQLModel.metadata`
+- every emitted namespace `__init__.py` exports `target_metadata = SQLModel.metadata`
 - many-to-many shorthand generates `__associations__.py`
-- collection persistence may rely on SQLAlchemy dialect-specific types depending on the configured strategy
+- collection persistence uses PostgreSQL-oriented JSONB or ARRAY types depending on the configured strategy
 
 The repo currently verifies generated output with Python `3.10+`.
 
 ## Configuration Reference
 
-```yaml
+`yaml
 emit:
-  - "@qninhdt/typespec-sqlmodel"
+
+- "@qninhdt/typespec-sqlmodel"
 
 options:
-  "@qninhdt/typespec-sqlmodel":
-    output-dir: "./outputs/sqlmodel"
-    standalone: true
-    library-name: "acme-models"
-    collection-strategy: "jsonb"
-    include:
-      - "Demo.Platform"
-    exclude:
-      - "Demo.Platform.Audit"
-```
+"@qninhdt/typespec-sqlmodel":
+output-dir: "./outputs/sqlmodel"
+standalone: true
+library-name: "acme-models"
+collection-strategy: "jsonb"
+include: - "Demo.Platform"
+exclude: - "Demo.Platform.Audit"
+`
 
 Supported options:
 
-| Option                | Type                    | Meaning                                           |
-| --------------------- | ----------------------- | ------------------------------------------------- |
-| `output-dir`          | `string`                | target directory handled by the TypeSpec compiler |
-| `standalone`          | `boolean`               | write `pyproject.toml` and package scaffolding    |
-| `library-name`        | `string`                | distribution name used in standalone mode         |
-| `collection-strategy` | `"jsonb" \| "postgres"` | persistence strategy for list-like fields         |
-| `include`             | `string[]`              | namespace or declaration selectors to keep        |
-| `exclude`             | `string[]`              | namespace or declaration selectors to drop        |
+| Option                      | Type                    | Meaning                                                                           |
+| --------------------------- | ----------------------- | --------------------------------------------------------------------------------- |
+| `output-dir`                | `string`                | target directory handled by the TypeSpec compiler                                 |
+| `standalone`                | `boolean`               | write `pyproject.toml` and package scaffolding                                    |
+| `library-name`              | `string`                | distribution name used in standalone mode                                         |
+| `version`                   | `string`                | distribution version written to the standalone `pyproject.toml` (default `0.0.0`) |
+| `description`               | `string`                | optional description written to the standalone `pyproject.toml`                   |
+| `collection-strategy`       | `"jsonb" \| "postgres"` | persistence strategy for list-like fields                                         |
+| `emit-atlas`                | `boolean`               | when true, write `atlas.hcl` alongside the generated package (default: false)     |
+| `include`                   | `string[]`              | namespace or declaration selectors to keep                                        |
+| `exclude`                   | `string[]`              | namespace or declaration selectors to drop                                        |
+| `auto-include-dependencies` | `boolean`               | when true, transitively pulls required dependencies into the selection            |
 
 Not supported:
 
@@ -83,12 +86,13 @@ SQLModel generation uses the shared ORM selector engine. Selectors are dotted na
 
 Examples:
 
-```yaml
+`yaml
 include:
-  - "Demo.GamePlatform"
-exclude:
-  - "Demo.GamePlatform.Audit"
-```
+
+- "Demo.GamePlatform"
+  exclude:
+- "Demo.GamePlatform.Audit"
+  `
 
 Behavior:
 
@@ -100,13 +104,13 @@ Behavior:
 
 Given:
 
-```typescript
+`typescript
 namespace App.Identity;
-```
+`
 
 Standalone output looks like:
 
-```text
+`text
 outputs/sqlmodel/
   pyproject.toml
   app/
@@ -114,15 +118,15 @@ outputs/sqlmodel/
     identity/
       __init__.py
       user.py
-```
+`
 
 Rules:
 
 - namespace segments become Python package directories
 - `__init__.py` files are generated at every emitted package level
-- top-level package roots expose `metadata = SQLModel.metadata`
+- every package level (including multi-segment ones) exposes `target_metadata = SQLModel.metadata`
 
-That root-level `metadata` export is the intended Alembic integration point.
+That `target_metadata` export is the intended Atlas integration point. Atlas via `atlas-provider-sqlalchemy` auto-detects type changes and server defaults from the SQLAlchemy metadata, so no Alembic-style `env.py` configuration is required.
 
 ## Generated Package Contract
 
@@ -132,13 +136,13 @@ Standalone output typically includes:
 - namespace package folders with generated `__init__.py`
 - one module per emitted model
 - a top-level `__associations__.py` for shorthand many-to-many tables
-- a root package export for `metadata = SQLModel.metadata`
+- a root package export for `target_metadata = SQLModel.metadata`
 
 Non-standalone mode emits only the code tree and skips package metadata files.
 
 ## Schema Example
 
-```typescript
+`typescript
 import "@qninhdt/typespec-orm";
 
 using Qninhdt.Orm;
@@ -147,35 +151,37 @@ namespace Demo.Shared;
 
 @tableMixin
 model Timestamped {
-  @key id: uuid;
-  @autoCreateTime createdAt: utcDateTime;
-  @autoUpdateTime updatedAt?: utcDateTime;
+@key id: uuid;
+@autoCreateTime createdAt: utcDateTime;
+@autoUpdateTime updatedAt?: utcDateTime;
 }
 
 namespace Demo.Accounts;
 
 @table
-model User is Demo.Shared.Timestamped {
-  @unique
-  @maxLength(320)
-  @format("email")
-  email: string;
+model User {
+...Demo.Shared.Timestamped;
+@unique
+@maxLength(320)
+@format("email")
+email: string;
 
-  @check("users_credits_non_negative", "credits >= 0")
-  credits: int32 = 0;
+@check("users_credits_non_negative", "credits >= 0")
+credits: int32 = 0;
 
-  @manyToMany("user_badges")
-  badges?: Badge[];
+@manyToMany("user_badges")
+badges?: Badge[];
 }
 
 @table
-model Badge is Demo.Shared.Timestamped {
-  @unique code: string;
+model Badge {
+...Demo.Shared.Timestamped;
+@unique code: string;
 
-  @manyToMany("user_badges")
-  users?: User[];
+@manyToMany("user_badges")
+users?: User[];
 }
-```
+`
 
 ## Generated Behavior
 
@@ -189,9 +195,11 @@ model Badge is Demo.Shared.Timestamped {
 - composite constraint support
 - foreign-key handling with delete/update actions
 
+Bare `string` properties must declare `@maxLength(N)` (or use the `text` scalar) — the emitter no longer falls back to a silent `max_length=255` and reports `string-without-max-length` instead.
+
 ### Data models
 
-`@data` models become non-table Python models that preserve:
+default form models become non-table Python models that preserve:
 
 - validation metadata
 - titles and descriptions
@@ -199,16 +207,16 @@ model Badge is Demo.Shared.Timestamped {
 
 ### Named checks
 
-```typescript
+`typescript
 @check("users_credits_non_negative", "credits >= 0")
 credits: int32 = 0;
-```
+`
 
 becomes:
 
-```py
+`py
 CheckConstraint("credits >= 0", name="users_credits_non_negative")
-```
+`
 
 inside `__table_args__`.
 
@@ -216,9 +224,9 @@ inside `__table_args__`.
 
 When both sides declare:
 
-```typescript
+`typescript
 @manyToMany("user_badges")
-```
+`
 
 the emitter generates:
 
@@ -230,21 +238,19 @@ the emitter generates:
 
 Top-level package roots expose:
 
-```py
+`py
 from sqlmodel import SQLModel
 
-metadata = SQLModel.metadata
-```
+target_metadata = SQLModel.metadata
+`
 
 This makes it straightforward to wire the generated package into Alembic.
 
 Example:
 
-```py
-from demo import metadata
-
-target_metadata = metadata
-```
+`py
+from demo import target_metadata
+`
 
 ### Collection persistence
 
@@ -274,7 +280,7 @@ When you need payload columns on the join itself, define an explicit junction ta
 - named checks
 - many-to-many shorthand
 - collection persistence strategies
-- `@data` model generation
+- default form models model generation
 - shared filtering with `include` and `exclude`
 
 ## Limitations
@@ -282,13 +288,14 @@ When you need payload columns on the join itself, define an explicit junction ta
 - many-to-many shorthand is for simple join tables without payload columns
 - if a join table needs extra data, model it explicitly
 - non-standalone mode emits code only and skips package metadata
+- DB cascade actions are emitted on foreign keys; ORM `delete-orphan` ownership is not inferred unless a future explicit ownership decorator exists
 
 ## Common Diagnostics And Gotchas
 
 - `standalone-requires-library-name`
   Standalone mode needs `library-name` to write a coherent Python distribution manifest.
 - `unsupported-type`
-  The TypeSpec field could not be mapped to a SQLModel or SQLAlchemy field.
+  The TypeSpec field could not be mapped to a SQLModel or SQLAlchemy field and emission fails.
 - `missing-back-reference`
   A collection relation has no inverse owner. SQLAlchemy may require additional manual configuration if you keep the model shape as-is.
 - `foreign-key-target-not-table`
@@ -297,17 +304,17 @@ When you need payload columns on the join itself, define an explicit junction ta
 Practical guidance:
 
 - keep generated packages importable on their own before wiring them into application code
-- use the exported root `metadata` in Alembic instead of manually assembling model imports
+- use the exported root `target_metadata` in Alembic instead of manually assembling model imports
 - prefer explicit data models for public-facing API shapes rather than exposing persistence models directly
 
 ## Verification
 
 The repo verifies generated Python output with:
 
-```sh
+`sh
 pnpm run compile-examples
-python -m compileall outputs/sqlmodel
-```
+python -m compileall outputs/file-vault/sqlmodel outputs/game-platform/sqlmodel
+`
 
 ## Related Docs
 

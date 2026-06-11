@@ -93,6 +93,29 @@ model User {
     expect(output).toContain("Ref: users.organization_code > organizations.code");
   });
 
+  it("preserves exact mapped column names in references", async () => {
+    const output = await emitDbmlFile(
+      `
+@table
+model User {
+  @key id: uuid;
+}
+
+@table
+model Post {
+  @key id: uuid;
+  @map("authorId")
+  authorId: uuid;
+  @foreignKey("authorId")
+  author: User;
+}
+`,
+      "posts.dbml",
+    );
+    expect(output).toContain("authorId uuid");
+    expect(output).toContain("Ref: posts.authorId > users.id");
+  });
+
   it("preserves delete and update actions on references", async () => {
     const output = await emitDbmlFile(
       `
@@ -113,7 +136,7 @@ model Post {
 `,
       "posts.dbml",
     );
-    expect(output).toContain("Ref: posts.author_id > users.id [delete: CASCADE, update: CASCADE]");
+    expect(output).toContain("Ref: posts.author_id > users.id [delete: cascade, update: cascade]");
   });
 
   it("keeps indexes for enum columns", async () => {
