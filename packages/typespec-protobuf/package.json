@@ -1,12 +1,11 @@
 {
   "name": "@qninhdt/typespec-protobuf",
-  "version": "0.0.0",
+  "version": "0.5.0",
   "description": "First-party Protobuf emitter for the openlet TypeSpec stack — ergonomic decorators, auto type mapping, cross-file imports, single-source @entity sharing with ent/sqlmodel, auto-generated buf configs.",
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "tspMain": "lib/main.tsp",
-  "private": true,
   "sideEffects": false,
   "exports": {
     ".": {
@@ -51,8 +50,20 @@
     "email": "qndt123@gmail.com"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qninhdt/typespec-libraries.git",
+    "directory": "packages/typespec-protobuf"
+  },
+  "homepage": "https://github.com/qninhdt/typespec-libraries/tree/main/packages/typespec-protobuf#readme",
+  "bugs": {
+    "url": "https://github.com/qninhdt/typespec-libraries/issues"
+  },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "peerDependencies": {
     "@typespec/compiler": ">=1.12.0"
