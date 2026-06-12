@@ -16,9 +16,24 @@ import { getZodOptions } from "./context/zod-options.js";
 import { getPattern } from "@typespec/compiler";
 import { isBuiltIn } from "@qninhdt/typespec-orm";
 
+function isCompositeScalar(type: Type): boolean {
+  if (type.kind !== "Scalar") return false;
+  let current: Scalar | undefined = type;
+  while (current) {
+    if (current.name === "composite") return true;
+    current = current.baseScalar;
+  }
+  return false;
+}
+
 export function scalarBaseType($: Typekit, type: Scalar): Children {
   if (type.baseScalar && shouldReference($.program, type.baseScalar)) {
     return <MemberExpression.Part refkey={refkey(type.baseScalar, refkeySym)} />;
+  }
+
+  // ORM-only scalars (composite indexes) have no runtime representation
+  if (isCompositeScalar(type)) {
+    return zodMemberExpr(callPart("never"));
   }
 
   if ($.scalar.extendsBoolean(type)) {

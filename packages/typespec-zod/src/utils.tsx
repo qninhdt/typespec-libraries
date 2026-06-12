@@ -26,10 +26,20 @@ const ownPropertiesCache = new WeakMap<Model, ModelProperty[]>();
 export function getModelOwnProperties(model: Model): ModelProperty[] {
   let cached = ownPropertiesCache.get(model);
   if (cached === undefined) {
-    cached = ormGetModelOwnProperties(model);
+    cached = ormGetModelOwnProperties(model).filter((prop) => !isCompositeScalar(prop.type));
     ownPropertiesCache.set(model, cached);
   }
   return cached;
+}
+
+function isCompositeScalar(type: Type): boolean {
+  if (type.kind !== "Scalar") return false;
+  let current: typeof type | undefined = type;
+  while (current) {
+    if (current.name === "composite") return true;
+    current = current.baseScalar;
+  }
+  return false;
 }
 
 export const refkeySym = Symbol.for("typespec-zod.refkey");

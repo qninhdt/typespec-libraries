@@ -17,7 +17,7 @@ export async function $onEmit(context: EmitContext<ZodEmitterOptions>) {
   const libraryName = options["library-name"];
 
   const result = bootstrapEmitter(context, {
-    kinds: ["mixin", "data"],
+    kinds: ["table", "mixin", "data"],
     include: options.include,
     exclude: options.exclude,
     autoIncludeDependencies: options["auto-include-dependencies"],
